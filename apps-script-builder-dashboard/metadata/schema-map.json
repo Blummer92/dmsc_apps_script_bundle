@@ -10,6 +10,20 @@
         "workspace_target",
         "output_type",
         "generated_artifact",
+        "generated_artifact_file_id",
+        "generated_artifact_url",
+        "generated_artifact_parent_folder_id",
+        "workspace_target_file_id",
+        "workspace_target_url",
+        "source_document_file_id",
+        "source_document_url",
+        "handoff_packet_file_id",
+        "handoff_packet_url",
+        "drive_registry_status",
+        "drive_lookup_strategy",
+        "last_drive_verified_at",
+        "archive_folder_id",
+        "archive_status",
         "last_synced_at",
         "build_status",
         "deployment_status",
@@ -27,13 +41,19 @@
       ],
       "safe_writes": [
         "Apps Script operational metadata",
-        "Apps Script build status",
-        "Apps Script generated artifact references"
+        "Apps Script-specific build status",
+        "Apps Script-generated artifact references",
+        "mock/manual Drive registry metadata after artifact creation"
       ],
-      "restricted_writes": [
-        "curriculum owned fields",
-        "source owned fields",
-        "approval owned fields"
+      "blocked_writes": [
+        "curriculum readiness",
+        "source authority",
+        "source document authority",
+        "lesson decisions",
+        "packet approval",
+        "final generation approval",
+        "live Drive folder creation",
+        "live Notion or curriculum sync"
       ]
     },
     "Project Logs": {
@@ -58,7 +78,7 @@
       ]
     },
     "Handoff Records": {
-      "purpose": "Governance-safe questions for owner agents.",
+      "purpose": "Governance-safe questions for Dashboard Sync Agent, Drive Operations Manager, or other owner agents.",
       "fields": [
         "handoff_id",
         "project_id",
@@ -69,7 +89,7 @@
         "question_for_owner",
         "owner_response",
         "approved_contract",
-        "status",
+        "handoff_status",
         "created_at",
         "resolved_at"
       ]
@@ -89,8 +109,9 @@
         "created_at"
       ]
     },
-    "Agent/Data Contracts": {
+    "Agent Data Contracts": {
       "purpose": "Field ownership and sync safety contract used by agents and reviewers.",
+      "approved_database_label": "Agent/Data Contracts",
       "fields": [
         "contract_id",
         "field_name",
@@ -103,5 +124,64 @@
         "updated_at"
       ]
     }
-  }
+  },
+  "sync_guardrails": {
+    "default_sync_mode": "mock",
+    "live_notion_curriculum_sync": "blocked",
+    "live_drive_automation": "blocked",
+    "dry_run_required_before_live_write": true,
+    "audit_live_sync_attempts": true,
+    "lookup_suffix_blocked": "_lookup",
+    "relation_fields_require_owner_review_for_live_write": true
+  },
+  "writable_field_allowlist": [
+    "project_id",
+    "project_name",
+    "agent_owner",
+    "workspace_target",
+    "output_type",
+    "generated_artifact",
+    "generated_artifact_file_id",
+    "generated_artifact_url",
+    "generated_artifact_parent_folder_id",
+    "workspace_target_file_id",
+    "workspace_target_url",
+    "handoff_packet_file_id",
+    "handoff_packet_url",
+    "drive_registry_status",
+    "drive_lookup_strategy",
+    "last_drive_verified_at",
+    "archive_folder_id",
+    "archive_status",
+    "last_synced_at",
+    "build_status",
+    "deployment_status",
+    "project_risk_level",
+    "blocked_until_dashboard_sync_review",
+    "blocked_until_drive_ops_review",
+    "blocked_reason"
+  ],
+  "denylist": [
+    "unit_id",
+    "lesson_id",
+    "packet_id",
+    "readiness_status",
+    "source_document",
+    "source_authority",
+    "curriculum_readiness",
+    "lesson_decision",
+    "packet_approval",
+    "evidence_readiness",
+    "reuse_approval",
+    "final_generation_approval",
+    "curriculum_identity",
+    "generation_approval",
+    "source_document_relation",
+    "source_document_file_id",
+    "source_document_url",
+    "unit_id_lookup",
+    "lesson_id_lookup",
+    "packet_id_lookup",
+    "curriculum_readiness_lookup"
+  ]
 }
