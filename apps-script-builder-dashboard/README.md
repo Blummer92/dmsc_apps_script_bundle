@@ -42,6 +42,7 @@ apps-script-builder-dashboard
     Ui.html
     Styles.html
     Client.html
+    appsscript.json
   metadata
     field-contract.json
     handoff.json
@@ -52,13 +53,17 @@ apps-script-builder-dashboard
   .clasp.json.example
 ```
 
+`src/appsscript.json` is the deployable manifest used by clasp because `.clasp.json.example` sets `rootDir` to `src`. The root-level `appsscript.json` is retained as a reference copy only.
+
 ## Setup
 
 1. Create or choose a Google Sheet to hold the dashboard.
 2. Create an Apps Script project bound to that Sheet, or push this project with clasp.
-3. Copy `.clasp.json.example` to `.clasp.json` and set the real script ID if using clasp.
-4. Run `setupDashboard(spreadsheetId)` once with the dashboard spreadsheet ID.
-5. Reload the spreadsheet and open **Builder Dashboard > Open Dashboard**.
+3. Copy `.clasp.json.example` to `.clasp.json` and set your local script identifier if using clasp.
+4. Keep `.clasp.json` local and keep private workspace identifiers out of commits.
+5. Confirm clasp uses `src/` as `rootDir` and that the deployable manifest is `src/appsscript.json`.
+6. Run `setupDashboard(spreadsheetId)` once with the dashboard spreadsheet ID.
+7. Reload the spreadsheet and open **Builder Dashboard > Open Dashboard**.
 
 ## Main Functions
 
@@ -142,9 +147,9 @@ Use the approved lookup/relation labels instead:
 
 ## Drive Safety
 
-`.clasp.json.example` is placeholder-only. A real `.clasp.json` contains a real Apps Script ID, must stay local, and must not be committed.
+`.clasp.json.example` is placeholder-only. A real `.clasp.json` contains a local Apps Script project identifier, must stay local, and must not be committed.
 
-Generated Drive artifacts must store stable file IDs and URLs after creation. Agents must use registry IDs after creation instead of repeated Drive name searches.
+Generated Drive artifacts must store stable file identifiers and URLs after creation. Agents must use registry identifiers after creation instead of repeated Drive name searches.
 
 Drive registry fields are present for future use:
 
