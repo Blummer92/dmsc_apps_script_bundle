@@ -1,0 +1,396 @@
+<script>
+  const state = {
+    queues: [],
+    queueId: 'all',
+    page: 1,
+    pageSize: 50,
+    search: '',
+    nextOwner: '',
+    selectedId: '',
+    currentRecord: null,
+    activeTab: 'summary'
+  };
+
+  document.addEventListener('DOMContentLoaded', initDashboard);
+
+  function initDashboard() {
+    bindEvents();
+    loadBootstrap();
+  }
+
+  function bindEvents() {
+    document.getElementById('refreshButton').addEventListener('click', () => loadRows());
+    document.getElementById('searchInput').addEventListener('input', debounce(function(event) {
+      state.search = event.target.value;
+      state.page = 1;
+      loadRows();
+    }, 280));
+    document.getElementById('ownerFilter').addEventListener('change', function(event) {
+      state.nextOwner = event.target.value;
+      state.page = 1;
+      loadRows();
+    });
+    document.getElementById('pageSizeSelect').addEventListener('change', function(event) {
+      state.pageSize = Number(event.target.value);
+      state.page = 1;
+      loadRows();
+    });
+    document.getElementById('previousPageButton').addEventListener('click', function() {
+      if (state.page > 1) {
+        state.page -= 1;
+        loadRows();
+      }
+    });
+    document.getElementById('nextPageButton').addEventListener('click', function() {
+      state.page += 1;
+      loadRows();
+    });
+    document.getElementById('scanButton').addEventListener('click', function() {
+      confirmDangerousAction('Scan Drive Images', 'This may touch many rows and can take time. It does not approve assets. Continue?', runDriveScan);
+    });
+    document.getElementById('mergeButton').addEventListener('click', function() {
+      confirmDangerousAction('Merge Metadata', 'This regenerates the merged metadata view. It does not approve assets. Continue?', runMerge);
+    });
+    document.getElementById('openSheetButton').addEventListener('click', openSelectedRow);
+    document.querySelectorAll('.tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        setActiveTab(tab.dataset.tab);
+      });
+    });
+  }
+
+  function loadBootstrap() {
+    setLoading(true);
+    google.script.run
+      .withSuccessHandler(function(response) {
+        state.queues = response.queues || [];
+        renderQueues();
+        updateSummary(response.summary || {});
+        loadRows();
+      })
+      .withFailureHandler(showError)
+      .getDmscDashboardBootstrap();
+  }
+
+  function loadRows() {
+    setLoading(true);
+    clearError();
+    google.script.run
+      .withSuccessHandler(function(response) {
+        setLoading(false);
+        renderRows(response.records || []);
+        updateSummary(response.summary || {});
+        updatePagination(response);
+      })
+      .withFailureHandler(showError)
+      .getDmscDashboardRows({
+        queueId: state.queueId,
+        search: state.search,
+        nextOwner: state.nextOwner,
+        page: state.page,
+        pageSize: state.pageSize,
+        sortBy: 'lastMetadataSyncTimestamp',
+        sortDirection: 'desc'
+      });
+  }
+
+  function renderQueues() {
+    const nav = document.getElementById('queueNav');
+    const groups = {};
+    state.queues.forEach(function(queue) {
+      groups[queue.group] = groups[queue.group] || [];
+      groups[queue.group].push(queue);
+    });
+
+    nav.innerHTML = Object.keys(groups).map(function(groupName) {
+      const buttons = groups[groupName].map(function(queue) {
+        return `<button type="button" class="queue-button ${queue.id === state.queueId ? 'active' : ''}" data-queue-id="${escapeHtml(queue.id)}">
+          <span>${escapeHtml(queue.label)}</span>
+        </button>`;
+      }).join('');
+      return `<div class="queue-group"><div class="queue-group-label">${escapeHtml(groupName)}</div>${buttons}</div>`;
+    }).join('');
+
+    nav.querySelectorAll('.queue-button').forEach(function(button) {
+      button.addEventListener('click', function() {
+        state.queueId = button.dataset.queueId;
+        state.page = 1;
+        const queue = state.queues.find(q => q.id === state.queueId);
+        document.getElementById('viewTitle').textContent = queue ? queue.label : 'Registry Records';
+        renderQueues();
+        loadRows();
+      });
+    });
+  }
+
+  function renderRows(records) {
+    const body = document.getElementById('recordsBody');
+    const empty = document.getElementById('emptyState');
+    const tableWrap = document.getElementById('tableWrap');
+
+    if (!records.length) {
+      body.innerHTML = '';
+      empty.classList.remove('hidden');
+      tableWrap.classList.add('hidden');
+      return;
+    }
+
+    empty.classList.add('hidden');
+    tableWrap.classList.remove('hidden');
+    body.innerHTML = records.map(function(record) {
+      const isSelected = record.imageIdentityId === state.selectedId;
+      return `<tr tabindex="0" class="${isSelected ? 'selected' : ''}" data-id="${escapeHtml(record.imageIdentityId)}">
+        <td>
+          <div class="asset-name">${escapeHtml(record.fileName || '(Untitled asset)')}</div>
+          <div class="asset-path">${escapeHtml(record.fullPath || record.normalizedFilename || '')}</div>
+        </td>
+        <td>${badge(record.promptEvidenceStatus, promptBadgeType(record.promptEvidenceStatus))}</td>
+        <td>${badge(record.sourceControlClearanceNeeded === 'Yes' ? 'Clearance Needed' : record.sourceVerificationStatus, record.sourceControlClearanceNeeded === 'Yes' ? 'danger' : 'ok')}</td>
+        <td>${badge(record.humanReviewRequired === 'Yes' ? 'Needs Review' : 'No Review Flag', record.humanReviewRequired === 'Yes' ? 'warning' : 'ok')}<div class="asset-path">${escapeHtml(record.reviewReason || '')}</div></td>
+        <td>${escapeHtml(record.nextOwner || '-')}</td>
+        <td>${escapeHtml(record.lastMetadataSyncTimestamp || '-')}</td>
+      </tr>`;
+    }).join('');
+
+    body.querySelectorAll('tr').forEach(function(row) {
+      row.addEventListener('click', () => selectRecord(row.dataset.id));
+      row.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          selectRecord(row.dataset.id);
+        }
+      });
+    });
+  }
+
+  function selectRecord(identifier) {
+    state.selectedId = identifier;
+    google.script.run
+      .withSuccessHandler(function(response) {
+        state.currentRecord = response.record;
+        renderInspector(response.record, response.audit || []);
+        document.querySelectorAll('.registry-table tr').forEach(function(row) {
+          row.classList.toggle('selected', row.dataset.id === identifier);
+        });
+      })
+      .withFailureHandler(showError)
+      .getDmscDashboardRecord(identifier);
+  }
+
+  function renderInspector(record, audit) {
+    document.getElementById('inspectorEmpty').classList.add('hidden');
+    document.getElementById('inspectorContent').classList.remove('hidden');
+    document.getElementById('inspectorTitle').textContent = record.fileName || '(Untitled asset)';
+    document.getElementById('inspectorPath').textContent = record.fullPath || record.normalizedFilename || '';
+
+    document.getElementById('tab-summary').innerHTML = detailList([
+      ['Image Identity ID', record.imageIdentityId],
+      ['File ID', record.fileId],
+      ['Drive URL', record.driveUrl],
+      ['Normalized Filename', record.normalizedFilename],
+      ['Duplicate Group', record.duplicateCandidateGroup || 'None'],
+      ['Last Metadata Sync', record.lastMetadataSyncTimestamp || '-']
+    ]);
+
+    document.getElementById('tab-prompt').innerHTML = `
+      ${detailList([
+        ['Prompt Evidence Status', record.promptEvidenceStatus],
+        ['Prompt Match Status', record.promptMatchStatus],
+        ['Match Key Used', record.matchKeyUsed],
+        ['Prompt Source', record.promptSource]
+      ])}
+      <h3 style="margin:14px 0 8px;">Projected Prompt Evidence</h3>
+      <div class="prompt-box">${escapeHtml(record.projectedImagePrompt || record.promptEvidenceExcerpt || 'No prompt evidence available.')}</div>
+    `;
+
+    document.getElementById('tab-source').innerHTML = detailList([
+      ['Source Group', record.sourceGroup || 'Unknown'],
+      ['Source Type', record.sourceType || 'Unknown'],
+      ['Source Evidence Status', record.sourceEvidenceStatus],
+      ['Source Classification Confidence', record.sourceClassificationConfidence || '-'],
+      ['Source Verification Status', record.sourceVerificationStatus],
+      ['Source-Control Clearance Needed', record.sourceControlClearanceNeeded],
+      ['Do Not Use Reason', record.doNotUseReason || '-']
+    ]);
+
+    document.getElementById('tab-audit').innerHTML = audit.length
+      ? audit.map(item => `<div class="audit-item"><strong>${escapeHtml(item.action)}</strong><small>${escapeHtml(item.timestamp)} - ${escapeHtml(item.actor)} - ${escapeHtml(item.source)}</small><div>${escapeHtml(item.field)}: ${escapeHtml(item.oldValue)} → ${escapeHtml(item.newValue)}</div></div>`).join('')
+      : '<div class="state-panel">No audit entries yet for this record.</div>';
+
+    document.getElementById('tab-routing').innerHTML = `
+      <div class="routing-form">
+        <label><span>Human Review Required</span>
+          <select id="routingReviewRequired"><option ${record.humanReviewRequired === 'Yes' ? 'selected' : ''}>Yes</option><option ${record.humanReviewRequired === 'No' ? 'selected' : ''}>No</option></select>
+        </label>
+        <label><span>Next Owner</span>
+          <select id="routingNextOwner">
+            ${ownerOptions(record.nextOwner)}
+          </select>
+        </label>
+        <label><span>Review Reason</span>
+          <textarea id="routingReviewReason">${escapeHtml(record.reviewReason || '')}</textarea>
+        </label>
+        <label><span>Notes</span>
+          <textarea id="routingNotes">${escapeHtml(record.notes || '')}</textarea>
+        </label>
+        <button class="btn primary" type="button" id="saveRoutingButton">Save Routing Metadata</button>
+      </div>
+    `;
+
+    document.getElementById('saveRoutingButton').addEventListener('click', saveRoutingMetadata);
+    setActiveTab(state.activeTab);
+  }
+
+  function saveRoutingMetadata() {
+    if (!state.currentRecord) return;
+    const payload = {
+      imageIdentityId: state.currentRecord.imageIdentityId,
+      updates: {
+        'Human Review Required': document.getElementById('routingReviewRequired').value,
+        'Next Owner': document.getElementById('routingNextOwner').value,
+        'Review Reason': document.getElementById('routingReviewReason').value,
+        'Notes': document.getElementById('routingNotes').value
+      }
+    };
+    google.script.run
+      .withSuccessHandler(function(response) {
+        showToast(`Saved routing metadata. ${response.changed} field(s) changed.`);
+        selectRecord(state.currentRecord.imageIdentityId);
+        loadRows();
+      })
+      .withFailureHandler(showError)
+      .updateDmscReviewMetadata(payload);
+  }
+
+  function setActiveTab(tabName) {
+    state.activeTab = tabName;
+    document.querySelectorAll('.tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === tabName));
+    document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+    const panel = document.getElementById('tab-' + tabName);
+    if (panel) panel.classList.add('active');
+  }
+
+  function updateSummary(summary) {
+    document.getElementById('metricTotal').textContent = summary.totalRecords || 0;
+    document.getElementById('metricReview').textContent = summary.humanReviewRequired || 0;
+    document.getElementById('metricSource').textContent = summary.sourceClearanceNeeded || 0;
+    document.getElementById('metricNoPrompt').textContent = summary.noPromptEvidence || 0;
+    document.getElementById('metricDupes').textContent = summary.duplicateGroups || 0;
+  }
+
+  function updatePagination(response) {
+    const total = response.total || 0;
+    const start = total ? ((response.page - 1) * response.pageSize) + 1 : 0;
+    const end = Math.min(response.page * response.pageSize, total);
+    document.getElementById('resultCount').textContent = `Showing ${start}-${end} of ${total} records`;
+    document.getElementById('pageStatus').textContent = `Page ${response.page} of ${response.totalPages}`;
+    document.getElementById('previousPageButton').disabled = response.page <= 1;
+    document.getElementById('nextPageButton').disabled = response.page >= response.totalPages;
+  }
+
+  function openSelectedRow() {
+    if (!state.currentRecord) return;
+    google.script.run
+      .withSuccessHandler(function(response) {
+        window.open(response.url, '_blank');
+      })
+      .withFailureHandler(showError)
+      .getDmscSpreadsheetRowLink(state.currentRecord.imageIdentityId);
+  }
+
+  function runDriveScan() {
+    showToast('Drive scan started...');
+    google.script.run
+      .withSuccessHandler(function() { showToast('Drive scan finished. Refreshing...'); loadRows(); })
+      .withFailureHandler(showError)
+      .dmscRunDriveScanFromDashboard();
+  }
+
+  function runMerge() {
+    showToast('Metadata merge started...');
+    google.script.run
+      .withSuccessHandler(function(response) { showToast(`Merge finished. Rows created: ${response.rowsCreated || 0}.`); loadRows(); })
+      .withFailureHandler(showError)
+      .dmscRunMergeFromDashboard();
+  }
+
+  function confirmDangerousAction(title, message, onConfirm) {
+    const dialog = document.getElementById('confirmDialog');
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMessage').textContent = message;
+    dialog.showModal();
+    dialog.addEventListener('close', function handler() {
+      dialog.removeEventListener('close', handler);
+      if (dialog.returnValue === 'confirm') onConfirm();
+    });
+  }
+
+  function setLoading(isLoading) {
+    document.getElementById('loadingState').classList.toggle('hidden', !isLoading);
+  }
+
+  function showError(error) {
+    setLoading(false);
+    const message = error && error.message ? error.message : String(error);
+    const node = document.getElementById('errorState');
+    node.textContent = message;
+    node.classList.remove('hidden');
+    showToast(message);
+  }
+
+  function clearError() {
+    document.getElementById('errorState').classList.add('hidden');
+  }
+
+  function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    window.setTimeout(() => toast.classList.remove('show'), 3600);
+  }
+
+  function badge(text, type) {
+    return `<span class="badge ${type || ''}">${escapeHtml(text || '-')}</span>`;
+  }
+
+  function promptBadgeType(value) {
+    const text = String(value || '').toLowerCase();
+    if (text.indexOf('no prompt') !== -1 || text.indexOf('error') !== -1) return 'warning';
+    if (text.indexOf('ai') !== -1 || text.indexOf('gemini') !== -1 || text.indexOf('openai') !== -1) return 'ok';
+    return '';
+  }
+
+  function detailList(items) {
+    return `<div class="detail-list">${items.map(function(item) {
+      return `<div class="detail-item"><span>${escapeHtml(item[0])}</span>${linkIfUrl(item[1])}</div>`;
+    }).join('')}</div>`;
+  }
+
+  function linkIfUrl(value) {
+    const text = String(value || '-');
+    if (/^https?:\/\//.test(text)) return `<a href="${escapeHtml(text)}" target="_blank" rel="noopener">Open link</a>`;
+    return escapeHtml(text);
+  }
+
+  function ownerOptions(selected) {
+    const owners = ['Source Authority Agent', 'Visual Asset Director', 'Instructional Materials Agent', 'Assessment Agent', 'Dashboard Sync Agent', 'Curriculum Dashboard Architect', 'Unit Alignment Agent', 'Modeling Coach'];
+    return owners.map(owner => `<option ${owner === selected ? 'selected' : ''}>${escapeHtml(owner)}</option>`).join('');
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function debounce(fn, delay) {
+    let timer;
+    return function(...args) {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
+</script>

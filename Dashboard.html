@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DMSC Metadata Dashboard</title>
+  <?!= include('DashboardCss'); ?>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Dashboard navigation">
+      <div class="brand-block">
+        <div class="brand-mark" aria-hidden="true">D</div>
+        <div>
+          <h1>DMSC</h1>
+          <p>Image Metadata Registry</p>
+        </div>
+      </div>
+
+      <div class="boundary-card" role="note">
+        <strong>Metadata only.</strong>
+        <span>No classroom, reuse, source-control, production, assessment, or instructional approval is created here.</span>
+      </div>
+
+      <nav id="queueNav" class="queue-nav" aria-label="Review queues"></nav>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Digital Media Source Control</p>
+          <h2 id="viewTitle">All Metadata Records</h2>
+          <p id="viewSubtitle">Server-backed review console for metadata evidence and human routing.</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn ghost" id="refreshButton" type="button">Refresh</button>
+          <button class="btn ghost danger-aware" id="scanButton" type="button">Scan Drive</button>
+          <button class="btn primary danger-aware" id="mergeButton" type="button">Merge Metadata</button>
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="Dashboard summary">
+        <article class="metric-card"><span>Total Records</span><strong id="metricTotal">-</strong></article>
+        <article class="metric-card warning"><span>Human Review</span><strong id="metricReview">-</strong></article>
+        <article class="metric-card warning"><span>Source Clearance</span><strong id="metricSource">-</strong></article>
+        <article class="metric-card"><span>No Prompt</span><strong id="metricNoPrompt">-</strong></article>
+        <article class="metric-card"><span>Duplicate Groups</span><strong id="metricDupes">-</strong></article>
+      </section>
+
+      <section class="toolbar" aria-label="Search and filters">
+        <label class="search-box">
+          <span class="sr-only">Search records</span>
+          <input id="searchInput" type="search" placeholder="Search filename, path, status, owner...">
+        </label>
+        <select id="ownerFilter" aria-label="Filter by next owner">
+          <option value="">All owners</option>
+          <option>Source Authority Agent</option>
+          <option>Visual Asset Director</option>
+          <option>Instructional Materials Agent</option>
+          <option>Assessment Agent</option>
+          <option>Dashboard Sync Agent</option>
+          <option>Curriculum Dashboard Architect</option>
+        </select>
+        <select id="pageSizeSelect" aria-label="Rows per page">
+          <option value="25">25 rows</option>
+          <option value="50" selected>50 rows</option>
+          <option value="100">100 rows</option>
+        </select>
+      </section>
+
+      <section class="content-grid">
+        <div class="table-card">
+          <div class="table-header">
+            <div>
+              <h3>Registry Records</h3>
+              <p id="resultCount">Loading records...</p>
+            </div>
+          </div>
+
+          <div id="loadingState" class="state-panel">Loading dashboard rows...</div>
+          <div id="emptyState" class="state-panel hidden">No records match this view.</div>
+          <div id="errorState" class="state-panel error hidden"></div>
+
+          <div class="table-wrap" id="tableWrap">
+            <table class="registry-table">
+              <caption class="sr-only">Image metadata registry records</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Asset</th>
+                  <th scope="col">Prompt Evidence</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Review</th>
+                  <th scope="col">Next Owner</th>
+                  <th scope="col">Updated</th>
+                </tr>
+              </thead>
+              <tbody id="recordsBody"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination-bar" aria-label="Pagination controls">
+            <button class="btn ghost" id="previousPageButton" type="button">Previous</button>
+            <span id="pageStatus">Page 1</span>
+            <button class="btn ghost" id="nextPageButton" type="button">Next</button>
+          </div>
+        </div>
+
+        <aside class="inspector" aria-label="Selected record inspector">
+          <div id="inspectorEmpty" class="inspector-empty">
+            <h3>Select a record</h3>
+            <p>Choose a row to inspect prompt evidence, source status, duplicate flags, routing, and audit history.</p>
+          </div>
+
+          <div id="inspectorContent" class="hidden">
+            <div class="inspector-header">
+              <div>
+                <p class="eyebrow">Selected Asset</p>
+                <h3 id="inspectorTitle"></h3>
+                <p id="inspectorPath"></p>
+              </div>
+              <button class="btn ghost" id="openSheetButton" type="button">Open Row</button>
+            </div>
+
+            <div class="tabs" role="tablist" aria-label="Inspector sections">
+              <button class="tab active" type="button" data-tab="summary">Summary</button>
+              <button class="tab" type="button" data-tab="prompt">Prompt</button>
+              <button class="tab" type="button" data-tab="source">Source</button>
+              <button class="tab" type="button" data-tab="audit">Audit</button>
+              <button class="tab" type="button" data-tab="routing">Routing</button>
+            </div>
+
+            <section id="tab-summary" class="tab-panel active"></section>
+            <section id="tab-prompt" class="tab-panel"></section>
+            <section id="tab-source" class="tab-panel"></section>
+            <section id="tab-audit" class="tab-panel"></section>
+            <section id="tab-routing" class="tab-panel"></section>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="confirmDialog" class="confirm-dialog">
+    <form method="dialog">
+      <h3 id="confirmTitle">Confirm action</h3>
+      <p id="confirmMessage"></p>
+      <div class="dialog-actions">
+        <button class="btn ghost" value="cancel">Cancel</button>
+        <button class="btn primary" id="confirmProceedButton" value="confirm">Proceed</button>
+      </div>
+    </form>
+  </dialog>
+
+  <?!= include('DashboardJs'); ?>
+</body>
+</html>
