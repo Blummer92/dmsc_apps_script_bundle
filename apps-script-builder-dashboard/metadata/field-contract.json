@@ -1,0 +1,77 @@
+{
+  "contract_version": "1.0.0",
+  "fields": [
+    {
+      "field_name": "project_id",
+      "classification": "canonical",
+      "owner_database": "Apps Script Projects",
+      "safe_sync_rule": "May create and update."
+    },
+    {
+      "field_name": "project_name",
+      "classification": "canonical",
+      "owner_database": "Apps Script Projects",
+      "safe_sync_rule": "May create and update."
+    },
+    {
+      "field_name": "agent_owner",
+      "classification": "canonical",
+      "owner_database": "Apps Script Projects",
+      "safe_sync_rule": "May create and update."
+    },
+    {
+      "field_name": "workspace_target",
+      "classification": "canonical",
+      "owner_database": "Apps Script Projects",
+      "safe_sync_rule": "May create and update."
+    },
+    {
+      "field_name": "output_type",
+      "classification": "canonical",
+      "owner_database": "Apps Script Projects",
+      "safe_sync_rule": "May update as Apps Script output type only."
+    },
+    {
+      "field_name": "generated_artifact",
+      "classification": "canonical",
+      "owner_database": "Apps Script Projects",
+      "safe_sync_rule": "May write generated Apps Script artifact references."
+    },
+    {
+      "field_name": "last_synced_at",
+      "classification": "canonical",
+      "owner_database": "Apps Script Projects",
+      "safe_sync_rule": "May update for Apps Script metadata sync."
+    },
+    {
+      "field_name": "source_document_relation",
+      "classification": "relation",
+      "owner_database": "External source record",
+      "safe_sync_rule": "Reference only."
+    },
+    {
+      "field_name": "unit_id_lookup",
+      "classification": "lookup",
+      "owner_database": "External source record",
+      "safe_sync_rule": "Read-only lookup."
+    },
+    {
+      "field_name": "lesson_id_lookup",
+      "classification": "lookup",
+      "owner_database": "External source record",
+      "safe_sync_rule": "Read-only lookup."
+    },
+    {
+      "field_name": "packet_id_lookup",
+      "classification": "lookup",
+      "owner_database": "External source record",
+      "safe_sync_rule": "Read-only lookup."
+    },
+    {
+      "field_name": "curriculum_readiness_lookup",
+      "classification": "lookup",
+      "owner_database": "External source record",
+      "safe_sync_rule": "Read-only summary."
+    }
+  ]
+}
