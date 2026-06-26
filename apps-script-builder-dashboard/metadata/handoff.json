@@ -1,0 +1,34 @@
+{
+  "handoff_type": "apps_script_metadata_sync_review",
+  "requesting_agent": "Google Apps Script Builder Agent",
+  "generated_artifact": "Apps Script Builder Dashboard schema project",
+  "records_to_create_or_update": [
+    "Apps Script Projects",
+    "Project Logs",
+    "Handoff Records",
+    "Change Log",
+    "Agent/Data Contracts"
+  ],
+  "canonical_metadata_fields_needed": [
+    "project_id",
+    "project_name",
+    "agent_owner",
+    "workspace_target",
+    "output_type",
+    "generated_artifact",
+    "last_synced_at",
+    "build_status",
+    "deployment_status",
+    "project_risk_level"
+  ],
+  "lookup_or_relation_fields": [
+    "unit_id_lookup",
+    "lesson_id_lookup",
+    "packet_id_lookup",
+    "curriculum_readiness_lookup",
+    "source_document_relation"
+  ],
+  "boundary_note": "This dashboard is for Apps Script operational metadata and logs only. Curriculum-facing fields stay lookup or relation-only.",
+  "blocked_until_review": false,
+  "recommended_next_agent": "Dashboard Sync Agent"
+}
