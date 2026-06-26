@@ -2,6 +2,12 @@
   "handoff_type": "apps_script_metadata_sync_review",
   "requesting_agent": "Google Apps Script Builder Agent",
   "generated_artifact": "Apps Script Builder Dashboard schema project",
+  "github_repo_or_branch": "",
+  "google_workspace_targets": [
+    "Google Sheets",
+    "Apps Script HTML Service"
+  ],
+  "notion_databases_in_scope": [],
   "records_to_create_or_update": [
     "Apps Script Projects",
     "Project Logs",
@@ -16,19 +22,33 @@
     "workspace_target",
     "output_type",
     "generated_artifact",
+    "generated_artifact_file_id",
+    "generated_artifact_url",
+    "generated_artifact_parent_folder_id",
+    "workspace_target_file_id",
+    "workspace_target_url",
+    "handoff_packet_file_id",
+    "handoff_packet_url",
+    "drive_registry_status",
+    "drive_lookup_strategy",
+    "last_drive_verified_at",
+    "archive_folder_id",
+    "archive_status",
     "last_synced_at",
     "build_status",
     "deployment_status",
     "project_risk_level"
   ],
-  "lookup_or_relation_fields": [
+  "possible_duplicate_fields": [
     "unit_id_lookup",
     "lesson_id_lookup",
     "packet_id_lookup",
     "curriculum_readiness_lookup",
     "source_document_relation"
   ],
-  "boundary_note": "This dashboard is for Apps Script operational metadata and logs only. Curriculum-facing fields stay lookup or relation-only.",
+  "possible_duplicate_records": [],
+  "source_of_truth_assumption": "Apps Script Builder Dashboard owns Apps Script operational metadata only. Curriculum source-of-truth dashboards own curriculum readiness, lesson decisions, packet approval, source authority, and final generation approval.",
+  "sync_question_for_dashboard_agent": "Confirm that relation and lookup fields remain non-editable and that Apps Script sync writes only operational metadata and Apps Script-specific logs. Live Notion/curriculum sync and live Drive automation remain blocked.",
   "blocked_until_review": false,
   "recommended_next_agent": "Dashboard Sync Agent"
 }
