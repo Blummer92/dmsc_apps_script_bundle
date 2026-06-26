@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0.0",
+  "database": "Change Log",
+  "purpose": "Track schema, sync, contract, and implementation changes.",
+  "fields": [
+    {
+      "name": "change_id",
+      "type": "text",
+      "required": true
+    },
+    {
+      "name": "project_id",
+      "type": "text",
+      "required": false
+    },
+    {
+      "name": "change_type",
+      "type": "select",
+      "options": [
+        "schema",
+        "sync",
+        "contract",
+        "implementation",
+        "handoff",
+        "review"
+      ]
+    },
+    {
+      "name": "changed_field",
+      "type": "text"
+    },
+    {
+      "name": "previous_value",
+      "type": "text"
+    },
+    {
+      "name": "new_value",
+      "type": "text"
+    },
+    {
+      "name": "reason",
+      "type": "text"
+    },
+    {
+      "name": "changed_by_agent",
+      "type": "text"
+    },
+    {
+      "name": "requires_owner_review",
+      "type": "boolean"
+    },
+    {
+      "name": "created_at",
+      "type": "datetime"
+    }
+  ]
+}
