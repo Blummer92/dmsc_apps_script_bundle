@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0.0",
+  "required_change_log_coverage": [
+    "schema changes",
+    "sync rule changes",
+    "agent/data contract changes",
+    "field classification changes",
+    "blocked field decisions",
+    "deployment changes"
+  ],
+  "change_types": [
+    "schema_setup",
+    "schema_change",
+    "sync_rule_change",
+    "field_contract_change",
+    "deployment_change",
+    "blocked_field_review",
+    "bug_fix",
+    "performance_fix"
+  ],
+  "required_for_mvp": [
+    "attempted live sync audit entries",
+    "dry-run diff review before live write",
+    "mock mode versus live mode changes",
+    "Drive registry field changes",
+    "handoff status changes"
+  ],
+  "minimum_fields": [
+    "change_id",
+    "project_id",
+    "change_type",
+    "changed_field",
+    "previous_value",
+    "new_value",
+    "reason",
+    "changed_by_agent",
+    "requires_owner_review",
+    "created_at"
+  ],
+  "owner_review_required_when": [
+    "A lookup-only curriculum field would become editable.",
+    "A relation-only source document field would become authority-bearing.",
+    "Any sync path would write curriculum readiness, lesson decisions, packet approval, source authority, or final generation approval.",
+    "The Apps Script Builder Dashboard would become canonical for curriculum metadata."
+  ]
+}

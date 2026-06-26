@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <title>Apps Script Builder Dashboard</title>
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <h1>Apps Script Builder Dashboard</h1>
+        <p>Operational metadata, logs, and handoffs for Apps Script projects.</p>
+      </header>
+
+      <section class="card">
+        <h2>Schema Status</h2>
+        <div id="summary">Loading...</div>
+      </section>
+
+      <section class="card warning">
+        <h2>Boundary</h2>
+        <p>This dashboard tracks Apps Script build operations only. Curriculum-facing values are lookup or relation-only.</p>
+      </section>
+    </main>
+    <?!= include('Client'); ?>
+  </body>
+</html>

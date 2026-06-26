@@ -1,0 +1,251 @@
+{
+  "schema_version": "1.0.0",
+  "approved_databases": [
+    "Apps Script Projects",
+    "Project Logs",
+    "Handoff Records",
+    "Change Log",
+    "Agent/Data Contracts"
+  ],
+  "sheets_safe_database_names": {
+    "Agent/Data Contracts": "Agent Data Contracts"
+  },
+  "ownership_rule": "This dashboard owns Apps Script operational metadata only. It does not own curriculum readiness, lesson decisions, packet approval, source authority, or final generation approval.",
+  "sync_mode_default": "mock",
+  "live_notion_curriculum_sync": "blocked",
+  "live_drive_automation": "blocked",
+  "fields": [
+    {
+      "field": "project_id",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "All agent dashboards",
+      "safe_sync_rule": "May create and update for Apps Script project identity.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "project_name",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "All agent dashboards",
+      "safe_sync_rule": "May create and update for Apps Script project display.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "agent_owner",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Agent dashboards",
+      "safe_sync_rule": "May create and update operational agent ownership.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "workspace_target",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Operations Manager, Dashboard Sync Agent",
+      "safe_sync_rule": "May create and update Google Workspace target.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "output_type",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Worksheet and Slide agents",
+      "safe_sync_rule": "May create and update Apps Script output type only.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "source_document_relation",
+      "classification": "Relation/link only",
+      "owner_database": "Curriculum source-of-truth dashboard or Drive Operations Manager",
+      "consuming_database": "Apps Script Builder Dashboard",
+      "safe_sync_rule": "Store relation or link only; do not claim source authority.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "unit_id_lookup",
+      "classification": "Lookup/summary only",
+      "owner_database": "Curriculum source-of-truth dashboard",
+      "consuming_database": "Apps Script Builder Dashboard",
+      "safe_sync_rule": "Display only; never overwrite curriculum unit identity.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "lesson_id_lookup",
+      "classification": "Lookup/summary only",
+      "owner_database": "Curriculum source-of-truth dashboard",
+      "consuming_database": "Apps Script Builder Dashboard",
+      "safe_sync_rule": "Display only; never overwrite curriculum lesson identity.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "packet_id_lookup",
+      "classification": "Lookup/summary only",
+      "owner_database": "Curriculum source-of-truth dashboard",
+      "consuming_database": "Apps Script Builder Dashboard",
+      "safe_sync_rule": "Display only; never overwrite packet identity or approval.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "curriculum_readiness_lookup",
+      "classification": "Lookup/summary only",
+      "owner_database": "Curriculum source-of-truth dashboard",
+      "consuming_database": "Apps Script Builder Dashboard",
+      "safe_sync_rule": "Display only; never update readiness.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "generated_artifact",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Operations Manager, curriculum dashboards",
+      "safe_sync_rule": "May write Apps Script-generated artifact links; final approval remains external.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "generated_artifact_file_id",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store stable Drive file ID after artifact creation; must not create Drive files or folders in MVP.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "generated_artifact_url",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store stable Drive URL after artifact creation; must not use repeated Drive name searches.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "generated_artifact_parent_folder_id",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store approved parent folder ID after manual review; live folder creation remains blocked.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "workspace_target_file_id",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store the stable workspace target file ID after manual verification.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "workspace_target_url",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store the stable workspace target URL after manual verification.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "source_document_file_id",
+      "classification": "Blocked pending owner review",
+      "owner_database": "Curriculum source-of-truth dashboard or Drive Metadata Operations Agent",
+      "consuming_database": "Apps Script Builder Dashboard",
+      "safe_sync_rule": "Schema placeholder only in MVP; source references must remain relation/lookup/summary-only.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "source_document_url",
+      "classification": "Blocked pending owner review",
+      "owner_database": "Curriculum source-of-truth dashboard or Drive Metadata Operations Agent",
+      "consuming_database": "Apps Script Builder Dashboard",
+      "safe_sync_rule": "Schema placeholder only in MVP; source references must remain relation/lookup/summary-only.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "handoff_packet_file_id",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store stable handoff packet file ID after creation.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "handoff_packet_url",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store stable handoff packet URL after creation.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "drive_registry_status",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May track manual/mock registry status only; live Drive automation remains blocked.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "drive_lookup_strategy",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May document lookup strategy; agents must prefer registry IDs over repeated name searches.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "last_drive_verified_at",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store manual verification timestamp.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "archive_folder_id",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May store approved archive folder ID; live folder creation remains blocked.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "archive_status",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Metadata Operations Agent",
+      "safe_sync_rule": "May track archive status only; moving files live remains blocked.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "bug_log_link",
+      "classification": "Relation/link only",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Human and agent dashboards",
+      "safe_sync_rule": "Link to Project Logs filtered by bug log type.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "decision_log_link",
+      "classification": "Relation/link only",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Human and agent dashboards",
+      "safe_sync_rule": "Link to operational decisions only; never decide curriculum ownership.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "performance_log_link",
+      "classification": "Relation/link only",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Drive Operations Manager, agent dashboards",
+      "safe_sync_rule": "Link to Project Logs filtered by performance log type.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "last_synced_at",
+      "classification": "Canonical Apps Script metadata",
+      "owner_database": "Apps Script Builder Dashboard",
+      "consuming_database": "Dashboard Sync Agent",
+      "safe_sync_rule": "May update for Apps Script operational metadata sync only.",
+      "blocked_until_owner_review": false
+    }
+  ]
+}

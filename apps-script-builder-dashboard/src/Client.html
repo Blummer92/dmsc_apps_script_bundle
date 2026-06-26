@@ -1,0 +1,22 @@
+<script>
+  function renderSummary(summary) {
+    const target = document.getElementById('summary');
+    target.innerHTML = '';
+
+    summary.sheets.forEach((sheet) => {
+      const row = document.createElement('div');
+      row.className = 'sheet-row';
+      row.innerHTML = `<strong>${sheet.name}</strong><span>${sheet.records} records</span>`;
+      target.appendChild(row);
+    });
+  }
+
+  function renderError(error) {
+    document.getElementById('summary').textContent = error.message || String(error);
+  }
+
+  google.script.run
+    .withSuccessHandler(renderSummary)
+    .withFailureHandler(renderError)
+    .getClientDashboardSummary();
+</script>
