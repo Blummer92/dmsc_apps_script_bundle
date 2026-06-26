@@ -1,0 +1,107 @@
+{
+  "schema_version": "1.0.0",
+  "databases": {
+    "Apps Script Projects": {
+      "purpose": "Canonical Apps Script operational project/build metadata.",
+      "fields": [
+        "project_id",
+        "project_name",
+        "agent_owner",
+        "workspace_target",
+        "output_type",
+        "generated_artifact",
+        "last_synced_at",
+        "build_status",
+        "deployment_status",
+        "project_risk_level",
+        "source_document_relation",
+        "unit_id_lookup",
+        "lesson_id_lookup",
+        "packet_id_lookup",
+        "curriculum_readiness_lookup",
+        "blocked_until_dashboard_sync_review",
+        "blocked_until_drive_ops_review",
+        "blocked_reason",
+        "created_at",
+        "updated_at"
+      ],
+      "safe_writes": [
+        "Apps Script operational metadata",
+        "Apps Script build status",
+        "Apps Script generated artifact references"
+      ],
+      "restricted_writes": [
+        "curriculum owned fields",
+        "source owned fields",
+        "approval owned fields"
+      ]
+    },
+    "Project Logs": {
+      "purpose": "Typed log entries for bugs, decisions, performance, deployment, and review notes.",
+      "fields": [
+        "log_id",
+        "project_id",
+        "log_type",
+        "severity",
+        "summary",
+        "details",
+        "root_cause",
+        "fix_applied",
+        "prevention_rule",
+        "action_name",
+        "duration_ms",
+        "record_count",
+        "cache_status",
+        "status",
+        "created_at",
+        "created_by_agent"
+      ]
+    },
+    "Handoff Records": {
+      "purpose": "Governance-safe questions for owner agents.",
+      "fields": [
+        "handoff_id",
+        "project_id",
+        "handoff_type",
+        "requesting_agent",
+        "target_agent",
+        "blocked_until_review",
+        "question_for_owner",
+        "owner_response",
+        "approved_contract",
+        "status",
+        "created_at",
+        "resolved_at"
+      ]
+    },
+    "Change Log": {
+      "purpose": "Schema, sync, contract, and implementation changes before and after deployment.",
+      "fields": [
+        "change_id",
+        "project_id",
+        "change_type",
+        "changed_field",
+        "previous_value",
+        "new_value",
+        "reason",
+        "changed_by_agent",
+        "requires_owner_review",
+        "created_at"
+      ]
+    },
+    "Agent/Data Contracts": {
+      "purpose": "Field ownership and sync safety contract used by agents and reviewers.",
+      "fields": [
+        "contract_id",
+        "field_name",
+        "classification",
+        "owner_database",
+        "consuming_database",
+        "safe_sync_rule",
+        "blocked_until_owner_review",
+        "notes",
+        "updated_at"
+      ]
+    }
+  }
+}
