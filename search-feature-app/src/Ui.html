@@ -6,28 +6,55 @@
   </head>
   <body>
     <main class="app-shell">
-      <header>
-        <h1>Curriculum Search</h1>
-        <p>Search indexed curriculum records and configured Drive folders.</p>
+      <header class="app-header">
+        <div>
+          <h1>Curriculum Search</h1>
+          <p id="configStatus" class="status-text">Loading configuration...</p>
+        </div>
       </header>
 
-      <section class="search-panel">
+      <form id="searchForm" class="search-form">
         <label for="query">Search</label>
-        <input id="query" type="search" placeholder="Try: unit 2, worksheet, slides, draft" autofocus>
-
-        <div class="filters">
-          <input id="unit" placeholder="Unit">
-          <input id="lesson" placeholder="Lesson">
-          <input id="packet" placeholder="Packet">
-          <input id="output_type" placeholder="Output type">
-          <input id="readiness_status" placeholder="Readiness status">
+        <div class="search-row">
+          <input id="query" name="query" type="search" autocomplete="off" placeholder="Record, lesson, file, or keyword">
+          <button type="submit">Search</button>
         </div>
 
-        <button id="searchButton" type="button">Search</button>
-      </section>
+        <section class="filters" aria-label="Search filters">
+          <label>
+            Unit
+            <input id="unit" name="unit" type="text" placeholder="Any">
+          </label>
+          <label>
+            Lesson
+            <input id="lesson" name="lesson" type="text" placeholder="Any">
+          </label>
+          <label>
+            Packet
+            <input id="packet" name="packet" type="text" placeholder="Any">
+          </label>
+          <label>
+            Output type
+            <select id="output_type" name="output_type">
+              <option value="">Any</option>
+              <option value="worksheet">Worksheet</option>
+              <option value="slide_deck">Slide deck</option>
+              <option value="source_document">Source document</option>
+              <option value="dashboard_or_index">Dashboard or index</option>
+              <option value="pdf">PDF</option>
+            </select>
+          </label>
+          <label>
+            Readiness
+            <input id="readiness_status" name="readiness_status" type="text" list="readinessOptions" placeholder="Any approved value">
+            <datalist id="readinessOptions"></datalist>
+          </label>
+        </section>
+      </form>
 
-      <section id="status" class="status">Loading configuration...</section>
-      <section id="results" class="results"></section>
+      <section class="message-panel" id="messagePanel" hidden></section>
+      <section class="results-summary" id="resultsSummary" hidden></section>
+      <section class="results-list" id="resultsList" aria-live="polite"></section>
     </main>
 
     <?!= include('Client'); ?>
