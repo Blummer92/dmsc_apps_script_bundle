@@ -1,0 +1,118 @@
+<script>
+(function() {
+  const fieldIds = ['unit', 'lesson', 'packet', 'output_type', 'readiness_status'];
+  const searchButton = document.getElementById('searchButton');
+  const queryInput = document.getElementById('query');
+  const statusEl = document.getElementById('status');
+  const resultsEl = document.getElementById('results');
+
+  searchButton.addEventListener('click', runSearch);
+  queryInput.addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+      runSearch();
+    }
+  });
+
+  google.script.run
+    .withSuccessHandler(function(bootstrap) {
+      statusEl.textContent = buildConfigStatus(bootstrap.configStatus);
+    })
+    .withFailureHandler(function(error) {
+      statusEl.textContent = 'Configuration failed to load: ' + error.message;
+    })
+    .getSearchBootstrap();
+
+  function runSearch() {
+    const query = queryInput.value;
+    const filters = collectFilters();
+
+    setLoading(true);
+    resultsEl.innerHTML = '';
+
+    google.script.run
+      .withSuccessHandler(renderResults)
+      .withFailureHandler(function(error) {
+        setLoading(false);
+        statusEl.textContent = 'Search failed: ' + error.message;
+      })
+      .searchCurriculum(query, filters);
+  }
+
+  function collectFilters() {
+    return fieldIds.reduce(function(accumulator, id) {
+      accumulator[id] = document.getElementById(id).value || '';
+      return accumulator;
+    }, {});
+  }
+
+  function renderResults(response) {
+    setLoading(false);
+
+    const warnings = response.warnings && response.warnings.length
+      ? ' Warnings: ' + response.warnings.join(' | ')
+      : '';
+
+    statusEl.textContent = response.resultCount + ' result(s) found in ' + response.elapsedMs + ' ms.' + warnings;
+
+    if (!response.results || !response.results.length) {
+      resultsEl.innerHTML = '<article class="empty">No results found. Try fewer filters or a broader keyword.</article>';
+      return;
+    }
+
+    resultsEl.innerHTML = response.results.map(renderResultCard).join('');
+  }
+
+  function renderResultCard(result) {
+    const metadata = result.metadata || {};
+    const safeUrl = escapeHtml(result.fileUrl || '');
+    const link = safeUrl
+      ? '<a href="' + safeUrl + '" target="_blank" rel="noopener">Open file</a>'
+      : '<span class="muted">No file URL</span>';
+
+    return [
+      '<article class="result-card">',
+      '<div class="result-header">',
+      '<h2>' + escapeHtml(result.title || 'Untitled') + '</h2>',
+      '<span class="pill">' + escapeHtml(result.source || 'unknown') + '</span>',
+      '</div>',
+      '<p class="match">' + escapeHtml(result.matchReason || 'Matched record') + '</p>',
+      '<dl>',
+      metadata.unit ? '<dt>Unit</dt><dd>' + escapeHtml(metadata.unit) + '</dd>' : '',
+      metadata.lesson ? '<dt>Lesson</dt><dd>' + escapeHtml(metadata.lesson) + '</dd>' : '',
+      metadata.packet ? '<dt>Packet</dt><dd>' + escapeHtml(metadata.packet) + '</dd>' : '',
+      metadata.outputType ? '<dt>Output Type</dt><dd>' + escapeHtml(metadata.outputType) + '</dd>' : '',
+      metadata.readinessStatus ? '<dt>Status</dt><dd>' + escapeHtml(metadata.readinessStatus) + '</dd>' : '',
+      '</dl>',
+      '<div class="actions">' + link + '</div>',
+      '</article>'
+    ].join('');
+  }
+
+  function buildConfigStatus(configStatus) {
+    if (!configStatus) {
+      return 'Configuration unavailable.';
+    }
+
+    return 'Index sheet: ' + configStatus.indexSheetName +
+      ' | Drive search: ' + (configStatus.enableDriveSearch ? 'on' : 'off') +
+      ' | Limit: ' + configStatus.resultLimit;
+  }
+
+  function setLoading(isLoading) {
+    searchButton.disabled = isLoading;
+    searchButton.textContent = isLoading ? 'Searching...' : 'Search';
+    if (isLoading) {
+      statusEl.textContent = 'Searching...';
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+})();
+</script>
