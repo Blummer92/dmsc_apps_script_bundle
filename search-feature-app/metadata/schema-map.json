@@ -1,159 +1,223 @@
 {
-  "project": "curriculum-search-feature",
-  "version": "0.2.0",
-  "status": "governance_revision_pending_dashboard_sync_review",
-  "governance_version": "2026-06-27-governance-compliance",
+  "manifest_type": "curriculum_search_schema_map",
+  "generated_artifact": "search-feature-app",
+  "github_repo": "Blummer92/dmsc_apps_script_bundle",
+  "github_branch": "governance-compliance-search-feature",
+  "project": "search-feature-app",
+  "governance_version": "dashboard-sync-review-v1",
+  "schema_revision": "2026-06-27-dashboard-sync-governance",
+  "review_status": "implemented_pending_dashboard_sync_confirmation",
+  "google_workspace_targets": [
+    "Google Sheets",
+    "Google Drive",
+    "Apps Script Sidebar"
+  ],
+  "sync_owner": "Dashboard Sync Agent",
+  "read_only": true,
+  "blocked_until_review": true,
+  "source_badges": [
+    "Google Sheets",
+    "Google Drive",
+    "Notion",
+    "Dashboard"
+  ],
   "approved_readiness_vocabulary": {
-    "configured_by": "CURRICULUM_SEARCH_READINESS_VOCABULARY",
-    "format": "JSON array of strings or objects with value, label, and aliases",
-    "default_behavior": "No hard-coded readiness vocabulary is enforced when the property is empty.",
-    "approval_required": true
+    "configuration_source": "Script property: CURRICULUM_SEARCH_READINESS_VOCABULARY",
+    "format": [
+      {
+        "value": "canonical_status_key",
+        "label": "Display label",
+        "aliases": [
+          "legacy label",
+          "alternate spelling"
+        ]
+      }
+    ],
+    "default_behavior": "No readiness options are hard-coded. If the property is empty, users can type a value and the search remains read-only.",
+    "governance_note": "Dashboard Sync Agent must approve canonical values before this vocabulary is treated as authoritative."
   },
-  "fields": {
-    "title": {
+  "fields": [
+    {
+      "field": "title",
       "label": "Title",
-      "required": true,
-      "source_system": ["Google Sheets", "Google Drive", "Notion", "Dashboard"],
-      "canonical_owner_database": "Owner record by source system",
-      "canonical_record_url": "optional",
-      "duplicate_resolution_status": "review_required"
-    },
-    "unit": {
-      "label": "Unit",
-      "required": false,
-      "source_system": ["Google Sheets", "Notion", "Dashboard"],
-      "canonical_owner_database": "DM Units",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
-    },
-    "lesson": {
-      "label": "Lesson",
-      "required": false,
-      "source_system": ["Google Sheets", "Notion", "Dashboard"],
-      "canonical_owner_database": "DM Curriculum Elements",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
-    },
-    "packet": {
-      "label": "Packet",
-      "required": false,
-      "source_system": ["Google Sheets", "Notion"],
-      "canonical_owner_database": "DM Agent Retrieval Queue or DM Source Library",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
-    },
-    "source_document": {
-      "label": "Source Document",
-      "required": false,
-      "source_system": ["Google Sheets", "Google Drive", "Notion"],
-      "canonical_owner_database": "DM Source Library",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
-    },
-    "output_type": {
-      "label": "Output Type",
-      "required": false,
-      "source_system": ["Google Sheets", "Google Drive", "Notion"],
-      "canonical_owner_database": "DM Source Library or DM Curriculum Elements",
-      "canonical_record_url": "optional",
-      "duplicate_resolution_status": "review_required"
-    },
-    "target_dashboard": {
-      "label": "Target Dashboard",
-      "required": false,
-      "source_system": ["Google Sheets", "Dashboard", "Notion"],
-      "canonical_owner_database": "Agent Routing Dashboard",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
-    },
-    "related_notion_records": {
-      "label": "Related Notion Records",
-      "required": false,
-      "source_system": ["Google Sheets", "Notion"],
-      "canonical_owner_database": "Display-only until relation ownership is approved",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
-    },
-    "readiness_status": {
-      "label": "Readiness Status",
-      "required": false,
-      "source_system": ["Google Sheets", "Notion", "Dashboard"],
-      "canonical_owner_database": "Mapped from DM Source Library, DM Units, or DM Curriculum Elements",
-      "canonical_record_url": "recommended",
+      "source_system": "Google Sheets, Google Drive, Notion, or Dashboard",
+      "source": "Sheet header or Drive file name",
+      "used_for": ["search", "result display", "ranking", "duplicate candidate grouping"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
       "duplicate_resolution_status": "review_required",
-      "controlled_vocabulary_property": "CURRICULUM_SEARCH_READINESS_VOCABULARY"
+      "governance_status": "display-only"
     },
-    "file_url": {
+    {
+      "field": "unit",
+      "label": "Unit",
+      "source_system": "Google Sheets, Notion, or Dashboard",
+      "source": "Sheet header: unit",
+      "used_for": ["filter", "result metadata", "duplicate candidate grouping"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "canonical owner must remain externally governed"
+    },
+    {
+      "field": "lesson",
+      "label": "Lesson",
+      "source_system": "Google Sheets, Notion, or Dashboard",
+      "source": "Sheet header: lesson",
+      "used_for": ["filter", "result metadata", "duplicate candidate grouping"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "canonical owner must remain externally governed"
+    },
+    {
+      "field": "packet",
+      "label": "Packet",
+      "source_system": "Google Sheets, Notion, or Dashboard",
+      "source": "Sheet header: packet",
+      "used_for": ["filter", "result metadata", "duplicate candidate grouping"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "canonical owner must remain externally governed"
+    },
+    {
+      "field": "source_document",
+      "label": "Source Document",
+      "source_system": "Google Sheets, Google Drive, Notion, or Dashboard",
+      "source": "Sheet header: source_document or Drive file name",
+      "used_for": ["search", "result metadata"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "display-only"
+    },
+    {
+      "field": "output_type",
+      "label": "Output Type",
+      "source_system": "Google Sheets, Google Drive, Notion, or Dashboard",
+      "source": "Sheet header: output_type or Drive MIME type mapping",
+      "used_for": ["filter", "result type"],
+      "allowed_examples": ["worksheet", "slide_deck", "source_document", "dashboard_or_index", "pdf", "drive_file"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "canonical values require Dashboard Sync Agent approval"
+    },
+    {
+      "field": "target_dashboard",
+      "label": "Target Dashboard",
+      "source_system": "Google Sheets, Notion, or Dashboard",
+      "source": "Sheet header: target_dashboard",
+      "used_for": ["search", "result metadata", "source badge inference"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "owner dashboard must confirm"
+    },
+    {
+      "field": "related_notion_records",
+      "label": "Related Notion Records",
+      "source_system": "Google Sheets, Notion, or Dashboard",
+      "source": "Sheet header: related_notion_records",
+      "used_for": ["search", "review context"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "read-only"
+    },
+    {
+      "field": "readiness_status",
+      "label": "Readiness Status",
+      "source_system": "Google Sheets, Notion, or Dashboard",
+      "source": "Sheet header: readiness_status",
+      "used_for": ["filter", "result metadata"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "must not be overwritten by this project"
+    },
+    {
+      "field": "file_url",
       "label": "File URL",
-      "required": false,
-      "source_system": ["Google Sheets", "Google Drive", "Notion"],
-      "canonical_owner_database": "DM Source Library",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
+      "source_system": "Google Sheets or Google Drive",
+      "source": "Sheet header: file_url or Drive file URL",
+      "used_for": ["result link", "duplicate candidate grouping"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "display-only"
     },
-    "source_system": {
+    {
+      "field": "source_system",
       "label": "Source System",
-      "required": true,
-      "source_system": ["Google Sheets", "Google Drive", "Notion", "Dashboard"],
-      "canonical_owner_database": "Search result runtime metadata",
-      "canonical_record_url": "optional",
-      "duplicate_resolution_status": "not_mergeable"
+      "source_system": "Google Sheets, Google Drive, Notion, or Dashboard",
+      "source": "Sheet header: source_system or Drive service",
+      "used_for": ["source badge", "governance review"],
+      "allowed_examples": ["Google Sheets", "Google Drive", "Notion", "Dashboard"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "display-only"
     },
-    "canonical_owner_database": {
+    {
+      "field": "canonical_owner_database",
       "label": "Canonical Owner Database",
-      "required": false,
-      "source_system": ["Notion", "Dashboard"],
-      "canonical_owner_database": "Dashboard Sync Agent approved mapping",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
+      "source_system": "Dashboard Sync Agent",
+      "source": "Sheet header: canonical_owner_database",
+      "used_for": ["governance review"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "read-only; Dashboard Sync Agent owns approval"
     },
-    "canonical_record_url": {
+    {
+      "field": "canonical_record_url",
       "label": "Canonical Record URL",
-      "required": false,
-      "source_system": ["Google Sheets", "Notion", "Dashboard"],
-      "canonical_owner_database": "Owner record by source system",
-      "canonical_record_url": "self",
-      "duplicate_resolution_status": "review_required"
+      "source_system": "Dashboard Sync Agent",
+      "source": "Sheet header: canonical_record_url",
+      "used_for": ["result context", "duplicate candidate grouping"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "read-only; never created or overwritten"
     },
-    "duplicate_resolution_status": {
+    {
+      "field": "duplicate_resolution_status",
       "label": "Duplicate Resolution Status",
-      "required": false,
-      "source_system": ["Google Sheets", "Notion", "Dashboard"],
-      "canonical_owner_database": "Dashboard Sync Agent",
-      "canonical_record_url": "optional",
-      "duplicate_resolution_status": "review_required"
-    },
-    "description": {
-      "label": "Description",
-      "required": false,
-      "source_system": ["Google Sheets", "Notion"],
-      "canonical_owner_database": "DM Source Library or DM Curriculum Elements",
-      "canonical_record_url": "recommended",
-      "duplicate_resolution_status": "review_required"
-    },
-    "updated_at": {
-      "label": "Updated At",
-      "required": false,
-      "source_system": ["Google Sheets", "Google Drive", "Notion", "Dashboard"],
-      "canonical_owner_database": "Source-specific freshness metadata",
-      "canonical_record_url": "optional",
-      "duplicate_resolution_status": "not_mergeable"
+      "source_system": "Dashboard Sync Agent",
+      "source": "Sheet header: duplicate_resolution_status",
+      "used_for": ["review badge", "duplicate warning context"],
+      "canonical_owner_database": "",
+      "canonical_record_url": "",
+      "duplicate_resolution_status": "review_required",
+      "governance_status": "read-only; this app groups but never resolves duplicates"
     }
-  },
-  "scriptProperties": {
-    "CURRICULUM_SEARCH_INDEX_SPREADSHEET_ID": "Spreadsheet ID containing the curriculum index tab.",
-    "CURRICULUM_SEARCH_INDEX_SHEET_NAME": "Sheet tab name. Defaults to Curriculum Index.",
-    "CURRICULUM_SEARCH_DRIVE_FOLDER_IDS": "Optional comma-separated Drive folder IDs to search.",
-    "CURRICULUM_SEARCH_ENABLE_DRIVE": "Set true to enable Drive metadata search.",
-    "CURRICULUM_SEARCH_RESULT_LIMIT": "Optional positive integer result limit. Defaults to 50.",
-    "CURRICULUM_SEARCH_READINESS_VOCABULARY": "Optional JSON array controlling readiness labels and aliases."
-  },
-  "governance": {
-    "readOnly": true,
-    "writesBackToDashboard": false,
-    "writesToNotion": false,
-    "automaticDuplicateMerge": false,
-    "duplicateGroupingOnly": true,
-    "dashboardSyncReviewRequired": true
-  }
+  ],
+  "expected_sheet_headers": [
+    "title",
+    "unit",
+    "lesson",
+    "packet",
+    "source_document",
+    "output_type",
+    "target_dashboard",
+    "related_notion_records",
+    "readiness_status",
+    "file_url",
+    "source_system",
+    "canonical_owner_database",
+    "canonical_record_url",
+    "duplicate_resolution_status",
+    "description",
+    "updated_at"
+  ],
+  "script_properties": [
+    "CURRICULUM_SEARCH_INDEX_SPREADSHEET_ID",
+    "CURRICULUM_SEARCH_INDEX_SHEET_NAME",
+    "CURRICULUM_SEARCH_DRIVE_FOLDER_IDS",
+    "CURRICULUM_SEARCH_ENABLE_DRIVE",
+    "CURRICULUM_SEARCH_RESULT_LIMIT",
+    "CURRICULUM_SEARCH_READINESS_VOCABULARY"
+  ]
 }
