@@ -1,0 +1,97 @@
+{
+  "schema_name": "apps_script_project_registry_minimum_viable_support_module",
+  "schema_version": "0.2.0",
+  "last_prepared_at": "2026-06-27T21:43:00Z",
+  "workspace_timezone": "America/Detroit",
+  "safe_mode": true,
+  "integration_mode": "existing_apps_script_repo_module",
+  "registry_sheet_name": "Apps Script Project Registry",
+  "core_fields": [
+    {
+      "name": "Script Project Name",
+      "required": true,
+      "purpose": "Human-readable project label for builder agents."
+    },
+    {
+      "name": "Apps Script Project ID",
+      "required": true,
+      "purpose": "clasp/script identifier for the Apps Script project."
+    },
+    {
+      "name": "Script URL",
+      "required": true,
+      "purpose": "Direct Apps Script editor or deployed script URL."
+    },
+    {
+      "name": "Drive File ID",
+      "required": true,
+      "purpose": "Drive file identifier for the script container or related source artifact."
+    },
+    {
+      "name": "GitHub Repository",
+      "required": true,
+      "purpose": "Source repository location for builder handoff."
+    },
+    {
+      "name": "Branch",
+      "required": true,
+      "purpose": "Active source branch for builder handoff."
+    },
+    {
+      "name": "Builder Status",
+      "required": true,
+      "purpose": "Lightweight readiness indicator, expected values include Ready and Blocked."
+    },
+    {
+      "name": "Next Action",
+      "required": true,
+      "purpose": "Immediate next step for the builder agent."
+    },
+    {
+      "name": "Blocking Issue",
+      "required": false,
+      "purpose": "Reason a project cannot proceed. Blank means no known blocker."
+    }
+  ],
+  "status_interpretation": {
+    "ready": "Builder Status is Ready, required metadata is complete, and Blocking Issue is blank.",
+    "blocked": "Builder Status is Blocked, or Blocking Issue is not blank.",
+    "missing_metadata": "Any required field is blank."
+  },
+  "not_implemented": [
+    "Full deployment queue",
+    "Production status model",
+    "Large schema migration",
+    "Duplicate cleanup",
+    "Automated production writes",
+    "Advanced rollups",
+    "Generated prompt formulas"
+  ],
+  "governance_boundary": {
+    "source_of_truth_assumption": "No source-of-truth ownership is decided by this support layer.",
+    "sync_owner": "Dashboard Sync Agent",
+    "blocked_until_review": true
+  },
+  "ui_contract": {
+    "global_object": "window.START_HERE_REPORT",
+    "summary_fields": [
+      "totalProjects",
+      "readyProjects",
+      "blockedProjects",
+      "projectsMissingMetadata"
+    ],
+    "project_fields": [
+      "rowNumber",
+      "projectName",
+      "builderStatus",
+      "nextAction",
+      "blockingIssue",
+      "appsScriptProjectId",
+      "scriptUrl",
+      "driveFileId",
+      "githubRepository",
+      "branch",
+      "missingFields"
+    ]
+  }
+}
