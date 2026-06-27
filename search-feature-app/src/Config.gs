@@ -9,7 +9,8 @@ const APP_CONFIG = Object.freeze({
     INDEX_SHEET_NAME: 'CURRICULUM_SEARCH_INDEX_SHEET_NAME',
     DRIVE_FOLDER_IDS: 'CURRICULUM_SEARCH_DRIVE_FOLDER_IDS',
     ENABLE_DRIVE_SEARCH: 'CURRICULUM_SEARCH_ENABLE_DRIVE',
-    RESULT_LIMIT: 'CURRICULUM_SEARCH_RESULT_LIMIT'
+    RESULT_LIMIT: 'CURRICULUM_SEARCH_RESULT_LIMIT',
+    READINESS_VOCABULARY: 'CURRICULUM_SEARCH_READINESS_VOCABULARY'
   }),
   DEFAULTS: Object.freeze({
     INDEX_SHEET_NAME: 'Curriculum Index',
@@ -26,6 +27,10 @@ const APP_CONFIG = Object.freeze({
     RELATED_NOTION_RECORDS: 'related_notion_records',
     READINESS_STATUS: 'readiness_status',
     FILE_URL: 'file_url',
+    SOURCE_SYSTEM: 'source_system',
+    CANONICAL_OWNER_DATABASE: 'canonical_owner_database',
+    CANONICAL_RECORD_URL: 'canonical_record_url',
+    DUPLICATE_RESOLUTION_STATUS: 'duplicate_resolution_status',
     DESCRIPTION: 'description',
     UPDATED_AT: 'updated_at'
   })
@@ -43,6 +48,10 @@ function getRuntimeConfig() {
       properties.getProperty(APP_CONFIG.PROPERTIES.ENABLE_DRIVE_SEARCH),
       APP_CONFIG.DEFAULTS.ENABLE_DRIVE_SEARCH
     ),
+    readinessVocabulary: parseReadinessVocabulary_(
+      properties.getProperty(APP_CONFIG.PROPERTIES.READINESS_VOCABULARY)
+    ),
+    maxDriveFilesPerFolder: APP_CONFIG.MAX_DRIVE_FILES_PER_FOLDER,
     resultLimit: Number.isFinite(configuredLimit) && configuredLimit > 0
       ? configuredLimit
       : APP_CONFIG.DEFAULT_RESULT_LIMIT
@@ -69,4 +78,43 @@ function parseCsvProperty_(value) {
 function parseBooleanProperty_(value, fallback) {
   const normalized = String(value || fallback || '').toLowerCase();
   return ['true', '1', 'yes', 'y'].indexOf(normalized) !== -1;
+}
+
+function parseReadinessVocabulary_(value) {
+  if (!value) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) {
+      console.warn('Readiness vocabulary property must be a JSON array.');
+      return [];
+    }
+
+    return parsed
+      .map(function(item) {
+        if (typeof item === 'string') {
+          return {
+            value: item,
+            label: item,
+            aliases: []
+          };
+        }
+
+        return {
+          value: String(item.value || '').trim(),
+          label: String(item.label || item.value || '').trim(),
+          aliases: Array.isArray(item.aliases) ? item.aliases.map(String) : []
+        };
+      })
+      .filter(function(item) {
+        return item.value;
+      });
+  } catch (error) {
+    console.error('Failed to parse readiness vocabulary property', {
+      message: error.message
+    });
+    return [];
+  }
 }
