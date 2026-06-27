@@ -21,15 +21,23 @@
     "Next Action",
     "Blocking Issue"
   ],
-  "possible_duplicate_fields": [],
+  "possible_duplicate_fields": [
+    "GitHub Repository",
+    "Branch",
+    "Drive File ID",
+    "Builder Status",
+    "Next Action",
+    "Blocking Issue"
+  ],
   "possible_duplicate_records": [],
+  "duplicate_risk_note": "Duplicate risk is not cleared. It remains pending live dashboard review because source-control, Drive metadata, builder queue, next-action, and blocker fields may already exist elsewhere.",
   "source_of_truth_assumption": "No production source-of-truth ownership is assumed. This project reads a lightweight registry only.",
-  "sync_question_for_dashboard_agent": "Confirm whether these registry fields are safe as a builder-facing metadata contract, which dashboard or database owns each field, and whether any field should remain summary-only before production sync or dashboard automation is added.",
+  "sync_question_for_dashboard_agent": "Confirm whether these registry fields are safe as a builder-facing metadata contract, which dashboard or database owns each field, whether any duplicate fields already exist, and whether any field should remain summary-only before production sync or dashboard automation is added.",
   "blocked_until_review": true,
   "recommended_next_agent": "Dashboard Sync Agent",
   "limited_handoff_scope": {
     "integration_mode": "Add to existing Apps Script repo/project as a separate module.",
-    "client_ui_contract": "Server-side code injects window.START_HERE_REPORT before the registry client renderer runs.",
+    "client_ui_contract": "Server-side code injects a parsed START_HERE_REPORT object before the registry client renderer runs.",
     "build_only": [
       "Apps Script Project Registry support",
       "Builder Start Here workflow",
