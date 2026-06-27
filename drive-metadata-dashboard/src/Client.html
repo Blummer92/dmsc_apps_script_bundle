@@ -1,0 +1,75 @@
+<script>
+  const state = { dashboard: null, selectedIndex: 0 };
+  const panels = {
+    scan: document.getElementById('scan'),
+    review: document.getElementById('review'),
+    validation: document.getElementById('validation'),
+    source: document.getElementById('source'),
+    handoff: document.getElementById('handoff')
+  };
+  const messagePanel = document.getElementById('messagePanel');
+  const configStatus = document.getElementById('configStatus');
+
+  document.querySelectorAll('.tab-button').forEach(function(button) {
+    button.addEventListener('click', function() { activateTab(button.dataset.tab); });
+  });
+
+  google.script.run.withSuccessHandler(renderBootstrap).withFailureHandler(renderFailure).getDashboardBootstrap();
+  google.script.run.withSuccessHandler(renderDashboard).withFailureHandler(renderFailure).getDriveMetadataDashboard();
+
+  function renderBootstrap(payload) {
+    const status = payload.configStatus || {};
+    configStatus.textContent = [status.hasDashboardSpreadsheet ? 'Dashboard configured' : 'Dashboard missing', 'Sheet: ' + (status.metadataSheetName || 'Drive Images'), status.hasSourceLibrarySpreadsheet ? 'Source Library configured' : 'Source Library summary only', 'Limit ' + status.resultLimit].join(' · ');
+  }
+
+  function renderDashboard(payload) {
+    state.dashboard = payload;
+    renderMessages(payload.summary.warnings || []);
+    renderScan(payload);
+    renderReview(payload);
+    renderValidation(payload);
+    renderSource(payload);
+    renderHandoff(payload);
+  }
+
+  function renderScan(payload) {
+    const s = payload.summary;
+    panels.scan.innerHTML = '<section class="metric-grid">' + metric('Records', s.totalRecords) + metric('Missing metadata', s.missingMetadataCount) + metric('Duplicate candidates', s.duplicateCandidateCount) + metric('Blocked', s.blockedCount) + metric('Export eligible', s.exportEligibleCount) + metric('Generation eligible', s.generationEligibleCount) + '</section><section class="panel"><h2>Review Tiers</h2><div class="badge-row">' + badge('Tier 1: ' + s.tierCounts.tier1, 'warn') + badge('Tier 2: ' + s.tierCounts.tier2, 'warn') + badge('Tier 3: ' + s.tierCounts.tier3, 'good') + badge('Tier 4: ' + s.tierCounts.tier4, 'block') + badge('Invalid: ' + s.tierCounts.invalid, s.tierCounts.invalid ? 'block' : '') + '</div></section>';
+  }
+
+  function renderReview(payload) {
+    const records = payload.records || [];
+    if (!records.length) { panels.review.innerHTML = emptyPanel('No records available for review.'); return; }
+    const record = records[state.selectedIndex] || records[0];
+    panels.review.innerHTML = '<section class="panel"><select id="recordPicker">' + records.map(function(r, i) { return '<option value="' + i + '"' + (i === state.selectedIndex ? ' selected' : '') + '>Row ' + escapeHtml(r.rowNumber) + ' · ' + escapeHtml(r.fileName || 'Untitled') + '</option>'; }).join('') + '</select></section>' + renderRecord(record) + renderPrompts(record);
+    document.getElementById('recordPicker').addEventListener('change', function(event) { state.selectedIndex = Number(event.target.value); renderReview(state.dashboard); });
+  }
+
+  function renderValidation(payload) {
+    const records = payload.records || [];
+    const items = records.filter(function(r) { return r.validationWarnings.length || r.unresolvedDuplicate; }).slice(0, 50).map(function(r) { return '<li>Row ' + escapeHtml(r.rowNumber) + ': ' + escapeHtml(r.validationWarnings.map(function(w) { return w.message; }).join(' ')) + '</li>'; }).join('');
+    panels.validation.innerHTML = '<section class="panel"><h2>Validation</h2><ul>' + (items || '<li>No validation warnings in current view.</li>') + '</ul></section>';
+  }
+
+  function renderSource(payload) {
+    const records = payload.records || [];
+    panels.source.innerHTML = records.slice(0, 50).map(function(r) { const s = r.sourceApproval || {}; return '<article class="record-card"><h2>Row ' + escapeHtml(r.rowNumber) + '</h2>' + field('Status', s.approvalStatus) + field('Evidence', linkOrText(s.approvalEvidenceUrl)) + field('Approved By', s.approvedBy) + field('Approved At', s.approvedAt) + '</article>'; }).join('') || emptyPanel('No source summary available.');
+  }
+
+  function renderHandoff(payload) { panels.handoff.innerHTML = '<section class="handoff-box">' + escapeHtml(payload.handoffText || '') + '</section>'; }
+
+  function renderRecord(r) { return '<article class="record-card"><h2>' + escapeHtml(r.fileName || 'Untitled') + '</h2><div class="badge-row">' + badge(r.reviewTier, tierClass(r.reviewTier)) + badge(r.computedExportEligible ? 'Export eligible' : 'Not export eligible', r.computedExportEligible ? 'good' : 'warn') + badge(r.computedGenerationEligible ? 'Generation eligible' : 'Not generation eligible', r.computedGenerationEligible ? 'good' : 'warn') + '</div>' + field('Drive URL', linkOrText(r.driveUrl)) + field('File ID', r.fileId) + field('Full Path', r.fullPath) + field('Blocked Reason', r.blockedReason) + '</article>'; }
+  function renderPrompts(r) { return '<section class="panel"><h2>Prompt Comparison</h2>' + promptBox('Gemini', r.prompts.gemini) + promptBox('OpenAI', r.prompts.openai) + promptBox('Copilot', r.prompts.copilot) + promptBox('Original', r.prompts.original) + promptBox('Approved Prompt', r.prompts.approved) + '</section>'; }
+
+  function activateTab(name) { document.querySelectorAll('.tab-button').forEach(function(b) { b.classList.toggle('is-active', b.dataset.tab === name); }); Object.keys(panels).forEach(function(k) { panels[k].classList.toggle('is-active', k === name); }); }
+  function renderMessages(warnings) { if (!warnings.length) { messagePanel.hidden = true; return; } messagePanel.hidden = false; messagePanel.textContent = warnings.join(' '); }
+  function renderFailure(error) { messagePanel.hidden = false; messagePanel.className = 'error'; messagePanel.textContent = error && error.message ? error.message : 'Dashboard failed to load.'; }
+  function metric(label, value) { return '<div class="metric"><strong>' + escapeHtml(value) + '</strong><span>' + escapeHtml(label) + '</span></div>'; }
+  function badge(text, kind) { return text ? '<span class="badge ' + escapeHtml(kind || '') + '">' + escapeHtml(text) + '</span>' : ''; }
+  function field(label, value) { return '<div class="field"><span>' + escapeHtml(label) + '</span><span>' + (String(value || '').indexOf('<a ') === 0 ? value : escapeHtml(value || '')) + '</span></div>'; }
+  function promptBox(label, value) { return '<div class="prompt-box"><strong>' + escapeHtml(label) + '</strong>\n' + escapeHtml(value || 'No value') + '</div>'; }
+  function linkOrText(value) { if (!value) return ''; if (/^https?:\/\//.test(value)) return '<a href="' + escapeHtml(value) + '" target="_blank" rel="noopener">Open link</a>'; return escapeHtml(value); }
+  function emptyPanel(message) { return '<section class="panel"><p>' + escapeHtml(message) + '</p></section>'; }
+  function tierClass(tier) { if (tier === 'Tier 3') return 'good'; if (tier === 'Tier 4' || tier === 'Invalid Tier') return 'block'; return 'warn'; }
+  function escapeHtml(value) { return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
+</script>
