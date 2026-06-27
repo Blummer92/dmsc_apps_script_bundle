@@ -15,28 +15,31 @@ This version is designed to be added to an existing Apps Script repo/project as 
 
 ## File Structure
 
-Recommended integration layout:
+Current isolated PR layout:
 
 ```txt
-src
+apps-script-builder-dashboard/src/registry-support
   BuilderRegistry.gs
   BuilderValidation.gs
   BuilderStartHere.gs
-  Config.gs
-  Services.gs
-  Ui.html
-  Styles.html
-  Client.html
+  RegistryConfig.gs
+  RegistryServices.gs
+  RegistryUi.html
+  RegistryStyles.html
+  RegistryClient.html
 ```
 
-Supporting handoff files included in this package:
+Supporting handoff files:
 
 ```txt
-metadata
+apps-script-builder-dashboard/metadata/registry-support
   handoff.json
   schema-map.json
   validation-checklist.md
+  README.md
 ```
+
+For this MVP, `RegistryUi.html` is self-contained. It does not require `RegistryStyles.html` or `RegistryClient.html` at runtime. Those files remain isolated support files for a later reviewed refactor.
 
 ## Registry Sheet
 
@@ -60,13 +63,13 @@ Next Action
 Blocking Issue
 ```
 
-`Blocking Issue` is allowed to be blank. All other fields are required for a project to be considered ready.
+`Blocking Issue` is allowed to be blank. All other fields are required for a project to be considered ready for builder attention.
 
 ## Setup
 
 1. Open the existing Apps Script project or repo.
-2. Copy the files in `src/` into the existing `src/` directory.
-3. Keep the existing uploaded `Client.html` as the client render file when present. This package's `Client.html` uses the same `window.START_HERE_REPORT` contract.
+2. Keep the files isolated under `src/registry-support/` for this MVP.
+3. Confirm `BuilderStartHere.gs` loads the self-contained template from `registry-support/RegistryUi`.
 4. In Apps Script project settings, add this Script Property:
 
 ```txt
@@ -77,28 +80,12 @@ REGISTRY_SPREADSHEET_ID = your Google Sheet ID
 6. Run `validateAppsScriptProjectRegistry`.
 7. Run `runBuilderStartHere`.
 
-## Optional Clasp Setup
-
-Copy `.clasp.json.example` to `.clasp.json`, then replace:
-
-```txt
-PASTE_APPS_SCRIPT_PROJECT_ID_HERE
-```
-
-with the target Apps Script project ID.
-
-Then push with:
-
-```bash
-clasp push
-```
-
 ## Apps Script Functions Generated
 
 - `runBuilderStartHere()`: reads the registry, validates each project, logs and returns the Builder Start Here report.
 - `validateAppsScriptProjectRegistry()`: returns a validation result for all registry projects.
 - `getBuilderStartHereJson()`: returns the Start Here report as formatted JSON.
-- `doGet()`: serves the optional Builder Start Here web app view.
+- `doGet()`: serves the optional Builder Start Here web app view using `RegistryUi.html`.
 - `readBuilderRegistryRows()`: reads registry rows in one batch.
 - `validateBuilderRegistryProject(project)`: checks one project for missing metadata and status.
 - `validateBuilderRegistryProjects(projects)`: validates all registry rows.
@@ -106,7 +93,7 @@ clasp push
 
 ## Builder Start Here Output
 
-The server generates `window.START_HERE_REPORT` with this shape:
+The server creates a JSON report with this shape. The self-contained UI parses it into a local `START_HERE_REPORT` object.
 
 ```json
 {
@@ -146,7 +133,6 @@ The UI shows:
 - ready projects
 - blocked projects
 - projects missing metadata
-- all projects
 - next action for each project
 - script location
 - Drive file ID
@@ -161,6 +147,8 @@ A project is treated as `ready` when:
 - `Builder Status` is `Ready`
 - no required metadata is missing
 - `Blocking Issue` is blank
+
+This means ready for builder attention only. It does not mean production readiness, curriculum readiness, deployment approval, or source-of-truth approval.
 
 A project is treated as `blocked` when:
 
