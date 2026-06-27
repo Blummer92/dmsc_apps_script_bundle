@@ -1,8 +1,28 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <base target="_top">
-    <?!= include('Styles'); ?>
+    <title>Builder Start Here</title>
+    <style>
+      body { margin: 0; background: #f7f7f5; color: #222; font-family: Arial, sans-serif; }
+      .page { max-width: 1120px; margin: 0 auto; padding: 28px 20px 40px; }
+      .header { border-bottom: 1px solid #d8d8d8; padding-bottom: 18px; }
+      .eyebrow { margin: 0 0 8px; color: #636363; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; }
+      h1, h2, h3, p { margin-top: 0; }
+      h1 { margin-bottom: 8px; font-size: 28px; }
+      .summary { margin-bottom: 0; color: #636363; }
+      .section { margin-top: 24px; }
+      .project-list { display: grid; gap: 12px; }
+      .project, .empty { background: #fff; border: 1px solid #d8d8d8; border-radius: 12px; padding: 16px; }
+      .project-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+      .project-title h3 { margin: 0; }
+      .status { display: inline-flex; border-radius: 999px; padding: 4px 10px; font-size: 12px; border: 1px solid #d8d8d8; }
+      .status.ready { color: #126b58; }
+      .status.blocked { color: #a63a3a; }
+      .status.missing { color: #9a5a00; }
+      .details { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+      .label { display: block; color: #636363; font-size: 12px; margin-bottom: 2px; }
+    </style>
   </head>
   <body>
     <main class="page">
@@ -29,8 +49,67 @@
     </main>
 
     <script>
-      window.START_HERE_REPORT = <?!= reportJson ?>;
+      const START_HERE_REPORT = JSON.parse(<?= JSON.stringify(reportJson) ?>);
+
+      function renderReport(report) {
+        document.getElementById('summary').textContent = [
+          `${report.summary.totalProjects} total projects`,
+          `${report.summary.readyProjects} ready`,
+          `${report.summary.blockedProjects} blocked`,
+          `${report.summary.projectsMissingMetadata} missing metadata`,
+          `mode: ${report.safeMode}`,
+        ].join(' | ');
+
+        renderProjectList('readyProjects', report.readyProjects, 'ready');
+        renderProjectList('blockedProjects', report.blockedProjects, 'blocked');
+        renderProjectList('projectsMissingMetadata', report.projectsMissingMetadata, 'missing');
+      }
+
+      function renderProjectList(elementId, projects, statusClass) {
+        const element = document.getElementById(elementId);
+        if (!projects.length) {
+          element.innerHTML = '<div class="empty">No projects in this category.</div>';
+          return;
+        }
+        element.innerHTML = projects.map((project) => projectCard(project, statusClass)).join('');
+      }
+
+      function projectCard(project, statusClass) {
+        const missingFields = project.missingFields.length ? project.missingFields.join(', ') : 'None';
+        return `
+          <article class="project">
+            <div class="project-title">
+              <h3>${escapeHtml(project.projectName || `Row ${project.rowNumber}`)}</h3>
+              <span class="status ${statusClass}">${escapeHtml(project.builderStatus || statusClass)}</span>
+            </div>
+            <div class="details">
+              ${detail('Next Action', project.nextAction)}
+              ${detail('Blocking Issue', project.blockingIssue || 'None')}
+              ${detail('Apps Script Project ID', project.appsScriptProjectId)}
+              ${detail('Script URL', project.scriptUrl)}
+              ${detail('Drive File ID', project.driveFileId)}
+              ${detail('GitHub Repository', project.githubRepository)}
+              ${detail('Branch', project.branch)}
+              ${detail('Missing Metadata', missingFields)}
+            </div>
+          </article>
+        `;
+      }
+
+      function detail(label, value) {
+        return `<div><span class="label">${escapeHtml(label)}</span><span>${escapeHtml(value || 'Missing')}</span></div>`;
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      renderReport(START_HERE_REPORT);
     </script>
-    <?!= include('Client'); ?>
   </body>
 </html>
