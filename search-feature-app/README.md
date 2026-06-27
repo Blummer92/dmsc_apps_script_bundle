@@ -1,172 +1,278 @@
-# Curriculum Search Feature
+# Curriculum Search Apps Script
 
-This is a clasp-compatible Google Apps Script project for a Google Sheets sidebar search tool.
+GitHub-ready, clasp-compatible Google Apps Script project for `Blummer92/dmsc_apps_script_bundle` on branch `governance-compliance-search-feature`, project `search-feature-app`. It searches curriculum records across a configured Google Sheets metadata index and optional Google Drive folders while complying with Dashboard Sync Agent governance boundaries.
 
-## Purpose
-
-The script adds a custom menu named Search Tools. From that menu, users can open a sidebar and search curriculum records, source documents, worksheets, slide decks, packets, and related metadata.
-
-Search sources:
-
-- A configured Google Sheets metadata index
-- Optional configured Google Drive folders
-- Future Notion or dashboard records, only after Dashboard Sync Agent approval
-
-The project is read-only. It does not write to Sheets, Drive, Notion, or a dashboard.
-
-## Current governance status
-
-Status: blocked until Dashboard Sync Agent review.
-
-This branch implements governance-compliance updates requested after the initial review. It adds:
-
-- canonical owner metadata
-- source system metadata
-- canonical record URL support
-- duplicate resolution status support
-- configurable readiness vocabulary
-- duplicate candidate grouping without merging
-- source badges in the sidebar UI
-- read-only warnings and documentation
-
-## Project structure
-
-- src/Code.gs
-- src/Config.gs
-- src/SearchService.gs
-- src/DriveSearchService.gs
-- src/SheetSearchService.gs
-- src/Ui.html
-- src/Styles.html
-- src/Client.html
-- metadata/handoff.json
-- metadata/schema-map.json
-- appsscript.json
-- .clasp.json.example
-- .claspignore
-- .gitignore
-
-## Script properties
-
-Set these in Apps Script Project Settings.
-
-- CURRICULUM_SEARCH_INDEX_SPREADSHEET_ID: spreadsheet containing the curriculum index
-- CURRICULUM_SEARCH_INDEX_SHEET_NAME: optional sheet tab name, defaults to Curriculum Index
-- CURRICULUM_SEARCH_DRIVE_FOLDER_IDS: optional comma-separated Drive folder IDs
-- CURRICULUM_SEARCH_ENABLE_DRIVE: set true to enable Drive search
-- CURRICULUM_SEARCH_RESULT_LIMIT: optional positive integer result limit
-- CURRICULUM_SEARCH_READINESS_VOCABULARY: optional JSON array used to configure approved readiness labels and aliases
-
-Example readiness vocabulary:
-
-```json
-[
-  {"value":"source_ready","label":"Source Ready","aliases":["ready","verified"]},
-  {"value":"needs_review","label":"Needs Review","aliases":["review","draft"]},
-  {"value":"blocked","label":"Blocked","aliases":["hold","issue"]}
-]
-```
-
-Do not treat this example as approved vocabulary. Dashboard Sync Agent must approve final readiness mappings.
-
-## Recommended sheet headers
-
-Title, Unit, Lesson, Packet, Source Document, Output Type, Target Dashboard, Related Notion Records, Readiness Status, File URL, Source System, Canonical Owner Database, Canonical Record URL, Duplicate Resolution Status, Description, Updated At
-
-The script normalizes headers to snake case internally.
-
-## Source badges
-
-The sidebar displays a badge for each result source:
+## Workspace Targets
 
 - Google Sheets
 - Google Drive
-- Notion
-- Dashboard
-- Unknown Source
+- Apps Script sidebar UI
 
-Badges are informational only. They do not imply canonical ownership.
+## What It Does
 
-## Duplicate handling
+This project adds a custom spreadsheet menu named **Search Tools**. The menu opens a sidebar where users can search curriculum records, source documents, worksheets, slide decks, dashboards, PDFs, and related metadata.
 
-Duplicate candidates are grouped for review only. The app never merges, deletes, collapses, or rewrites records.
+The tool is read-only. It does not update Notion, overwrite readiness status, merge duplicate records, resolve duplicates, or decide metadata ownership.
 
-Duplicate candidate order:
+When duplicate candidates are detected, the sidebar groups them for review and shows a warning banner. Grouping is display-only and never performs a merge.
 
-1. Canonical record URL
-2. File URL
-3. Metadata key using title, unit, lesson, packet, and source document
+## Project Structure
 
-When duplicate candidates are detected, the sidebar shows a warning banner. Any resolution must happen outside this read-only search surface after Dashboard Sync Agent approval.
+```txt
+search-feature-app
+  src
+    Code.gs
+    Config.gs
+    SearchService.gs
+    DriveSearchService.gs
+    SheetSearchService.gs
+    Ui.html
+    Styles.html
+    Client.html
+  metadata
+    handoff.json
+    schema-map.json
+  appsscript.json
+  README.md
+  .claspignore
+  .clasp.json.example
+```
 
-## Setup
+## Apps Script Functions
 
-1. Install clasp.
-2. Log in with clasp.
-3. Copy .clasp.json.example to .clasp.json.
-4. Add your Apps Script script ID to .clasp.json.
-5. Push the project with clasp.
-6. Open the bound Sheet and reload it.
-7. Use Search Tools > Open Search.
+- `onOpen()` adds the **Search Tools** menu.
+- `showSearchSidebar()` opens the curriculum search sidebar.
+- `include(filename)` loads shared HTML partials.
+- `getSearchBootstrap()` returns configuration status for the UI.
+- `searchCurriculum(query, filters)` runs the combined search.
+- `getRuntimeConfig()` reads deployment settings from `PropertiesService`.
+- `getMetadataFields()` exposes the expected metadata field names.
 
-## Governance boundary
+## Services
 
-This project must stay read-only until Dashboard Sync Agent reviews and approves the metadata contract. Do not add sync or write-back behavior until metadata ownership, duplicate policy, dashboard schema, readiness vocabulary, and Notion-related fields are approved.
+- `CurriculumSearchService` coordinates sheet and Drive search, ranking, result limits, duplicate candidate grouping, warnings, and governance flags.
+- `SheetSearchService` reads the configured metadata index with one batch read, searches normalized rows, applies configurable readiness mappings, and emits source badges.
+- `DriveSearchService` searches configured Drive folders by file name and description when Drive search is enabled.
 
-Read-only guarantees:
+## Required Script Properties
 
-- No writes to Google Sheets
-- No writes to Google Drive
-- No writes to Notion
-- No writes to dashboards
-- No automatic duplicate merge
-- No readiness status updates
-- No schema approval workflow inside Apps Script
+Set these in Apps Script under **Project Settings > Script properties**.
 
-Review these files before any sync work:
+| Property | Required | Example | Notes |
+| --- | --- | --- | --- |
+| `CURRICULUM_SEARCH_INDEX_SPREADSHEET_ID` | Yes | `1abc...` | Spreadsheet ID for the metadata index. |
+| `CURRICULUM_SEARCH_INDEX_SHEET_NAME` | No | `Curriculum Index` | Defaults to `Curriculum Index`. |
+| `CURRICULUM_SEARCH_ENABLE_DRIVE` | No | `true` | Defaults to `false`. |
+| `CURRICULUM_SEARCH_DRIVE_FOLDER_IDS` | No | `folderId1,folderId2` | Comma-separated folder IDs. Required only when Drive search is enabled. |
+| `CURRICULUM_SEARCH_RESULT_LIMIT` | No | `50` | Defaults to `50`. |
+| `CURRICULUM_SEARCH_READINESS_VOCABULARY` | No | See below | JSON array of approved readiness values and aliases. No readiness values are hard-coded in the UI. |
 
-- metadata/handoff.json
-- metadata/schema-map.json
+### Readiness Vocabulary
 
-## Notion databases in scope for review
+Set `CURRICULUM_SEARCH_READINESS_VOCABULARY` to a JSON array approved by Dashboard Sync Agent.
 
-- DM Source Library
-- DM Units
-- DM Curriculum Elements
-- DM Source Claims / Extracted Evidence
-- DM Agent Retrieval Queue
-- Agent Routing Dashboard
+Example:
 
-## Dashboard Sync Agent review checklist
+```json
+[
+  {
+    "value": "approved_status_key",
+    "label": "Approved Status Label",
+    "aliases": ["legacy label", "alternate spelling"]
+  }
+]
+```
 
-Before production read-only deployment, confirm:
+If this property is empty, the readiness filter remains a free-text field. The app still stays read-only and does not define canonical readiness values.
 
-- canonical owner database for every field
-- approved readiness vocabulary and mapping source
-- duplicate candidate grouping policy
-- Drive search folder scope
-- whether related_notion_records remains display-only
-- which fields are safe for the teacher-facing sidebar
+## Expected Sheet Headers
 
-## Testing
+The metadata index should use these normalized headers:
 
-1. Create the curriculum index sheet with the recommended headers.
-2. Add sample rows with titles, units, lessons, statuses, URLs, source systems, and canonical owner values.
-3. Set the spreadsheet ID script property.
-4. Optional: set the readiness vocabulary property with approved JSON.
-5. Push the script.
-6. Open the sidebar and search for a known title or unit.
-7. Confirm source badges appear.
-8. Add duplicate-looking rows and confirm the duplicate warning banner appears.
-9. Enable Drive search only after setting folder IDs.
-10. Confirm no write behavior occurs during testing.
+```txt
+title
+unit
+lesson
+packet
+source_document
+output_type
+target_dashboard
+related_notion_records
+readiness_status
+file_url
+source_system
+canonical_owner_database
+canonical_record_url
+duplicate_resolution_status
+description
+updated_at
+```
 
-## Generated functions
+Header matching is forgiving: spaces and punctuation are normalized to underscores.
 
-- onOpen
-- showSearchSidebar
-- include
-- getSearchBootstrap
-- searchCurriculum
-- getRuntimeConfig
-- getMetadataFields
+## clasp Setup
+
+1. Install clasp if needed:
+
+   ```bash
+   npm install -g @google/clasp
+   ```
+
+2. Create or identify an Apps Script project.
+
+3. Copy the example config:
+
+   ```bash
+   cp .clasp.json.example .clasp.json
+   ```
+
+4. Replace `PASTE_SCRIPT_ID_HERE` with your Apps Script project ID.
+
+5. Push the project:
+
+   ```bash
+   clasp push
+   ```
+
+   The included `.claspignore` uploads only `appsscript.json` and files under `src`. Because the source files stay in the `src` folder, the sidebar loader references HTML files with their `src/` path.
+
+6. Open the Apps Script editor and set the required script properties.
+
+7. Reload the bound spreadsheet and open **Search Tools > Open Search**.
+
+## Drive Search Configuration
+
+Drive search is optional and off by default.
+
+To enable it:
+
+1. Set `CURRICULUM_SEARCH_ENABLE_DRIVE` to `true`.
+2. Set `CURRICULUM_SEARCH_DRIVE_FOLDER_IDS` to a comma-separated list of Drive folder IDs.
+3. Confirm the deploying account has read access to those folders.
+
+Drive search only uses Drive file metadata. It does not parse full document bodies.
+
+## Source Badges
+
+Every result displays one source badge:
+
+- `Google Sheets`
+- `Google Drive`
+- `Notion`
+- `Dashboard`
+
+Drive results always use `Google Drive`. Sheet-indexed records use the `source_system` column when present. If the source cannot be inferred, the app defaults the badge to `Google Sheets`.
+
+If a sheet row contains an unrecognized `source_system`, the UI displays `Unknown Source`. Missing `source_system` values default to the adapter source, so Sheet rows default to `Google Sheets` and Drive files default to `Google Drive`.
+
+## Governance Metadata Passthrough
+
+Every search result includes these governance fields in `result.metadata`:
+
+- `canonical_owner_database`
+- `source_system`
+- `canonical_record_url`
+- `duplicate_resolution_status`
+- `approved_readiness_vocabulary`
+- `description`
+- `file_url`
+
+For UI compatibility, the adapters also include camelCase aliases such as `canonicalOwnerDatabase`, `canonicalRecordUrl`, `duplicateResolutionStatus`, and `approvedReadinessVocabulary`.
+
+When `duplicate_resolution_status` is missing, adapters return `review_required`. The app does not write this default back to Sheets, Drive, Notion, or dashboards.
+
+## Duplicate Candidate Handling
+
+Duplicate candidates are grouped when multiple results share one of these review keys:
+
+- `canonical_record_url`
+- `file_url`
+- normalized title plus unit, lesson, packet, and source document
+
+The app checks those keys in that order. It displays a warning banner when duplicates are detected. It does not merge, delete, update, hide, or resolve any records. The response includes `duplicateCandidateGroups`, `duplicateCandidateCount`, and governance flags showing `automaticMergeEnabled: false`.
+
+## Governance Boundary
+
+This project touches curriculum metadata, so it includes:
+
+- `metadata/schema-map.json`
+- `metadata/handoff.json`
+
+The project must remain read-only until Dashboard Sync Agent review confirms the approved metadata contract.
+
+Governance fields now included:
+
+- `canonical_owner_database`
+- `source_system`
+- `canonical_record_url`
+- `duplicate_resolution_status`
+- `approved_readiness_vocabulary`
+- `github_repo`
+- `github_branch`
+- `governance_version`
+- `review_status`
+- `schema_revision`
+- `last_reviewed`
+- `pending_decisions`
+
+This project does not decide:
+
+- Notion source-of-truth ownership
+- duplicate database cleanup or automatic merge
+- schema merge outcomes
+- readiness status ownership
+- canonical metadata definitions
+- final worksheet or slide generation approval
+
+## Dashboard Sync Agent Handoff
+
+Before adding any Notion update, write-back sync, duplicate cleanup, or readiness status update, route `metadata/handoff.json` to Dashboard Sync Agent.
+
+Required review question:
+
+```md
+Dashboard Sync Agent, please review this Apps Script project handoff before any Notion updates occur.
+
+Check whether the databases in scope are working together efficiently, whether any records or fields would be duplicated, and whether worksheet and slide generation agents can access canonical metadata without re-querying or redefining fields.
+
+Please verify:
+1. Which database owns each metadata field.
+2. Which fields should be summary-only.
+3. Whether any fields or records are duplicates.
+4. Whether the generated Apps Script metadata manifest matches the source-of-truth schema.
+5. Whether downstream worksheet and slide agents can safely consume this metadata.
+6. What changes, if any, should be routed to the owner dashboard.
+7. The approved readiness vocabulary and alias mappings.
+8. The allowed duplicate resolution statuses.
+
+Return:
+- duplicate risk
+- owner database
+- consuming database
+- safe sync path
+- blocked fields
+- recommended schema cleanup
+- approved metadata contract
+```
+
+## Testing Notes
+
+Manual checks:
+
+1. Confirm `onOpen()` adds the **Search Tools** menu after reloading the spreadsheet.
+2. Confirm the sidebar opens.
+3. Search a known title from the metadata index.
+4. Search with unit, lesson, packet, output type, and readiness filters.
+5. Confirm result links open the expected files.
+6. Disable or remove Drive folder properties and confirm sheet search still works.
+7. Enable Drive search and confirm files appear when folder IDs are valid.
+8. Add duplicate candidate rows and confirm the warning banner appears.
+9. Confirm duplicate candidates are grouped but still displayed as separate records.
+10. Confirm source badges display for Google Sheets, Google Drive, Notion, and Dashboard source systems.
+11. Confirm no metadata records are created, merged, deleted, or updated by this project.
+
+## Deployment Notes
+
+Recommended deployment mode: bound spreadsheet script.
+
+For a standalone script, keep the same script properties and bind the UI entry point to whatever launch surface the deployment uses. The current `onOpen()` menu assumes a spreadsheet container.
