@@ -1,26 +1,51 @@
 {
   "project": "curriculum-search-feature",
   "handoffType": "apps-script-metadata-sync-review",
-  "status": "blocked_until_review",
+  "status": "blocked_until_dashboard_sync_review",
+  "review_status": "revision_requested",
+  "governance_version": "2026-06-27-governance-compliance",
+  "schema_revision": "0.2.0",
+  "last_reviewed": "2026-06-27",
   "createdFor": "Dashboard Sync Agent",
+  "github_repo": "Blummer92/dmsc_apps_script_bundle",
+  "github_branch": "governance-compliance-search-feature",
+  "project_path": "search-feature-app",
+  "notion_databases_in_scope": [
+    "DM Source Library",
+    "DM Units",
+    "DM Curriculum Elements",
+    "DM Source Claims / Extracted Evidence",
+    "DM Agent Retrieval Queue",
+    "Agent Routing Dashboard"
+  ],
   "summary": "Read-only curriculum search Apps Script project. Searches configured Google Sheets metadata index and optional Drive folders. No metadata write-back or sync behavior is enabled.",
+  "pending_decisions": [
+    "Approve canonical_owner_database mapping for each field.",
+    "Approve readiness_status vocabulary and mapping source.",
+    "Approve duplicate candidate grouping policy.",
+    "Confirm whether Drive search remains folder-scoped.",
+    "Confirm whether related_notion_records remains display-only."
+  ],
   "blockers": [
     "Confirm canonical ownership of curriculum metadata before any write-back is added.",
-    "Confirm duplicate detection and merge policy for records that appear in both Sheets and Drive.",
-    "Confirm approved schema contract for dashboard and any Notion-backed curriculum metadata.",
-    "Confirm whether readiness_status values should be controlled vocabulary."
+    "Confirm duplicate detection and merge policy for records that appear in Sheets, Drive, Notion, or dashboards.",
+    "Confirm approved schema contract for dashboard and Notion-backed curriculum metadata.",
+    "Confirm controlled vocabulary for readiness_status."
   ],
   "readOnlyGuarantees": {
     "writesToSheets": false,
     "writesToDrive": false,
     "writesToNotion": false,
-    "syncsMetadata": false
+    "writesToDashboard": false,
+    "syncsMetadata": false,
+    "automaticDuplicateMerge": false
   },
   "reviewQuestions": [
     "Which system owns each metadata field?",
     "Should duplicate-looking records be collapsed, flagged, or shown separately?",
     "Which fields are safe to expose to teachers in the sidebar?",
-    "Should Drive search be folder-limited or domain-wide?"
+    "Should Drive search be folder-limited or domain-wide?",
+    "What approved readiness vocabulary should be configured in CURRICULUM_SEARCH_READINESS_VOCABULARY?"
   ],
   "nextRecommendedAgent": "Dashboard Sync Agent"
 }
