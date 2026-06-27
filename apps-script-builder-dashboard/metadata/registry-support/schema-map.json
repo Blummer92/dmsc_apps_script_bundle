@@ -1,11 +1,21 @@
 {
   "schema_name": "apps_script_project_registry_minimum_viable_support_module",
-  "schema_version": "0.2.1",
-  "last_prepared_at": "2026-06-27T22:48:00Z",
+  "schema_version": "0.3.1",
+  "last_prepared_at": "2026-06-27T23:34:00Z",
   "workspace_timezone": "America/Detroit",
   "safe_mode": true,
   "integration_mode": "existing_apps_script_repo_module",
   "registry_sheet_name": "Apps Script Project Registry",
+  "module_files": [
+    "BuilderRegistry.gs",
+    "BuilderValidation.gs",
+    "BuilderStartHere.gs",
+    "BuilderRegistryConfig.gs",
+    "BuilderRegistryServices.gs",
+    "BuilderRegistryUi.html",
+    "BuilderRegistryStyles.html",
+    "Client.html"
+  ],
   "core_fields": [
     {
       "name": "Script Project Name",
@@ -56,7 +66,7 @@
   "status_interpretation": {
     "ready": "Builder Status is Ready, required metadata is complete, and Blocking Issue is blank. This means ready for builder attention only, not production readiness.",
     "blocked": "Builder Status is Blocked, or Blocking Issue is not blank. This is an operational blocker state only.",
-    "missing_metadata": "Any required field is blank."
+    "missing_metadata": "Any required metadata field except Blocking Issue is blank."
   },
   "operational_routing_only_fields": [
     "Builder Status",
@@ -78,7 +88,12 @@
     "blocked_until_review": true
   },
   "ui_contract": {
-    "global_object": "START_HERE_REPORT",
+    "global_object": "window.START_HERE_REPORT",
+    "html_template": "BuilderRegistryUi.html",
+    "style_template": "BuilderRegistryStyles.html",
+    "client_template": "Client.html",
+    "server_html_helper": "getBuilderStartHereHtml",
+    "does_not_replace_do_get": true,
     "summary_fields": [
       "totalProjects",
       "readyProjects",
