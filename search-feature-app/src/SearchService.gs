@@ -135,12 +135,12 @@ const CurriculumSearchService = (function() {
 
   function getDuplicateCandidateKey_(result) {
     const metadata = result.metadata || {};
-    const canonicalUrl = normalizeSearchText_(metadata.canonicalRecordUrl);
+    const canonicalUrl = normalizeSearchText_(metadata.canonical_record_url || metadata.canonicalRecordUrl);
     if (canonicalUrl) {
       return 'canonical_url:' + canonicalUrl;
     }
 
-    const fileUrl = normalizeSearchText_(result.fileUrl);
+    const fileUrl = normalizeSearchText_(metadata.file_url || result.fileUrl);
     if (fileUrl) {
       return 'file_url:' + fileUrl;
     }
