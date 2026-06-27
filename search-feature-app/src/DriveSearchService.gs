@@ -5,104 +5,121 @@ const DriveSearchService = (function() {
       return [];
     }
 
-    return config.driveFolderIds.reduce(function(results, folderId) {
+    const results = [];
+
+    config.driveFolderIds.forEach(function(folderId) {
       try {
         const folder = DriveApp.getFolderById(folderId);
-        return results.concat(searchFolder_(folder, normalizedQuery, filters, config));
+        collectFolderMatches_(folder, normalizedQuery, filters, results, config);
       } catch (error) {
         console.error('Drive folder search failed', {
           folderId: folderId,
           message: error.message,
           stack: error.stack
         });
-        return results;
       }
-    }, []);
-  }
-
-  function searchFolder_(folder, normalizedQuery, filters, config) {
-    const files = folder.getFiles();
-    const results = [];
-    let scanned = 0;
-
-    while (files.hasNext() && scanned < APP_CONFIG.MAX_DRIVE_FILES_PER_FOLDER) {
-      const file = files.next();
-      scanned += 1;
-
-      const result = fileToResult_(file, folder);
-      if (driveResultMatchesQuery_(result, normalizedQuery) && driveResultMatchesFilters_(result, filters)) {
-        results.push(result);
-      }
-    }
+    });
 
     return results;
   }
 
-  function fileToResult_(file, folder) {
+  function collectFolderMatches_(folder, normalizedQuery, filters, results, config) {
+    const files = folder.getFiles();
+    let inspected = 0;
+
+    while (files.hasNext() && inspected < config.maxDriveFilesPerFolder) {
+      inspected += 1;
+      const file = files.next();
+      const result = fileToResultIfMatch_(file, normalizedQuery, filters, folder, config);
+
+      if (result) {
+        results.push(result);
+      }
+    }
+  }
+
+  function fileToResultIfMatch_(file, normalizedQuery, filters, folder, config) {
+    const name = file.getName();
     const mimeType = file.getMimeType();
-    const outputType = mimeTypeToOutputType_(mimeType);
+    const description = safeGetDescription_(file);
+    const sourceSystem = 'Google Drive';
+    const duplicateResolutionStatus = 'review_required';
+    const fileUrl = file.getUrl();
+
+    if (hasMetadataOnlyFilters_(filters)) {
+      return null;
+    }
+
+    const outputType = mapMimeTypeToOutputType_(mimeType);
+    if (!filterMatchesValue_(outputType, filters[APP_CONFIG.FIELDS.OUTPUT_TYPE])) {
+      return null;
+    }
+
+    if (normalizedQuery && !valueMatchesQuery_(name, normalizedQuery) && !valueMatchesQuery_(description, normalizedQuery)) {
+      return null;
+    }
 
     return {
       source: 'drive',
-      title: file.getName(),
+      sourceLabel: 'Google Drive',
+      title: name,
       type: outputType,
-      fileUrl: file.getUrl(),
-      matchReason: 'Matched Drive file name or metadata',
+      fileUrl: fileUrl,
+      matchReason: description ? 'Matched Drive name or description' : 'Matched Drive name',
       metadata: {
         unit: '',
         lesson: '',
         packet: '',
-        sourceDocument: file.getName(),
+        sourceDocument: name,
         outputType: outputType,
         targetDashboard: '',
         relatedNotionRecords: '',
         readinessStatus: '',
-        fileId: file.getId(),
-        mimeType: mimeType,
-        parentFolder: folder.getName(),
-        updatedAt: file.getLastUpdated() ? file.getLastUpdated().toISOString() : ''
+        description: description,
+        source_system: sourceSystem,
+        canonical_owner_database: '',
+        canonical_record_url: '',
+        duplicate_resolution_status: duplicateResolutionStatus,
+        approved_readiness_vocabulary: config.readinessVocabulary || [],
+        file_url: fileUrl,
+        sourceSystem: sourceSystem,
+        canonicalOwnerDatabase: '',
+        canonicalRecordUrl: '',
+        duplicateResolutionStatus: duplicateResolutionStatus,
+        approvedReadinessVocabulary: config.readinessVocabulary || [],
+        fileUrl: fileUrl,
+        updatedAt: file.getLastUpdated().toISOString(),
+        folderName: folder.getName(),
+        mimeType: mimeType
       }
     };
   }
 
-  function driveResultMatchesQuery_(result, normalizedQuery) {
-    if (!normalizedQuery) {
-      return true;
-    }
-
+  function hasMetadataOnlyFilters_(filters) {
     return [
-      result.title,
-      result.type,
-      result.metadata.parentFolder,
-      result.metadata.mimeType
-    ].some(function(value) {
-      return valueMatchesQuery_(value, normalizedQuery);
+      APP_CONFIG.FIELDS.UNIT,
+      APP_CONFIG.FIELDS.LESSON,
+      APP_CONFIG.FIELDS.PACKET,
+      APP_CONFIG.FIELDS.READINESS_STATUS
+    ].some(function(field) {
+      return Boolean(filters[field]);
     });
   }
 
-  function driveResultMatchesFilters_(result, filters) {
-    const fields = APP_CONFIG.FIELDS;
-
-    return Object.keys(filters).every(function(field) {
-      if (!filters[field]) {
-        return true;
-      }
-
-      if (field === fields.OUTPUT_TYPE) {
-        return filterMatchesValue_(result.metadata.outputType, filters[field]);
-      }
-
-      return false;
-    });
+  function safeGetDescription_(file) {
+    try {
+      return file.getDescription() || '';
+    } catch (error) {
+      return '';
+    }
   }
 
-  function mimeTypeToOutputType_(mimeType) {
-    const mapping = {
-      'application/vnd.google-apps.document': 'google_doc',
-      'application/vnd.google-apps.presentation': 'google_slides',
-      'application/vnd.google-apps.spreadsheet': 'google_sheet',
-      'application/pdf': 'pdf'
-    };
+  function mapMimeTypeToOutputType_(mimeType) {
+    const mapping = {};
+    mapping[MimeType.GOOGLE_DOCS] = 'source_document';
+    mapping[MimeType.GOOGLE_SLIDES] = 'slide_deck';
+    mapping[MimeType.GOOGLE_SHEETS] = 'dashboard_or_index';
+    mapping[MimeType.PDF] = 'pdf';
 
     return mapping[mimeType] || 'drive_file';
   }

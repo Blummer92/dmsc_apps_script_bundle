@@ -1,26 +1,70 @@
 {
-  "project": "curriculum-search-feature",
-  "handoffType": "apps-script-metadata-sync-review",
-  "status": "blocked_until_review",
-  "createdFor": "Dashboard Sync Agent",
-  "summary": "Read-only curriculum search Apps Script project. Searches configured Google Sheets metadata index and optional Drive folders. No metadata write-back or sync behavior is enabled.",
-  "blockers": [
-    "Confirm canonical ownership of curriculum metadata before any write-back is added.",
-    "Confirm duplicate detection and merge policy for records that appear in both Sheets and Drive.",
-    "Confirm approved schema contract for dashboard and any Notion-backed curriculum metadata.",
-    "Confirm whether readiness_status values should be controlled vocabulary."
+  "handoff_type": "apps_script_metadata_sync_review",
+  "requesting_agent": "Google Apps Script Builder Agent",
+  "generated_artifact": "search-feature-app",
+  "github_repo": "Blummer92/dmsc_apps_script_bundle",
+  "github_branch": "governance-compliance-search-feature",
+  "github_repo_or_branch": "Blummer92/dmsc_apps_script_bundle/governance-compliance-search-feature",
+  "governance_version": "dashboard-sync-review-v1",
+  "review_status": "implemented_pending_dashboard_sync_confirmation",
+  "schema_revision": "2026-06-27-dashboard-sync-governance",
+  "last_reviewed": "2026-06-27",
+  "google_workspace_targets": [
+    "Google Sheets",
+    "Google Drive",
+    "Apps Script Sidebar"
   ],
-  "readOnlyGuarantees": {
-    "writesToSheets": false,
-    "writesToDrive": false,
-    "writesToNotion": false,
-    "syncsMetadata": false
+  "notion_databases_in_scope": [
+    {
+      "name": "pending_dashboard_sync_agent_confirmation",
+      "database_url": "",
+      "role": "possible source or consuming database"
+    }
+  ],
+  "records_to_create_or_update": [],
+  "canonical_metadata_fields_needed": [
+    "unit",
+    "lesson",
+    "packet",
+    "source_document",
+    "output_type",
+    "target_dashboard",
+    "related_notion_records",
+    "readiness_status",
+    "file_url",
+    "source_system",
+    "canonical_owner_database",
+    "canonical_record_url",
+    "duplicate_resolution_status"
+  ],
+  "possible_duplicate_fields": [
+    "unit",
+    "lesson",
+    "packet",
+    "output_type",
+    "readiness_status",
+    "related_notion_records",
+    "canonical_record_url"
+  ],
+  "possible_duplicate_records": [],
+  "source_of_truth_assumption": "No source-of-truth ownership is assigned by this Apps Script project. The search tool reads configured Sheets and Drive folders only, groups duplicate candidates for review, and never merges or writes records.",
+  "sync_question_for_dashboard_agent": "Confirm the owner database, approved readiness vocabulary, duplicate resolution status vocabulary, source-system rules, and schema revision before any write-back, sync, duplicate cleanup, or readiness status update is added.",
+  "pending_decisions": [
+    "Confirm the canonical owner database for each metadata field.",
+    "Confirm the Notion databases in scope and their source/consumer roles.",
+    "Confirm the approved readiness vocabulary and aliases for CURRICULUM_SEARCH_READINESS_VOCABULARY.",
+    "Confirm allowed duplicate_resolution_status values.",
+    "Confirm whether governance-compliance-search-feature should be promoted to the release branch after review.",
+    "Confirm whether canonical_record_url should be required for duplicate grouping."
+  ],
+  "read_only_enforcement": {
+    "writes_metadata": false,
+    "creates_records": false,
+    "updates_records": false,
+    "merges_duplicates": false,
+    "deletes_records": false
   },
-  "reviewQuestions": [
-    "Which system owns each metadata field?",
-    "Should duplicate-looking records be collapsed, flagged, or shown separately?",
-    "Which fields are safe to expose to teachers in the sidebar?",
-    "Should Drive search be folder-limited or domain-wide?"
-  ],
-  "nextRecommendedAgent": "Dashboard Sync Agent"
+  "blocked_until_review": true,
+  "recommended_next_agent": "Dashboard Sync Agent",
+  "handoff_prompt": "Dashboard Sync Agent, please review this Apps Script project handoff before any Notion updates occur.\n\nCheck whether the databases in scope are working together efficiently, whether any records or fields would be duplicated, and whether worksheet and slide generation agents can access canonical metadata without re-querying or redefining fields.\n\nPlease verify:\n1. Which database owns each metadata field.\n2. Which fields should be summary-only.\n3. Whether any fields or records are duplicates.\n4. Whether the generated Apps Script metadata manifest matches the source-of-truth schema.\n5. Whether downstream worksheet and slide agents can safely consume this metadata.\n6. What changes, if any, should be routed to the owner dashboard.\n7. The approved readiness vocabulary and alias mappings.\n8. The allowed duplicate resolution statuses.\n\nReturn:\n- duplicate risk\n- owner database\n- consuming database\n- safe sync path\n- blocked fields\n- recommended schema cleanup\n- approved metadata contract"
 }
