@@ -1,122 +1,194 @@
 <script>
-(function() {
-  const fieldIds = ['unit', 'lesson', 'packet', 'output_type', 'readiness_status'];
-  const searchButton = document.getElementById('searchButton');
-  const queryInput = document.getElementById('query');
-  const statusEl = document.getElementById('status');
-  const resultsEl = document.getElementById('results');
+  const FIELD_NAMES = {
+    unit: 'unit',
+    lesson: 'lesson',
+    packet: 'packet',
+    outputType: 'output_type',
+    readinessStatus: 'readiness_status'
+  };
 
-  searchButton.addEventListener('click', runSearch);
-  queryInput.addEventListener('keydown', function(event) {
-    if (event.key === 'Enter') {
-      runSearch();
-    }
+  const form = document.getElementById('searchForm');
+  const messagePanel = document.getElementById('messagePanel');
+  const resultsSummary = document.getElementById('resultsSummary');
+  const resultsList = document.getElementById('resultsList');
+  const configStatus = document.getElementById('configStatus');
+  const readinessOptions = document.getElementById('readinessOptions');
+
+  form.addEventListener('submit', function(event) {
+    event.preventDefault();
+    runSearch();
   });
 
   google.script.run
-    .withSuccessHandler(function(bootstrap) {
-      statusEl.textContent = buildConfigStatus(bootstrap.configStatus);
-    })
-    .withFailureHandler(function(error) {
-      statusEl.textContent = 'Configuration failed to load: ' + error.message;
-    })
+    .withSuccessHandler(renderBootstrap)
+    .withFailureHandler(renderFailure)
     .getSearchBootstrap();
 
   function runSearch() {
-    const query = queryInput.value;
-    const filters = collectFilters();
     setLoading(true);
-    resultsEl.innerHTML = '';
+    clearMessage();
+    resultsSummary.hidden = true;
+    resultsList.innerHTML = '';
 
     google.script.run
-      .withSuccessHandler(renderResults)
-      .withFailureHandler(function(error) {
-        setLoading(false);
-        statusEl.textContent = 'Search failed: ' + error.message;
-      })
-      .searchCurriculum(query, filters);
+      .withSuccessHandler(renderSearchResponse)
+      .withFailureHandler(renderFailure)
+      .searchCurriculum(getQuery(), getFilters());
   }
 
-  function collectFilters() {
-    return fieldIds.reduce(function(accumulator, id) {
-      accumulator[id] = document.getElementById(id).value || '';
-      return accumulator;
-    }, {});
+  function getQuery() {
+    return document.getElementById('query').value.trim();
   }
 
-  function renderResults(response) {
+  function getFilters() {
+    const filters = {};
+    filters[FIELD_NAMES.unit] = document.getElementById('unit').value.trim();
+    filters[FIELD_NAMES.lesson] = document.getElementById('lesson').value.trim();
+    filters[FIELD_NAMES.packet] = document.getElementById('packet').value.trim();
+    filters[FIELD_NAMES.outputType] = document.getElementById('output_type').value;
+    filters[FIELD_NAMES.readinessStatus] = document.getElementById('readiness_status').value;
+    return filters;
+  }
+
+  function renderBootstrap(payload) {
+    const status = payload.configStatus || {};
+    const pieces = [];
+
+    pieces.push(status.hasIndexSpreadsheet ? 'Sheet index configured' : 'Sheet index missing');
+    pieces.push(status.enableDriveSearch ? 'Drive search on' : 'Drive search off');
+    pieces.push('Limit ' + status.resultLimit);
+    configStatus.textContent = pieces.join(' - ');
+    renderReadinessOptions(status.readinessVocabulary || []);
+
+    if (!status.hasIndexSpreadsheet) {
+      renderMessage('Set CURRICULUM_SEARCH_INDEX_SPREADSHEET_ID before searching sheet metadata.', 'warning');
+    }
+  }
+
+  function renderSearchResponse(response) {
     setLoading(false);
-    const warnings = response.warnings && response.warnings.length ? ' Warnings: ' + response.warnings.join(' | ') : '';
-    statusEl.textContent = response.resultCount + ' result(s) found in ' + response.elapsedMs + ' ms.' + warnings;
 
-    if (!response.results || !response.results.length) {
-      resultsEl.innerHTML = '<article class="empty">No results found. Try fewer filters or a broader keyword.</article>';
+    if (response.duplicateCandidateGroups && response.duplicateCandidateGroups.length) {
+      renderMessage(
+        response.duplicateCandidateCount + ' duplicate candidate records detected across ' +
+          response.duplicateCandidateGroups.length + ' group' +
+          (response.duplicateCandidateGroups.length === 1 ? '' : 's') +
+          '. Records are grouped for review only and were not merged.',
+        'warning'
+      );
+    } else if (response.warnings && response.warnings.length) {
+      renderMessage(response.warnings.join(' '), 'warning');
+    } else {
+      clearMessage();
+    }
+
+    resultsSummary.hidden = false;
+    resultsSummary.textContent = response.resultCount + ' result' + (response.resultCount === 1 ? '' : 's') +
+      ' found in ' + response.elapsedMs + ' ms. Read-only search; no records were merged or updated.';
+
+    if (!response.results.length) {
+      resultsList.innerHTML = '<article class="result-card"><h2>No matching records</h2><p class="result-meta">Try a broader keyword or fewer filters.</p></article>';
       return;
     }
 
-    resultsEl.innerHTML = renderDuplicateWarning(response) + response.results.map(renderResultCard).join('');
+    resultsList.innerHTML = renderResults(response);
   }
 
-  function renderDuplicateWarning(response) {
-    if (!response.duplicateCandidateGroups || !response.duplicateCandidateGroups.length) {
-      return '';
-    }
-    return '<section class="warning-banner"><strong>Duplicate review needed.</strong> ' +
-      escapeHtml(response.duplicateCandidateGroups.length) + ' duplicate group(s) found across ' +
-      escapeHtml(response.duplicateCandidateCount || 0) + ' records. Grouped for review only; no automatic merge was performed.</section>';
+  function renderReadinessOptions(vocabulary) {
+    readinessOptions.innerHTML = vocabulary.map(function(item) {
+      return '<option value="' + escapeAttribute(item.value) + '">' + escapeHtml(item.label || item.value) + '</option>';
+    }).join('');
   }
 
-  function renderResultCard(result) {
+  function renderResults(response) {
+    const groupedIds = {};
+    const duplicateGroups = response.duplicateCandidateGroups || [];
+    const groupedHtml = duplicateGroups.map(function(group) {
+      group.records.forEach(function(record) {
+        groupedIds[getResultIdentity(record)] = true;
+      });
+
+      return [
+        '<section class="duplicate-group">',
+        '<div class="duplicate-heading">',
+        '<strong>Duplicate candidates</strong>',
+        '<span>' + group.count + ' records - merge not performed</span>',
+        '</div>',
+        group.records.map(renderResult).join(''),
+        '</section>'
+      ].join('');
+    }).join('');
+
+    const ungroupedHtml = response.results
+      .filter(function(result) {
+        return !groupedIds[getResultIdentity(result)];
+      })
+      .map(renderResult)
+      .join('');
+
+    return groupedHtml + ungroupedHtml;
+  }
+
+  function renderResult(result) {
     const metadata = result.metadata || {};
-    const safeUrl = escapeHtml(result.fileUrl || metadata.canonicalRecordUrl || '');
-    const link = safeUrl ? '<a href="' + safeUrl + '" target="_blank" rel="noopener">Open record</a>' : '<span class="muted">No record URL</span>';
-    const badge = sourceBadge(result.source || metadata.sourceSystem || 'unknown');
+    const tags = [
+      result.type,
+      metadata.unit,
+      metadata.lesson,
+      metadata.packet,
+      metadata.readinessStatus
+    ].filter(Boolean);
 
     return [
       '<article class="result-card">',
-      '<div class="result-header">',
-      '<h2>' + escapeHtml(result.title || 'Untitled') + '</h2>',
-      '<span class="source-badge source-' + escapeHtml(badge.key) + '">' + escapeHtml(badge.label) + '</span>',
+      '<div class="result-topline">',
+      '<span class="source-badge">' + escapeHtml(result.sourceLabel || metadata.source_system || metadata.sourceSystem || 'Unknown Source') + '</span>',
+      metadata.duplicateResolutionStatus ? '<span class="review-badge">' + escapeHtml(metadata.duplicateResolutionStatus) + '</span>' : '',
       '</div>',
-      '<p class="match">' + escapeHtml(result.matchReason || 'Matched record') + '</p>',
-      '<dl>',
-      metadata.unit ? '<dt>Unit</dt><dd>' + escapeHtml(metadata.unit) + '</dd>' : '',
-      metadata.lesson ? '<dt>Lesson</dt><dd>' + escapeHtml(metadata.lesson) + '</dd>' : '',
-      metadata.packet ? '<dt>Packet</dt><dd>' + escapeHtml(metadata.packet) + '</dd>' : '',
-      metadata.outputType ? '<dt>Output Type</dt><dd>' + escapeHtml(metadata.outputType) + '</dd>' : '',
-      metadata.readinessStatus ? '<dt>Status</dt><dd>' + escapeHtml(metadata.readinessStatus) + '</dd>' : '',
-      metadata.canonicalOwnerDatabase ? '<dt>Owner</dt><dd>' + escapeHtml(metadata.canonicalOwnerDatabase) + '</dd>' : '',
-      metadata.duplicateResolutionStatus ? '<dt>Duplicate</dt><dd>' + escapeHtml(metadata.duplicateResolutionStatus) + '</dd>' : '',
-      '</dl>',
-      '<div class="actions">' + link + '</div>',
+      '<h2>' + escapeHtml(result.title || 'Untitled') + '</h2>',
+      '<div class="result-tags">' + tags.map(renderTag).join('') + '</div>',
+      '<p class="result-reason">' + escapeHtml(result.matchReason || 'Matched record') + '</p>',
+      result.fileUrl ? '<a class="result-link" href="' + escapeAttribute(result.fileUrl) + '" target="_blank" rel="noopener">Open file</a>' : '',
       '</article>'
     ].join('');
   }
 
-  function sourceBadge(source) {
-    const normalized = String(source || '').toLowerCase();
-    if (normalized.indexOf('sheet') !== -1) return { key: 'sheets', label: 'Google Sheets' };
-    if (normalized.indexOf('drive') !== -1) return { key: 'drive', label: 'Google Drive' };
-    if (normalized.indexOf('notion') !== -1) return { key: 'notion', label: 'Notion' };
-    if (normalized.indexOf('dashboard') !== -1) return { key: 'dashboard', label: 'Dashboard' };
-    return { key: 'unknown', label: 'Unknown Source' };
+  function renderTag(value) {
+    return '<span class="tag">' + escapeHtml(value) + '</span>';
   }
 
-  function buildConfigStatus(configStatus) {
-    if (!configStatus) {
-      return 'Configuration unavailable.';
-    }
-    return 'Read-only mode | Index sheet: ' + configStatus.indexSheetName +
-      ' | Drive search: ' + (configStatus.enableDriveSearch ? 'on' : 'off') +
-      ' | Limit: ' + configStatus.resultLimit;
+  function getResultIdentity(result) {
+    const metadata = result.metadata || {};
+    return [
+      result.source || '',
+      result.fileUrl || '',
+      result.title || '',
+      metadata.rowNumber || '',
+      metadata.canonical_record_url || metadata.canonicalRecordUrl || ''
+    ].join('|');
+  }
+
+  function renderFailure(error) {
+    setLoading(false);
+    renderMessage(error && error.message ? error.message : 'Search failed.', 'error');
+  }
+
+  function renderMessage(message, type) {
+    messagePanel.hidden = false;
+    messagePanel.className = 'message-panel ' + (type || '');
+    messagePanel.textContent = message;
+  }
+
+  function clearMessage() {
+    messagePanel.hidden = true;
+    messagePanel.className = 'message-panel';
+    messagePanel.textContent = '';
   }
 
   function setLoading(isLoading) {
-    searchButton.disabled = isLoading;
-    searchButton.textContent = isLoading ? 'Searching...' : 'Search';
-    if (isLoading) {
-      statusEl.textContent = 'Searching...';
-    }
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = isLoading;
+    button.textContent = isLoading ? 'Searching...' : 'Search';
   }
 
   function escapeHtml(value) {
@@ -127,5 +199,8 @@
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
   }
-})();
+
+  function escapeAttribute(value) {
+    return escapeHtml(value).replace(/`/g, '&#096;');
+  }
 </script>
