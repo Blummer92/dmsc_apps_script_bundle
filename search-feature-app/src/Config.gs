@@ -94,6 +94,10 @@ function parseReadinessVocabulary_(value) {
 
     return parsed
       .map(function(item) {
+        if (!item) {
+          return null;
+        }
+
         if (typeof item === 'string') {
           return {
             value: item,
@@ -105,11 +109,15 @@ function parseReadinessVocabulary_(value) {
         return {
           value: String(item.value || '').trim(),
           label: String(item.label || item.value || '').trim(),
-          aliases: Array.isArray(item.aliases) ? item.aliases.map(String) : []
+          aliases: Array.isArray(item.aliases)
+            ? item.aliases.map(String).map(function(alias) {
+              return alias.trim();
+            }).filter(Boolean)
+            : []
         };
       })
       .filter(function(item) {
-        return item.value;
+        return item && item.value;
       });
   } catch (error) {
     console.error('Failed to parse readiness vocabulary property', {
