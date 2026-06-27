@@ -7,7 +7,7 @@ function onOpen() {
 
 function showSearchSidebar() {
   const html = HtmlService
-    .createTemplateFromFile('Ui')
+    .createTemplateFromFile('src/Ui')
     .evaluate()
     .setTitle(APP_CONFIG.SIDEBAR_TITLE);
 
@@ -15,7 +15,7 @@ function showSearchSidebar() {
 }
 
 function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
+  return HtmlService.createHtmlOutputFromFile('src/' + filename).getContent();
 }
 
 function getSearchBootstrap() {
@@ -29,6 +29,7 @@ function getSearchBootstrap() {
       indexSheetName: config.indexSheetName,
       enableDriveSearch: config.enableDriveSearch,
       hasDriveFolders: config.driveFolderIds.length > 0,
+      readinessVocabulary: config.readinessVocabulary,
       resultLimit: config.resultLimit
     }
   };
