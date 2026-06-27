@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <h1>Curriculum Search</h1>
+        <p>Search indexed curriculum records and configured Drive folders.</p>
+      </header>
+
+      <section class="search-panel">
+        <label for="query">Search</label>
+        <input id="query" type="search" placeholder="Try: unit 2, worksheet, slides, draft" autofocus>
+
+        <div class="filters">
+          <input id="unit" placeholder="Unit">
+          <input id="lesson" placeholder="Lesson">
+          <input id="packet" placeholder="Packet">
+          <input id="output_type" placeholder="Output type">
+          <input id="readiness_status" placeholder="Readiness status">
+        </div>
+
+        <button id="searchButton" type="button">Search</button>
+      </section>
+
+      <section id="status" class="status">Loading configuration...</section>
+      <section id="results" class="results"></section>
+    </main>
+
+    <?!= include('Client'); ?>
+  </body>
+</html>
