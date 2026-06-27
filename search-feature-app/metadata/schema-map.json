@@ -1,0 +1,80 @@
+{
+  "project": "curriculum-search-feature",
+  "version": "0.1.0",
+  "status": "draft_pending_dashboard_sync_review",
+  "fields": {
+    "title": {
+      "label": "Title",
+      "required": true,
+      "source": "sheet_or_drive"
+    },
+    "unit": {
+      "label": "Unit",
+      "required": false,
+      "source": "sheet"
+    },
+    "lesson": {
+      "label": "Lesson",
+      "required": false,
+      "source": "sheet"
+    },
+    "packet": {
+      "label": "Packet",
+      "required": false,
+      "source": "sheet"
+    },
+    "source_document": {
+      "label": "Source Document",
+      "required": false,
+      "source": "sheet_or_drive"
+    },
+    "output_type": {
+      "label": "Output Type",
+      "required": false,
+      "source": "sheet_or_drive"
+    },
+    "target_dashboard": {
+      "label": "Target Dashboard",
+      "required": false,
+      "source": "sheet"
+    },
+    "related_notion_records": {
+      "label": "Related Notion Records",
+      "required": false,
+      "source": "sheet"
+    },
+    "readiness_status": {
+      "label": "Readiness Status",
+      "required": false,
+      "source": "sheet"
+    },
+    "file_url": {
+      "label": "File URL",
+      "required": false,
+      "source": "sheet_or_drive"
+    },
+    "description": {
+      "label": "Description",
+      "required": false,
+      "source": "sheet"
+    },
+    "updated_at": {
+      "label": "Updated At",
+      "required": false,
+      "source": "sheet_or_drive"
+    }
+  },
+  "scriptProperties": {
+    "CURRICULUM_SEARCH_INDEX_SPREADSHEET_ID": "Spreadsheet ID containing the curriculum index tab.",
+    "CURRICULUM_SEARCH_INDEX_SHEET_NAME": "Sheet tab name. Defaults to Curriculum Index.",
+    "CURRICULUM_SEARCH_DRIVE_FOLDER_IDS": "Optional comma-separated Drive folder IDs to search.",
+    "CURRICULUM_SEARCH_ENABLE_DRIVE": "Set true to enable Drive metadata search.",
+    "CURRICULUM_SEARCH_RESULT_LIMIT": "Optional positive integer result limit. Defaults to 50."
+  },
+  "governance": {
+    "readOnly": true,
+    "writesBackToDashboard": false,
+    "writesToNotion": false,
+    "dashboardSyncReviewRequired": true
+  }
+}

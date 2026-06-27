@@ -1,0 +1,26 @@
+{
+  "project": "curriculum-search-feature",
+  "handoffType": "apps-script-metadata-sync-review",
+  "status": "blocked_until_review",
+  "createdFor": "Dashboard Sync Agent",
+  "summary": "Read-only curriculum search Apps Script project. Searches configured Google Sheets metadata index and optional Drive folders. No metadata write-back or sync behavior is enabled.",
+  "blockers": [
+    "Confirm canonical ownership of curriculum metadata before any write-back is added.",
+    "Confirm duplicate detection and merge policy for records that appear in both Sheets and Drive.",
+    "Confirm approved schema contract for dashboard and any Notion-backed curriculum metadata.",
+    "Confirm whether readiness_status values should be controlled vocabulary."
+  ],
+  "readOnlyGuarantees": {
+    "writesToSheets": false,
+    "writesToDrive": false,
+    "writesToNotion": false,
+    "syncsMetadata": false
+  },
+  "reviewQuestions": [
+    "Which system owns each metadata field?",
+    "Should duplicate-looking records be collapsed, flagged, or shown separately?",
+    "Which fields are safe to expose to teachers in the sidebar?",
+    "Should Drive search be folder-limited or domain-wide?"
+  ],
+  "nextRecommendedAgent": "Dashboard Sync Agent"
+}

@@ -1,0 +1,160 @@
+<style>
+  :root {
+    font-family: Arial, sans-serif;
+    color: #202124;
+    background: #ffffff;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+  }
+
+  .app-shell {
+    padding: 16px;
+  }
+
+  header h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+  }
+
+  header p {
+    color: #5f6368;
+    font-size: 13px;
+    margin: 0 0 16px;
+  }
+
+  .search-panel {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #5f6368;
+  }
+
+  input {
+    border: 1px solid #dadce0;
+    border-radius: 6px;
+    box-sizing: border-box;
+    font-size: 14px;
+    padding: 9px 10px;
+    width: 100%;
+  }
+
+  input:focus {
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 1px #1a73e8;
+    outline: none;
+  }
+
+  .filters {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr;
+  }
+
+  button {
+    background: #1a73e8;
+    border: 0;
+    border-radius: 6px;
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 10px 12px;
+  }
+
+  button:disabled {
+    cursor: progress;
+    opacity: 0.7;
+  }
+
+  .status {
+    background: #f8fafd;
+    border: 1px solid #e8eaed;
+    border-radius: 6px;
+    color: #5f6368;
+    font-size: 12px;
+    margin-bottom: 12px;
+    padding: 10px;
+  }
+
+  .results {
+    display: grid;
+    gap: 10px;
+  }
+
+  .result-card,
+  .empty {
+    border: 1px solid #e8eaed;
+    border-radius: 8px;
+    padding: 12px;
+  }
+
+  .result-header {
+    align-items: start;
+    display: flex;
+    gap: 8px;
+    justify-content: space-between;
+  }
+
+  .result-header h2 {
+    font-size: 15px;
+    line-height: 1.3;
+    margin: 0;
+  }
+
+  .pill {
+    background: #e8f0fe;
+    border-radius: 999px;
+    color: #174ea6;
+    font-size: 11px;
+    padding: 3px 7px;
+    white-space: nowrap;
+  }
+
+  .match {
+    color: #5f6368;
+    font-size: 12px;
+    margin: 6px 0 10px;
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: 82px 1fr;
+    margin: 0;
+    row-gap: 4px;
+  }
+
+  dt {
+    color: #5f6368;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  dd {
+    font-size: 12px;
+    margin: 0;
+  }
+
+  .actions {
+    margin-top: 10px;
+  }
+
+  a {
+    color: #1a73e8;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .muted {
+    color: #80868b;
+    font-size: 12px;
+  }
+</style>
