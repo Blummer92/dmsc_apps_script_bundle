@@ -1,7 +1,7 @@
 {
   "schema_name": "apps_script_project_registry_minimum_viable_support_module",
-  "schema_version": "0.2.0",
-  "last_prepared_at": "2026-06-27T21:43:00Z",
+  "schema_version": "0.2.1",
+  "last_prepared_at": "2026-06-27T22:48:00Z",
   "workspace_timezone": "America/Detroit",
   "safe_mode": true,
   "integration_mode": "existing_apps_script_repo_module",
@@ -40,24 +40,29 @@
     {
       "name": "Builder Status",
       "required": true,
-      "purpose": "Lightweight readiness indicator, expected values include Ready and Blocked."
+      "purpose": "Operational routing field for builder workflow only. It is not production approval, curriculum readiness, or deployment approval."
     },
     {
       "name": "Next Action",
       "required": true,
-      "purpose": "Immediate next step for the builder agent."
+      "purpose": "Operational routing instruction for the next builder step only. It is not a governance approval or production readiness decision."
     },
     {
       "name": "Blocking Issue",
       "required": false,
-      "purpose": "Reason a project cannot proceed. Blank means no known blocker."
+      "purpose": "Operational blocker summary for builder workflow only. It is not curriculum readiness, production approval, or source-of-truth ownership. Blank means no known blocker."
     }
   ],
   "status_interpretation": {
-    "ready": "Builder Status is Ready, required metadata is complete, and Blocking Issue is blank.",
-    "blocked": "Builder Status is Blocked, or Blocking Issue is not blank.",
+    "ready": "Builder Status is Ready, required metadata is complete, and Blocking Issue is blank. This means ready for builder attention only, not production readiness.",
+    "blocked": "Builder Status is Blocked, or Blocking Issue is not blank. This is an operational blocker state only.",
     "missing_metadata": "Any required field is blank."
   },
+  "operational_routing_only_fields": [
+    "Builder Status",
+    "Next Action",
+    "Blocking Issue"
+  ],
   "not_implemented": [
     "Full deployment queue",
     "Production status model",
@@ -73,7 +78,7 @@
     "blocked_until_review": true
   },
   "ui_contract": {
-    "global_object": "window.START_HERE_REPORT",
+    "global_object": "START_HERE_REPORT",
     "summary_fields": [
       "totalProjects",
       "readyProjects",
