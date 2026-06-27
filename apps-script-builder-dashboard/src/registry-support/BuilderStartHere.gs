@@ -17,8 +17,8 @@ function validateAppsScriptProjectRegistry() {
   return {
     generatedAt: new Date().toISOString(),
     safeMode: true,
-    requiredFields: REQUIRED_REGISTRY_FIELDS,
-    optionalFields: OPTIONAL_REGISTRY_FIELDS,
+    requiredHeaders: BUILDER_REGISTRY_REQUIRED_HEADERS,
+    requiredMetadataFields: BUILDER_REGISTRY_REQUIRED_METADATA_FIELDS,
     projects: validations.map(toBuilderStartHereProject_),
   };
 }
@@ -64,11 +64,11 @@ function toBuilderStartHereProject_(validation) {
   };
 }
 
-function doGet() {
-  const template = HtmlService.createTemplateFromFile('registry-support/RegistryUi');
+function getBuilderStartHereHtml() {
+  const template = HtmlService.createTemplateFromFile('BuilderRegistryUi');
   template.reportJson = getBuilderStartHereJson();
 
   return template.evaluate()
-    .setTitle(CONFIG.OUTPUT.START_HERE_TITLE)
+    .setTitle(BUILDER_REGISTRY_CONFIG.OUTPUT.START_HERE_TITLE)
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
