@@ -2,9 +2,9 @@
 
 Minimum viable, read-only Apps Script support module for builder agents.
 
-This project helps a builder agent answer one question quickly: where should I start, and what is blocking me?
+This module helps a builder agent answer one question quickly: where should I start, and what is blocking me?
 
-This version is designed to be added to an existing Apps Script repo/project as a separate module. It is not a full standalone governance system.
+This version is designed to be added to an existing Apps Script repo/project as a separate module. It is not a standalone governance system.
 
 ## Workspace Target
 
@@ -22,11 +22,11 @@ apps-script-builder-dashboard/src/registry-support
   BuilderRegistry.gs
   BuilderValidation.gs
   BuilderStartHere.gs
-  RegistryConfig.gs
-  RegistryServices.gs
-  RegistryUi.html
-  RegistryStyles.html
-  RegistryClient.html
+  BuilderRegistryConfig.gs
+  BuilderRegistryServices.gs
+  BuilderRegistryUi.html
+  BuilderRegistryStyles.html
+  Client.html
 ```
 
 Supporting handoff files:
@@ -39,11 +39,9 @@ apps-script-builder-dashboard/metadata/registry-support
   README.md
 ```
 
-For this MVP, `RegistryUi.html` is self-contained. It does not require `RegistryStyles.html` or `RegistryClient.html` at runtime. Those files remain isolated support files for a later reviewed refactor.
-
 ## Registry Sheet
 
-Create or identify a Google Sheet tab named:
+Use a Google Sheet tab named:
 
 ```txt
 Apps Script Project Registry
@@ -63,37 +61,46 @@ Next Action
 Blocking Issue
 ```
 
-`Blocking Issue` is allowed to be blank. All other fields are required for a project to be considered ready for builder attention.
+`Blocking Issue` column must exist, but the cell may be blank. The other metadata fields are required for a project to be considered ready for builder attention.
 
 ## Setup
 
 1. Open the existing Apps Script project or repo.
 2. Keep the files isolated under `src/registry-support/` for this MVP.
-3. Confirm `BuilderStartHere.gs` loads the self-contained template from `registry-support/RegistryUi`.
-4. In Apps Script project settings, add this Script Property:
+3. Do not replace an existing `doGet()`.
+4. If UI routing is later approved, call `getBuilderStartHereHtml()` from the existing router.
+5. In Apps Script project settings, add this Script Property:
 
 ```txt
 REGISTRY_SPREADSHEET_ID = your Google Sheet ID
 ```
 
-5. Confirm the registry spreadsheet has a tab named `Apps Script Project Registry`.
-6. Run `validateAppsScriptProjectRegistry`.
-7. Run `runBuilderStartHere`.
+6. Confirm the registry spreadsheet has a tab named `Apps Script Project Registry`.
+7. Run `validateAppsScriptProjectRegistry()`.
+8. Run `runBuilderStartHere()`.
 
-## Apps Script Functions Generated
+## Apps Script Functions
 
 - `runBuilderStartHere()`: reads the registry, validates each project, logs and returns the Builder Start Here report.
-- `validateAppsScriptProjectRegistry()`: returns a validation result for all registry projects.
+- `validateAppsScriptProjectRegistry()`: returns validation results for all registry projects.
 - `getBuilderStartHereJson()`: returns the Start Here report as formatted JSON.
-- `doGet()`: serves the optional Builder Start Here web app view using `RegistryUi.html`.
+- `getBuilderStartHereHtml()`: returns the optional Builder Start Here HTML view without replacing `doGet()`.
 - `readBuilderRegistryRows()`: reads registry rows in one batch.
 - `validateBuilderRegistryProject(project)`: checks one project for missing metadata and status.
 - `validateBuilderRegistryProjects(projects)`: validates all registry rows.
 - `buildBuilderStartHereReport(validations)`: groups projects into ready, blocked, and missing metadata categories.
 
-## Builder Start Here Output
+## UI Contract
 
-The server creates a JSON report with this shape. The self-contained UI parses it into a local `START_HERE_REPORT` object.
+`BuilderRegistryUi.html` assigns:
+
+```js
+window.START_HERE_REPORT
+```
+
+before loading `Client.html`.
+
+The server generates this report shape:
 
 ```json
 {
@@ -128,24 +135,12 @@ Each project object includes:
 }
 ```
 
-The UI shows:
-
-- ready projects
-- blocked projects
-- projects missing metadata
-- next action for each project
-- script location
-- Drive file ID
-- GitHub repository and branch
-- blocking issue
-- missing metadata fields
-
 ## Status Rules
 
 A project is treated as `ready` when:
 
 - `Builder Status` is `Ready`
-- no required metadata is missing
+- required metadata is complete
 - `Blocking Issue` is blank
 
 This means ready for builder attention only. It does not mean production readiness, curriculum readiness, deployment approval, or source-of-truth approval.
@@ -155,7 +150,9 @@ A project is treated as `blocked` when:
 - `Builder Status` is `Blocked`, or
 - `Blocking Issue` is not blank
 
-A project is listed as `projects missing metadata` when any required metadata field is blank.
+A project is listed as missing metadata when any required metadata field except `Blocking Issue` is blank.
+
+A project may appear in both blocked and missing-metadata sections if both conditions are true.
 
 ## Safe Defaults
 
@@ -183,22 +180,3 @@ Dashboard/governance work is blocked until the Dashboard Sync Agent or owner das
 - whether downstream agents can consume the metadata contract safely
 
 See `metadata/handoff.json` for the governance handoff packet.
-
-## Test Steps
-
-1. In Apps Script, set Script Property `REGISTRY_SPREADSHEET_ID`.
-2. Confirm the registry spreadsheet has the `Apps Script Project Registry` tab and required headers.
-3. Run `runBuilderStartHere()` from the Apps Script editor.
-4. Confirm the execution log shows a report with `safeMode: true`.
-5. Run `validateAppsScriptProjectRegistry()` and confirm missing metadata is listed by project.
-6. Deploy or test the web app entry point.
-7. Open the UI and confirm it renders ready, blocked, and missing-metadata project sections.
-
-## Deployment Notes
-
-For internal web app use, deploy as:
-
-- Execute as: User deploying
-- Access: domain access, or narrower if required by your Workspace policy
-
-The web app only reads the configured registry spreadsheet and renders the Start Here report.
