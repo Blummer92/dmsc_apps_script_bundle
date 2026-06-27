@@ -65,7 +65,7 @@ function toBuilderStartHereProject_(validation) {
 }
 
 function doGet() {
-  const template = HtmlService.createTemplateFromFile('Ui');
+  const template = HtmlService.createTemplateFromFile('registry-support/RegistryUi');
   template.reportJson = getBuilderStartHereJson();
 
   return template.evaluate()
