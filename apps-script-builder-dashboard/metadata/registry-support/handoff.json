@@ -36,8 +36,19 @@
   "blocked_until_review": true,
   "recommended_next_agent": "Dashboard Sync Agent",
   "limited_handoff_scope": {
-    "integration_mode": "Add to existing Apps Script repo/project as a separate module.",
-    "client_ui_contract": "Server-side code injects a parsed START_HERE_REPORT object before the registry client renderer runs.",
+    "integration_mode": "Add to existing Apps Script repo/project as a separate module with registry-specific filenames.",
+    "client_ui_contract": "Use Client.html as the render file. BuilderRegistryUi.html injects window.START_HERE_REPORT before Client.html runs.",
+    "entrypoint_policy": "Do not replace an existing doGet(). Use getBuilderStartHereHtml() from an approved existing router.",
+    "module_files": [
+      "BuilderRegistry.gs",
+      "BuilderValidation.gs",
+      "BuilderStartHere.gs",
+      "BuilderRegistryConfig.gs",
+      "BuilderRegistryServices.gs",
+      "BuilderRegistryUi.html",
+      "BuilderRegistryStyles.html",
+      "Client.html"
+    ],
     "build_only": [
       "Apps Script Project Registry support",
       "Builder Start Here workflow",
