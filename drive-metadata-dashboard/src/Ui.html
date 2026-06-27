@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('src/Styles'); ?>
+  </head>
+  <body>
+    <main class="app-shell">
+      <h1>Drive Metadata Dashboard</h1>
+      <p id="configStatus">Loading configuration...</p>
+      <nav class="tabs">
+        <button class="tab-button is-active" data-tab="scan" type="button">Scan</button>
+        <button class="tab-button" data-tab="review" type="button">Review</button>
+        <button class="tab-button" data-tab="validation" type="button">Validation</button>
+        <button class="tab-button" data-tab="source" type="button">Source Summary</button>
+        <button class="tab-button" data-tab="handoff" type="button">Handoff</button>
+      </nav>
+      <section id="messagePanel" hidden></section>
+      <section id="scan" class="tab-panel is-active"></section>
+      <section id="review" class="tab-panel"></section>
+      <section id="validation" class="tab-panel"></section>
+      <section id="source" class="tab-panel"></section>
+      <section id="handoff" class="tab-panel"></section>
+    </main>
+    <?!= include('src/Client'); ?>
+  </body>
+</html>
