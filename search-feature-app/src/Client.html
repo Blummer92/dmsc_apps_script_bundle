@@ -25,7 +25,6 @@
   function runSearch() {
     const query = queryInput.value;
     const filters = collectFilters();
-
     setLoading(true);
     resultsEl.innerHTML = '';
 
@@ -47,11 +46,7 @@
 
   function renderResults(response) {
     setLoading(false);
-
-    const warnings = response.warnings && response.warnings.length
-      ? ' Warnings: ' + response.warnings.join(' | ')
-      : '';
-
+    const warnings = response.warnings && response.warnings.length ? ' Warnings: ' + response.warnings.join(' | ') : '';
     statusEl.textContent = response.resultCount + ' result(s) found in ' + response.elapsedMs + ' ms.' + warnings;
 
     if (!response.results || !response.results.length) {
@@ -59,21 +54,29 @@
       return;
     }
 
-    resultsEl.innerHTML = response.results.map(renderResultCard).join('');
+    resultsEl.innerHTML = renderDuplicateWarning(response) + response.results.map(renderResultCard).join('');
+  }
+
+  function renderDuplicateWarning(response) {
+    if (!response.duplicateCandidateGroups || !response.duplicateCandidateGroups.length) {
+      return '';
+    }
+    return '<section class="warning-banner"><strong>Duplicate review needed.</strong> ' +
+      escapeHtml(response.duplicateCandidateGroups.length) + ' duplicate group(s) found across ' +
+      escapeHtml(response.duplicateCandidateCount || 0) + ' records. Grouped for review only; no automatic merge was performed.</section>';
   }
 
   function renderResultCard(result) {
     const metadata = result.metadata || {};
-    const safeUrl = escapeHtml(result.fileUrl || '');
-    const link = safeUrl
-      ? '<a href="' + safeUrl + '" target="_blank" rel="noopener">Open file</a>'
-      : '<span class="muted">No file URL</span>';
+    const safeUrl = escapeHtml(result.fileUrl || metadata.canonicalRecordUrl || '');
+    const link = safeUrl ? '<a href="' + safeUrl + '" target="_blank" rel="noopener">Open record</a>' : '<span class="muted">No record URL</span>';
+    const badge = sourceBadge(result.source || metadata.sourceSystem || 'unknown');
 
     return [
       '<article class="result-card">',
       '<div class="result-header">',
       '<h2>' + escapeHtml(result.title || 'Untitled') + '</h2>',
-      '<span class="pill">' + escapeHtml(result.source || 'unknown') + '</span>',
+      '<span class="source-badge source-' + escapeHtml(badge.key) + '">' + escapeHtml(badge.label) + '</span>',
       '</div>',
       '<p class="match">' + escapeHtml(result.matchReason || 'Matched record') + '</p>',
       '<dl>',
@@ -82,18 +85,28 @@
       metadata.packet ? '<dt>Packet</dt><dd>' + escapeHtml(metadata.packet) + '</dd>' : '',
       metadata.outputType ? '<dt>Output Type</dt><dd>' + escapeHtml(metadata.outputType) + '</dd>' : '',
       metadata.readinessStatus ? '<dt>Status</dt><dd>' + escapeHtml(metadata.readinessStatus) + '</dd>' : '',
+      metadata.canonicalOwnerDatabase ? '<dt>Owner</dt><dd>' + escapeHtml(metadata.canonicalOwnerDatabase) + '</dd>' : '',
+      metadata.duplicateResolutionStatus ? '<dt>Duplicate</dt><dd>' + escapeHtml(metadata.duplicateResolutionStatus) + '</dd>' : '',
       '</dl>',
       '<div class="actions">' + link + '</div>',
       '</article>'
     ].join('');
   }
 
+  function sourceBadge(source) {
+    const normalized = String(source || '').toLowerCase();
+    if (normalized.indexOf('sheet') !== -1) return { key: 'sheets', label: 'Google Sheets' };
+    if (normalized.indexOf('drive') !== -1) return { key: 'drive', label: 'Google Drive' };
+    if (normalized.indexOf('notion') !== -1) return { key: 'notion', label: 'Notion' };
+    if (normalized.indexOf('dashboard') !== -1) return { key: 'dashboard', label: 'Dashboard' };
+    return { key: 'unknown', label: 'Unknown Source' };
+  }
+
   function buildConfigStatus(configStatus) {
     if (!configStatus) {
       return 'Configuration unavailable.';
     }
-
-    return 'Index sheet: ' + configStatus.indexSheetName +
+    return 'Read-only mode | Index sheet: ' + configStatus.indexSheetName +
       ' | Drive search: ' + (configStatus.enableDriveSearch ? 'on' : 'off') +
       ' | Limit: ' + configStatus.resultLimit;
   }
