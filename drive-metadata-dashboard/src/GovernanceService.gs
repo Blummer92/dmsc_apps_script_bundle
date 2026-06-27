@@ -1,20 +1,24 @@
 var GovernanceService = (function() {
-  function enrichRecords(records) {
-    const duplicateGroups = buildDuplicateGroups(records || []);
+  function enrichRecords(metadataRecords, sourceRecords) {
+    const records = metadataRecords || [];
+    const sourceLookup = buildSourceLookup_(sourceRecords || []);
+    const duplicateGroups = buildDuplicateGroups(records);
     const rowToDuplicate = {};
+
     duplicateGroups.forEach(function(group) {
       group.records.forEach(function(record) {
         rowToDuplicate[record.rowNumber] = group.duplicateKey;
       });
     });
 
-    return (records || []).map(function(record) {
+    return records.map(function(record) {
+      const sourceApproval = buildSourceApproval_(record, sourceLookup);
       const tier = normalizeTier_(record.review_tier);
-      const warnings = buildWarnings_(record, tier);
+      const warnings = buildWarnings_(record, tier, sourceApproval);
       const duplicateKey = rowToDuplicate[record.rowNumber] || '';
       const unresolvedDuplicate = Boolean(duplicateKey) && normalize_(record.duplicate_resolution_status) !== 'resolved';
-      const evidenceExists = Boolean(record.source_approval_evidence_url);
-      const sourceApproved = normalize_(record.source_approval_status) === 'approved';
+      const evidenceExists = Boolean(sourceApproval.approvalEvidenceUrl);
+      const sourceApproved = normalize_(sourceApproval.approvalStatus) === 'approved';
       const approvedPromptExists = Boolean(record.approved_prompt);
       const hasBlocker = warnings.some(function(warning) { return warning.severity === 'blocker'; });
       const blocked = !tier || tier === 'Tier 4' || hasBlocker || unresolvedDuplicate;
@@ -37,15 +41,7 @@ var GovernanceService = (function() {
         blockedReason: buildBlockedReason_(tier, warnings, unresolvedDuplicate),
         computedExportEligible: computedExportEligible,
         computedGenerationEligible: computedGenerationEligible,
-        sourceApproval: {
-          recordId: record.dm_source_library_record_id || '',
-          url: record.dm_source_library_url || '',
-          approvalStatus: record.source_approval_status || '',
-          approvalEvidenceUrl: record.source_approval_evidence_url || '',
-          approvedBy: record.source_approved_by || '',
-          approvedAt: record.source_approved_at || '',
-          restrictions: record.source_restrictions || ''
-        },
+        sourceApproval: sourceApproval,
         prompts: {
           gemini: record.gemini_guessed_prompt || '',
           openai: record.openai_guessed_prompt || '',
@@ -127,7 +123,80 @@ var GovernanceService = (function() {
     });
   }
 
-  function buildWarnings_(record, tier) {
+  function buildSourceLookup_(sourceRecords) {
+    const lookup = {};
+    (sourceRecords || []).forEach(function(record) {
+      stableKeys_(record).forEach(function(key) {
+        if (!lookup[key]) {
+          lookup[key] = record;
+        }
+      });
+    });
+    return lookup;
+  }
+
+  function buildSourceApproval_(metadataRecord, sourceLookup) {
+    const matchedSource = findMatchedSource_(metadataRecord, sourceLookup);
+
+    return {
+      recordId: firstValue_([
+        metadataRecord.dm_source_library_record_id,
+        matchedSource.dm_source_library_record_id,
+        matchedSource.source_record_id,
+        matchedSource.record_id,
+        matchedSource.id
+      ]),
+      url: firstValue_([
+        metadataRecord.dm_source_library_url,
+        matchedSource.dm_source_library_url,
+        matchedSource.source_url,
+        matchedSource.canonical_record_url,
+        matchedSource.url
+      ]),
+      approvalStatus: firstValue_([
+        metadataRecord.source_approval_status,
+        matchedSource.source_approval_status,
+        matchedSource.approval_status,
+        matchedSource.status
+      ]),
+      approvalEvidenceUrl: firstValue_([
+        metadataRecord.source_approval_evidence_url,
+        matchedSource.source_approval_evidence_url,
+        matchedSource.approval_evidence_url,
+        matchedSource.evidence_url,
+        matchedSource.approval_url
+      ]),
+      approvedBy: firstValue_([
+        metadataRecord.source_approved_by,
+        matchedSource.source_approved_by,
+        matchedSource.approved_by
+      ]),
+      approvedAt: firstValue_([
+        metadataRecord.source_approved_at,
+        matchedSource.source_approved_at,
+        matchedSource.approved_at
+      ]),
+      restrictions: firstValue_([
+        metadataRecord.source_restrictions,
+        matchedSource.source_restrictions,
+        matchedSource.restrictions,
+        matchedSource.usage_restrictions
+      ]),
+      matchedFromSourceLibrary: Object.keys(matchedSource).length > 0
+    };
+  }
+
+  function findMatchedSource_(metadataRecord, sourceLookup) {
+    const keys = stableKeys_(metadataRecord);
+    for (let i = 0; i < keys.length; i += 1) {
+      if (sourceLookup[keys[i]]) {
+        return sourceLookup[keys[i]];
+      }
+    }
+    return {};
+  }
+
+  function buildWarnings_(record, tier, sourceApproval) {
     const warnings = [];
     if (!record.file_id) warnings.push({ message: 'Missing File ID', severity: 'blocker' });
     if (!record.drive_url) warnings.push({ message: 'Missing Drive URL', severity: 'blocker' });
@@ -135,7 +204,7 @@ var GovernanceService = (function() {
     if (!tier) warnings.push({ message: 'Each record must have exactly one Review Tier.', severity: 'blocker' });
     if (tier === 'Tier 1') warnings.push({ message: 'Tier 1 is searchable/reviewable only and never exportable.', severity: 'info' });
     if (tier === 'Tier 2') warnings.push({ message: 'Tier 2 is reference-only and never generation eligible.', severity: 'info' });
-    if (tier === 'Tier 3' && !record.source_approval_evidence_url) warnings.push({ message: 'Tier 3 requires approval evidence before export/generation.', severity: 'blocker' });
+    if (tier === 'Tier 3' && !sourceApproval.approvalEvidenceUrl) warnings.push({ message: 'Tier 3 requires approval evidence before export/generation.', severity: 'blocker' });
     if (tier === 'Tier 4') warnings.push({ message: 'Tier 4 is audit-visible only and always blocked.', severity: 'blocker' });
     if (!record.gemini_guessed_prompt && !record.openai_guessed_prompt && !record.copilot_prompt_guess && !record.original_image_prompt) warnings.push({ message: 'All prompt fields are blank.', severity: 'warning' });
     return warnings;
@@ -154,9 +223,26 @@ var GovernanceService = (function() {
     if (record.file_id) keys.push('file_id:' + normalize_(record.file_id));
     if (record.drive_url) keys.push('drive_url:' + normalize_(record.drive_url));
     if (record.dm_source_library_record_id) keys.push('source_record:' + normalize_(record.dm_source_library_record_id));
+    if (record.canonical_record_url) keys.push('canonical_record_url:' + normalize_(record.canonical_record_url));
     const metadataKey = [record.file_name, record.full_path].map(normalize_).filter(Boolean).join('|');
     if (metadataKey) keys.push('metadata:' + metadataKey);
     return keys;
+  }
+
+  function stableKeys_(record) {
+    return [
+      ['source_record', record.dm_source_library_record_id || record.source_record_id || record.record_id || record.id],
+      ['source_url', record.dm_source_library_url],
+      ['file_id', record.file_id],
+      ['drive_url', record.drive_url],
+      ['source_url', record.source_url],
+      ['canonical_record_url', record.canonical_record_url],
+      ['canonical_record_url', record.url]
+    ].filter(function(pair) {
+      return pair[1];
+    }).map(function(pair) {
+      return pair[0] + ':' + normalize_(pair[1]);
+    });
   }
 
   function normalizeTier_(value) {
@@ -165,6 +251,15 @@ var GovernanceService = (function() {
     if (['2', 'tier 2', 'tier_2'].indexOf(n) !== -1) return 'Tier 2';
     if (['3', 'tier 3', 'tier_3'].indexOf(n) !== -1) return 'Tier 3';
     if (['4', 'tier 4', 'tier_4'].indexOf(n) !== -1) return 'Tier 4';
+    return '';
+  }
+
+  function firstValue_(values) {
+    for (let i = 0; i < values.length; i += 1) {
+      if (values[i]) {
+        return values[i];
+      }
+    }
     return '';
   }
 
