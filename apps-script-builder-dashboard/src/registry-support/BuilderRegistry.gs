@@ -2,7 +2,7 @@
  * Read-only accessors for the Apps Script Project Registry sheet.
  */
 function readBuilderRegistryRows() {
-  const sheet = getRegistrySheet_();
+  const sheet = getBuilderRegistrySheet_();
   const values = sheet.getDataRange().getValues();
 
   if (values.length < 2) {
@@ -13,11 +13,21 @@ function readBuilderRegistryRows() {
   }
 
   const headers = values[0].map((value) => String(value).trim());
+  const missingHeaders = getMissingBuilderRegistryHeaders_(headers);
+
+  if (missingHeaders.length) {
+    throw new Error(`Missing registry headers: ${missingHeaders.join(', ')}`);
+  }
+
   const rows = values.slice(1)
     .map((row, index) => rowToBuilderRegistryObject_(headers, row, index + 2))
     .filter((project) => hasAnyBuilderRegistryValue_(project));
 
   return { headers, rows };
+}
+
+function getMissingBuilderRegistryHeaders_(headers) {
+  return BUILDER_REGISTRY_REQUIRED_HEADERS.filter((field) => headers.indexOf(field) === -1);
 }
 
 function rowToBuilderRegistryObject_(headers, row, rowNumber) {
