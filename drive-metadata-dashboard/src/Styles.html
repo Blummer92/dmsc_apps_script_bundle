@@ -1,0 +1,24 @@
+<style>
+  body { margin: 0; font: 13px/1.45 Arial, sans-serif; color: #1f2933; }
+  .app-shell { display: flex; flex-direction: column; gap: 12px; padding: 14px; }
+  h1 { margin: 0; font-size: 18px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .tab-button { min-height: 32px; border: 1px solid #d9e0e8; border-radius: 6px; background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  .tab-button.is-active { color: #fff; border-color: #0f6b57; background: #0f6b57; }
+  .tab-panel { display: none; }
+  .tab-panel.is-active { display: flex; flex-direction: column; gap: 10px; }
+  .panel, .record-card, .handoff-box { border: 1px solid #d9e0e8; border-radius: 6px; padding: 10px; background: #fff; }
+  .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .metric { border: 1px solid #d9e0e8; border-radius: 6px; padding: 9px; background: #f6f8fb; }
+  .metric strong { display: block; font-size: 18px; }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
+  .badge { border-radius: 999px; padding: 3px 7px; font-size: 11px; font-weight: 700; background: #f6f8fb; }
+  .good { color: #fff; background: #0f6b57; }
+  .warn { color: #8a5a00; background: #fff3d4; }
+  .block { color: #a33a2f; background: #ffe6e2; }
+  .field { display: grid; grid-template-columns: 110px minmax(0,1fr); gap: 8px; }
+  .field span:first-child { color: #627386; font-weight: 700; }
+  .prompt-box, .handoff-box { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .message-panel, #messagePanel { border: 1px solid #d9e0e8; border-radius: 6px; padding: 10px; }
+  .error { color: #a33a2f; background: #fff7f5; }
+</style>
