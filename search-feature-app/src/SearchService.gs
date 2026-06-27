@@ -34,7 +34,10 @@ const CurriculumSearchService = (function() {
       }
     }
 
-    const rankedResults = rankAndLimitResults_(results, normalizedQuery, config.resultLimit);
+    const normalizedResults = results.map(function(result) {
+      return normalizeResultMetadata_(result, config);
+    });
+    const rankedResults = rankAndLimitResults_(normalizedResults, normalizedQuery, config.resultLimit);
     const duplicateGroups = buildDuplicateGroups_(rankedResults);
     return buildSearchResponse_(query, safeFilters, rankedResults, duplicateGroups, startedAt, warnings);
   }
@@ -150,10 +153,68 @@ const CurriculumSearchService = (function() {
       metadata.unit,
       metadata.lesson,
       metadata.packet,
-      metadata.sourceDocument
+      metadata.source_document || metadata.sourceDocument
     ].map(normalizeSearchText_).filter(Boolean);
 
     return parts.length ? 'metadata:' + parts.join('|') : '';
+  }
+
+  function normalizeResultMetadata_(result, config) {
+    const metadata = Object.assign({}, result.metadata || {});
+    const sourceLabel = normalizeSourceLabelForResult_(
+      result.sourceLabel || metadata.source_system || metadata.sourceSystem,
+      result.source
+    );
+
+    metadata.source_system = sourceLabel;
+    metadata.sourceSystem = sourceLabel;
+    metadata.canonical_owner_database = metadata.canonical_owner_database || metadata.canonicalOwnerDatabase || '';
+    metadata.canonicalOwnerDatabase = metadata.canonicalOwnerDatabase || metadata.canonical_owner_database;
+    metadata.canonical_record_url = metadata.canonical_record_url || metadata.canonicalRecordUrl || '';
+    metadata.canonicalRecordUrl = metadata.canonicalRecordUrl || metadata.canonical_record_url;
+    metadata.duplicate_resolution_status = metadata.duplicate_resolution_status || metadata.duplicateResolutionStatus || 'review_required';
+    metadata.duplicateResolutionStatus = metadata.duplicateResolutionStatus || metadata.duplicate_resolution_status;
+    metadata.approved_readiness_vocabulary = metadata.approved_readiness_vocabulary || metadata.approvedReadinessVocabulary || config.readinessVocabulary || [];
+    metadata.approvedReadinessVocabulary = metadata.approvedReadinessVocabulary || metadata.approved_readiness_vocabulary;
+    metadata.description = metadata.description || '';
+    metadata.file_url = metadata.file_url || metadata.fileUrl || result.fileUrl || '';
+    metadata.fileUrl = metadata.fileUrl || metadata.file_url;
+    metadata.source_document = metadata.source_document || metadata.sourceDocument || '';
+    metadata.sourceDocument = metadata.sourceDocument || metadata.source_document;
+
+    return Object.assign({}, result, {
+      sourceLabel: sourceLabel,
+      fileUrl: result.fileUrl || metadata.file_url,
+      metadata: metadata
+    });
+  }
+
+  function normalizeSourceLabelForResult_(value, adapterSource) {
+    const normalized = normalizeSearchText_(value);
+    if (!normalized) {
+      if (adapterSource === 'drive') {
+        return 'Google Drive';
+      }
+      if (adapterSource === 'sheet') {
+        return 'Google Sheets';
+      }
+      return 'Unknown Source';
+    }
+
+    if (normalized.indexOf('notion') !== -1) {
+      return 'Notion';
+    }
+    if (normalized.indexOf('dashboard') !== -1) {
+      return 'Dashboard';
+    }
+    if (normalized.indexOf('drive') !== -1) {
+      return 'Google Drive';
+    }
+    if (normalized.indexOf('sheet') !== -1 || normalized.indexOf('spreadsheet') !== -1) {
+      return 'Google Sheets';
+    }
+
+    return 'Unknown Source';
   }
 
   function buildSearchResponse_(query, filters, results, duplicateGroups, startedAt, warnings) {
