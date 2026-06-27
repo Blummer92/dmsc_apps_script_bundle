@@ -1,0 +1,71 @@
+<script>
+  function renderReport(report) {
+    document.getElementById('summary').textContent = [
+      `${report.summary.totalProjects} total projects`,
+      `${report.summary.readyProjects} ready`,
+      `${report.summary.blockedProjects} blocked`,
+      `${report.summary.projectsMissingMetadata} missing metadata`,
+      `mode: ${report.safeMode}`,
+    ].join(' | ');
+
+    renderProjectList('readyProjects', report.readyProjects, 'ready');
+    renderProjectList('blockedProjects', report.blockedProjects, 'blocked');
+    renderProjectList('projectsMissingMetadata', report.projectsMissingMetadata, 'missing');
+  }
+
+  function renderProjectList(elementId, projects, statusClass) {
+    const element = document.getElementById(elementId);
+
+    if (!projects.length) {
+      element.innerHTML = '<div class="empty">No projects in this category.</div>';
+      return;
+    }
+
+    element.innerHTML = projects.map((project) => projectCard(project, statusClass)).join('');
+  }
+
+  function projectCard(project, statusClass) {
+    const missingFields = project.missingFields.length
+      ? project.missingFields.join(', ')
+      : 'None';
+
+    return `
+      <article class="project">
+        <div class="project-title">
+          <h3>${escapeHtml(project.projectName || `Row ${project.rowNumber}`)}</h3>
+          <span class="status ${statusClass}">${escapeHtml(project.builderStatus || statusClass)}</span>
+        </div>
+        <div class="details">
+          ${detail('Next Action', project.nextAction)}
+          ${detail('Blocking Issue', project.blockingIssue || 'None')}
+          ${detail('Apps Script Project ID', project.appsScriptProjectId)}
+          ${detail('Script URL', project.scriptUrl)}
+          ${detail('Drive File ID', project.driveFileId)}
+          ${detail('GitHub Repository', project.githubRepository)}
+          ${detail('Branch', project.branch)}
+          ${detail('Missing Metadata', missingFields)}
+        </div>
+      </article>
+    `;
+  }
+
+  function detail(label, value) {
+    return `
+      <div>
+        <span class="label">${escapeHtml(label)}</span>
+        <span>${escapeHtml(value || 'Missing')}</span>
+      </div>
+    `;
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  renderReport(window.START_HERE_REPORT);
+</script>
