@@ -6,7 +6,7 @@ const CurriculumSearchService = (function() {
     const config = getRuntimeConfig();
 
     if (!normalizedQuery && !hasActiveFilters_(safeFilters)) {
-      return buildSearchResponse_(query, safeFilters, [], startedAt, []);
+      return buildSearchResponse_(query, safeFilters, [], [], startedAt, []);
     }
 
     const warnings = [];
@@ -35,7 +35,8 @@ const CurriculumSearchService = (function() {
     }
 
     const rankedResults = rankAndLimitResults_(results, normalizedQuery, config.resultLimit);
-    return buildSearchResponse_(query, safeFilters, rankedResults, startedAt, warnings);
+    const duplicateGroups = buildDuplicateGroups_(rankedResults);
+    return buildSearchResponse_(query, safeFilters, rankedResults, duplicateGroups, startedAt, warnings);
   }
 
   function normalizeFilters_(filters) {
@@ -102,18 +103,78 @@ const CurriculumSearchService = (function() {
     return score;
   }
 
-  function buildSearchResponse_(query, filters, results, startedAt, warnings) {
+  function buildDuplicateGroups_(results) {
+    const buckets = {};
+
+    results.forEach(function(result) {
+      const key = getDuplicateCandidateKey_(result);
+      if (!key) {
+        return;
+      }
+
+      if (!buckets[key]) {
+        buckets[key] = [];
+      }
+      buckets[key].push(result);
+    });
+
+    return Object.keys(buckets)
+      .filter(function(key) {
+        return buckets[key].length > 1;
+      })
+      .map(function(key) {
+        return {
+          duplicateKey: key,
+          count: buckets[key].length,
+          records: buckets[key],
+          resolutionStatus: 'review_required',
+          mergePerformed: false
+        };
+      });
+  }
+
+  function getDuplicateCandidateKey_(result) {
+    const metadata = result.metadata || {};
+    const canonicalUrl = normalizeSearchText_(metadata.canonicalRecordUrl);
+    if (canonicalUrl) {
+      return 'canonical_url:' + canonicalUrl;
+    }
+
+    const fileUrl = normalizeSearchText_(result.fileUrl);
+    if (fileUrl) {
+      return 'file_url:' + fileUrl;
+    }
+
+    const parts = [
+      result.title,
+      metadata.unit,
+      metadata.lesson,
+      metadata.packet,
+      metadata.sourceDocument
+    ].map(normalizeSearchText_).filter(Boolean);
+
+    return parts.length ? 'metadata:' + parts.join('|') : '';
+  }
+
+  function buildSearchResponse_(query, filters, results, duplicateGroups, startedAt, warnings) {
     const elapsedMs = new Date().getTime() - startedAt.getTime();
+    const duplicateCandidateCount = duplicateGroups.reduce(function(total, group) {
+      return total + group.count;
+    }, 0);
 
     return {
       query: query || '',
       filters: filters,
       resultCount: results.length,
       results: results,
+      duplicateCandidateGroups: duplicateGroups,
+      duplicateCandidateCount: duplicateCandidateCount,
       warnings: warnings,
       governance: {
         writesMetadata: false,
-        duplicateReviewRequired: true,
+        duplicateReviewRequired: duplicateGroups.length > 0,
+        duplicateGroupingOnly: true,
+        automaticMergeEnabled: false,
         recommendedNextAgent: 'Dashboard Sync Agent'
       },
       elapsedMs: elapsedMs,
