@@ -1,0 +1,8 @@
+{
+  "manifest_type": "drive_metadata_dashboard_schema_map",
+  "project": "drive-metadata-dashboard",
+  "read_only": true,
+  "tabs": ["Scan", "Review", "Validation", "Source Summary", "Handoff"],
+  "computed_fields": ["review_tier_validity", "duplicate_candidate_groups", "validation_warnings", "computed_export_eligible", "computed_generation_eligible", "handoff_preview"],
+  "required_sheet_fields": ["file_name", "full_path", "file_id", "drive_url", "review_tier"]
+}
