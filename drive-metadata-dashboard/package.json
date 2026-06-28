@@ -1,0 +1,12 @@
+{
+  "name": "drive-metadata-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "clasp:login": "node scripts/clasp-sync.mjs login",
+    "clasp:push": "node scripts/clasp-sync.mjs push",
+    "clasp:status": "node scripts/clasp-sync.mjs status",
+    "clasp:open": "node scripts/clasp-sync.mjs open",
+    "clasp:pull": "node scripts/clasp-sync.mjs pull --allow-pull"
+  }
+}
