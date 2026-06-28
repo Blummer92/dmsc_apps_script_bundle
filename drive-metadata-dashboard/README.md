@@ -4,7 +4,7 @@ Read-only Apps Script sidebar for reviewing Drive image metadata under the appro
 
 ## Purpose
 
-The dashboard can display sheet metadata, preview Drive file links, compare prompt fields, show validation warnings, group duplicate candidates for review, show DM Source Library approval status/evidence as a read-only summary, and generate handoff preview text for manual review.
+The dashboard can display sheet metadata, preview Drive file links, compare prompt fields, show validation warnings, group duplicate candidates for review, show DM Source Library approval status/evidence as a read-only summary, and show handoff preview text for manual review.
 
 The dashboard cannot approve, write, merge, export, promote, or update records.
 
