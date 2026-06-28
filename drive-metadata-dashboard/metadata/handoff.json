@@ -1,17 +1,16 @@
 {
-  "handoff_type": "drive_metadata_dashboard_read_only_implementation",
+  "handoff_type": "drive_metadata_dashboard_guarded_staging_sync",
   "generated_artifact": "drive-metadata-dashboard",
-  "governance_model": "approved_tiered_read_only",
-  "review_status": "limited_internal_pilot_packaging_only",
+  "governance_model": "limited_internal_pilot_guarded_staging_write",
+  "review_status": "staging_sync_implementation_ready_for_testing",
   "production_deployment_approved": false,
   "ui_labels": {
     "view_group_label": "Workspace Views",
     "handoff_tab_label": "Handoff Preview"
   },
-  "read_only_enforcement": {
+  "dashboard_read_only_enforcement": {
     "writes_google_sheets": false,
     "writes_drive": false,
-    "writes_notion": false,
     "writes_dashboard_databases": false,
     "merges_duplicates": false,
     "overwrites_prompts": false,
@@ -21,12 +20,33 @@
     "exports_blocked_records": false,
     "creates_or_deletes_records": false
   },
+  "guarded_notion_staging_sync": {
+    "function": "syncNotionRows2To11ToStaging",
+    "writes_notion_staging": true,
+    "writes_production_notion": false,
+    "row_scope": "2-11 only",
+    "required_mode": "STAGING_WRITE",
+    "required_write_approval": "YES_10_ROWS_ONLY",
+    "required_data_source_id": "collection://bf703afb-7526-4b55-aefa-1c4976032509",
+    "idempotency_key": "file_id",
+    "verify_after_write": true
+  },
   "tier_rules": [
     "Each record must have exactly one Review Tier.",
     "Tier 1 is searchable/reviewable inside dashboard only and never exportable.",
     "Tier 2 is reference-only and never generation eligible.",
     "Tier 3 requires approval evidence before export/generation.",
     "Tier 4 is audit-visible only and always blocked."
+  ],
+  "blocked_actions": [
+    "production deployment",
+    "production Notion sync",
+    "Drive file edits",
+    "Google Sheets writes",
+    "duplicate merge",
+    "prompt overwrite",
+    "export or generation promotion",
+    "curriculum readiness updates"
   ],
   "recommended_next_agent": "Modeling & Dashboard Governance Agent"
 }
