@@ -43,7 +43,7 @@ var WorkspaceService = (function() {
       }
     };
     definitions[normalize_(WORKSPACES.HANDOFF_RECORDS)] = {
-      statusLabel: 'Manual handoff tracking workspace',
+      statusLabel: 'Preview/review workspace for manual handoff tracking. Owner writes remain outside this console.',
       sections: {
         scan: ['Pending Handoffs', 'Waiting for Review'],
         review: ['Handoff Details', 'Next Owner', 'Workflow Status'],
@@ -53,7 +53,7 @@ var WorkspaceService = (function() {
       }
     };
     definitions[normalize_(WORKSPACES.PROJECT_LOGS)] = {
-      statusLabel: 'Operational logs workspace',
+      statusLabel: 'Preview/review workspace for operational logs. Owner writes remain outside this console.',
       sections: {
         scan: ['Recent Activity', 'Performance'],
         review: ['Agent Activity Timeline'],
@@ -63,7 +63,7 @@ var WorkspaceService = (function() {
       }
     };
     definitions[normalize_(WORKSPACES.AGENT_DATA_CONTRACTS)] = {
-      statusLabel: 'Agent contract monitoring workspace',
+      statusLabel: 'Preview/review workspace for agent data contracts. Owner writes remain outside this console.',
       sections: {
         scan: ['Connected Agents', 'Contract Status'],
         review: ['Version Compatibility', 'Permission Matrix'],
@@ -73,7 +73,7 @@ var WorkspaceService = (function() {
       }
     };
     definitions[normalize_(WORKSPACES.CHANGE_LOG)] = {
-      statusLabel: 'Change management workspace',
+      statusLabel: 'Preview/review workspace for change management. Owner writes remain outside this console.',
       sections: {
         scan: ['Recent Changes', 'Version Timeline'],
         review: ['Pending Changes'],
