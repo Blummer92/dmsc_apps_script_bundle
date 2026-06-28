@@ -1,12 +1,14 @@
 # Drive Metadata Dashboard
 
-Read-only Apps Script sidebar for reviewing Drive image metadata under the approved tiered governance model.
+Read-only Apps Script sidebar for reviewing Drive image metadata under the approved tiered governance model, with guarded Notion staging sync helpers for validation workflows.
 
 ## Purpose
 
-The dashboard can display sheet metadata, preview Drive file links, compare prompt fields, show validation warnings, group duplicate candidates for review, show DM Source Library approval status/evidence as a read-only summary, and show handoff preview text for manual review.
+The dashboard console can display sheet metadata, preview Drive file links, compare prompt fields, show validation warnings, group duplicate candidates for review, show DM Source Library approval status/evidence as a read-only summary, and show handoff preview text for manual review.
 
-The dashboard cannot approve, write, merge, export, promote, or update records.
+The visible dashboard console cannot approve, merge, export, generate, promote, overwrite prompts, edit Drive, write back to Sheets, write to Notion, or update curriculum readiness.
+
+Notion staging sync is only available through explicit Apps Script functions with staging-only guards.
 
 ## Project Structure
 
@@ -31,6 +33,7 @@ drive-metadata-dashboard
   package.json
   README.md
   PILOT_CHECKLIST.md
+  STAGING_SYNC_RUNBOOK.md
   .claspignore
   .clasp.json.example
 ```
@@ -51,17 +54,22 @@ These controls are navigation tabs only. They switch between read-only review vi
 | --- | --- | --- |
 | `DRIVE_METADATA_DASHBOARD_SPREADSHEET_ID` | No for bound scripts | Spreadsheet containing `Drive Images`. If omitted, the bound active spreadsheet is used. |
 | `DRIVE_METADATA_SHEET_NAME` | No | Defaults to `Drive Images`. |
-| `DM_SOURCE_LIBRARY_SPREADSHEET_ID` | No | Source approval lookup spreadsheet. |
-| `DM_SOURCE_LIBRARY_SHEET_NAME` | No | Defaults to `DM Source Library`. |
+| `DM_SOURCE_LIBRARY_SPREADSHEET_ID` | For Notion dry run or staging sync | Source approval lookup spreadsheet. |
+| `DM_SOURCE_LIBRARY_SHEET_NAME` | For Notion dry run or staging sync | Defaults to `DM Source Library`. |
 | `DRIVE_METADATA_RESULT_LIMIT` | No | Number of metadata rows to read. |
-| `DM_NOTION_STAGING_DATA_SOURCE_ID` | For dry run or staging sync | Must be the approved staging data source ID for rows 2-11. |
+| `DM_NOTION_STAGING_DATA_SOURCE_ID` | For dry run or staging sync | Must be the approved staging data source ID. |
 | `DM_NOTION_STAGING_DATABASE_URL` | For dry run or staging sync | Staging database URL used to identify the Notion database. |
 | `DM_NOTION_STAGING_DATABASE_ID` | Optional | Explicit Notion database ID; used instead of parsing the URL when present. |
 | `DM_NOTION_API_TOKEN` | For staging sync only | Notion integration token with access to the staging database. |
+| `DM_NOTION_SYNC_SCOPE` | For dry run or staging sync | `TEN_ROW_APPROVAL` or `ELIGIBLE_STAGING_BATCH`. |
 | `DM_NOTION_SYNC_MODE` | For dry run or staging sync | Use `DRY_RUN` for validation or `STAGING_WRITE` for guarded staging sync. |
-| `DM_NOTION_STAGING_WRITE_APPROVED` | For staging sync only | Must be `YES_10_ROWS_ONLY`. |
-| `DM_NOTION_SYNC_START_ROW` | For dry run or staging sync | Must be `2`. |
-| `DM_NOTION_SYNC_END_ROW` | For dry run or staging sync | Must be `11`. |
+| `DM_NOTION_STAGING_WRITE_APPROVED` | For 10-row staging sync only | Must be `YES_10_ROWS_ONLY`. |
+| `DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED` | For expanded staging batches only | Must be `YES_EXPANDED_STAGING_BATCH_ONLY`. |
+| `DM_NOTION_SYNC_START_ROW` | For dry run or staging sync | Start row for the configured lane. |
+| `DM_NOTION_SYNC_END_ROW` | For dry run or staging sync | End row for the configured lane. |
+| `DM_NOTION_SYNC_CURSOR_ROW` | For expanded staging batches | First row to process in the current batch. |
+| `DM_NOTION_SYNC_BATCH_SIZE` | For expanded staging batches | Defaults to `25`; maximum `50`. |
+| `DM_NOTION_SYNC_MAX_END_ROW` | For expanded staging batches | Guardrail end row limit; defaults to `454`. |
 | `DM_NOTION_TITLE_PROPERTY` | Optional | Defaults to `file_name`. |
 | `DM_NOTION_FILE_ID_PROPERTY` | Optional | Defaults to `file_id`; used for create/update idempotency. |
 
@@ -73,17 +81,21 @@ Enable the Google Sheets advanced service in Apps Script if it is not already en
 
 ## Notion Staging Sync
 
-`dryRunNotionRows2To11()` builds and logs the 10 approved row payloads without writing to Notion.
+The 10-row validation lane remains available:
 
-`syncNotionRows2To11ToStaging()` writes only to the configured Notion staging database. It is blocked unless all guards pass:
+- `dryRunNotionRows2To11()` builds and logs the approved row 2-11 payloads without writing to Notion.
+- `syncNotionRows2To11ToStaging()` writes rows 2-11 only after the 10-row staging guards pass.
 
-- `DM_NOTION_SYNC_MODE` is `STAGING_WRITE`.
-- `DM_NOTION_STAGING_WRITE_APPROVED` is `YES_10_ROWS_ONLY`.
-- Rows are exactly `2-11`.
-- The staging data source ID is exactly `collection://bf703afb-7526-4b55-aefa-1c4976032509`.
-- A Notion token is configured.
+The expanded staging batch lane is available for scaling eligible rows safely:
 
-The staging sync creates or updates pages by `file_id`, verifies the 10 synced pages by querying Notion, and returns a sync summary. It is not production deployment and does not grant export, generation, prompt overwrite, production source approval, readiness updates, or full Notion sync activation.
+- `dryRunNotionEligibleStagingBatch()` builds one eligible-row batch without writing to Notion.
+- `syncNotionEligibleStagingBatchToStaging()` writes one eligible-row batch after expanded staging guards pass.
+
+Expanded batches are cursor-based. The function returns `next_cursor_row`; set `DM_NOTION_SYNC_CURSOR_ROW` to that value before the next batch. The script does not write progress back to Sheets.
+
+Full operating steps are in `STAGING_SYNC_RUNBOOK.md`.
+
+This is not production deployment and does not grant export, generation, prompt overwrite, production source approval, readiness updates, production Notion sync, or full Notion sync activation.
 
 ## Tier Logic
 
@@ -96,7 +108,7 @@ Every record must have exactly one Review Tier.
 
 ## Forbidden Behavior
 
-This project must not include source approval, DM Source Library writes, Drive file edits, Google Sheets row edits, duplicate merge, prompt overwrite, eligibility promotion, readiness updates, blocked-record export, or record creation/deletion.
+This project must not include source approval, DM Source Library writes, Drive file edits, Google Sheets row edits, duplicate merge, prompt overwrite, eligibility promotion, readiness updates, blocked-record export, production Notion sync, or record creation/deletion.
 
 ## Pilot Packaging
 
@@ -141,12 +153,12 @@ git pull
 npm run clasp:preflight-push
 ```
 
-After pushing, reload Apps Script and test these functions manually:
+After pushing, reload Apps Script and test dry runs first:
 
 - `dryRunNotionRows2To11`
-- `syncNotionRows2To11ToStaging`
+- `dryRunNotionEligibleStagingBatch`
 
-Do not run the staging sync until the required staging script properties are set. This workflow does not run Notion sync, modify Drive Images, create production records, or approve production deployment.
+Do not run staging sync functions until the required staging script properties are set. This workflow does not run Notion sync, modify Drive Images, create production records, or approve production deployment.
 
 ## clasp Deployment
 
