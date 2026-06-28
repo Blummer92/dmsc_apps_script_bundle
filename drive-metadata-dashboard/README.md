@@ -23,9 +23,11 @@ drive-metadata-dashboard
   src/Ui.html
   src/Styles.html
   src/Client.html
+  scripts/clasp-sync.mjs
   metadata/handoff.json
   metadata/schema-map.json
   appsscript.json
+  package.json
   README.md
   PILOT_CHECKLIST.md
   .claspignore
@@ -101,9 +103,25 @@ Limited internal pilot guidance is tracked in `PILOT_CHECKLIST.md`. This pilot p
 
 ## clasp Deployment
 
+Login once:
+
 ```bash
-cp .clasp.json.example .clasp.json
-clasp push
+npm run clasp:login
 ```
 
-Reload the bound spreadsheet and open `Drive Metadata > Open Dashboard`.
+Push this project to an existing Apps Script project by providing the Script ID from Apps Script Project Settings:
+
+```bash
+SCRIPT_ID="PASTE_SCRIPT_ID_HERE" npm run clasp:push
+```
+
+Check deployment status or open the Apps Script project:
+
+```bash
+SCRIPT_ID="PASTE_SCRIPT_ID_HERE" npm run clasp:status
+SCRIPT_ID="PASTE_SCRIPT_ID_HERE" npm run clasp:open
+```
+
+The helper writes `.clasp.json` locally from `SCRIPT_ID`. That local file is intentionally not committed.
+
+Avoid `npm run clasp:pull` unless the Apps Script editor has newer manual edits that should replace your local files. Reload the bound spreadsheet and open `Drive Metadata > Open Dashboard` after pushing.
