@@ -19,7 +19,12 @@
 
   function renderBootstrap(payload) {
     const status = payload.configStatus || {};
-    configStatus.textContent = [status.hasDashboardSpreadsheet ? 'Dashboard configured' : 'Dashboard missing', 'Sheet: ' + (status.metadataSheetName || 'Drive Images'), status.hasSourceLibrarySpreadsheet ? 'Source Library configured' : 'Source Library summary only', 'Limit ' + status.resultLimit].join(' · ');
+    configStatus.textContent = [
+      status.hasDashboardSpreadsheet ? 'Dashboard configured' : 'Using bound dashboard',
+      'Sheet: ' + (status.metadataSheetName || 'Drive Images'),
+      status.hasSourceLibrarySpreadsheet ? 'Source Library configured' : 'Source Library summary only',
+      'Limit ' + status.resultLimit
+    ].join(' · ');
   }
 
   function renderDashboard(payload) {
@@ -33,43 +38,182 @@
   }
 
   function renderScan(payload) {
-    const s = payload.summary;
-    panels.scan.innerHTML = '<section class="metric-grid">' + metric('Records', s.totalRecords) + metric('Missing metadata', s.missingMetadataCount) + metric('Duplicate candidates', s.duplicateCandidateCount) + metric('Blocked', s.blockedCount) + metric('Export eligible', s.exportEligibleCount) + metric('Generation eligible', s.generationEligibleCount) + '</section><section class="panel"><h2>Review Tiers</h2><div class="badge-row">' + badge('Tier 1: ' + s.tierCounts.tier1, 'warn') + badge('Tier 2: ' + s.tierCounts.tier2, 'warn') + badge('Tier 3: ' + s.tierCounts.tier3, 'good') + badge('Tier 4: ' + s.tierCounts.tier4, 'block') + badge('Invalid: ' + s.tierCounts.invalid, s.tierCounts.invalid ? 'block' : '') + '</div></section>';
+    const summary = payload.summary || {};
+    const counts = summary.workflowCounts || {};
+    const records = payload.records || [];
+    panels.scan.innerHTML = [
+      panel('Status Header',
+        '<p class="muted">Read-only workflow view computed at ' + escapeHtml(summary.lastScanPreviewAt || '') + '.</p>' +
+        '<section class="metric-grid">' +
+        metric('Total records', summary.totalRecords) +
+        metric('Reviewable records', counts.reviewableRecords) +
+        metric('Needs metadata cleanup', counts.needsMetadataCleanup) +
+        metric('Reference candidates', counts.referenceCandidates) +
+        metric('Needs source approval', counts.needsSourceApproval) +
+        metric('Production blocked', counts.productionBlocked) +
+        metric('Hard blocked', counts.hardBlocked) +
+        metric('Duplicate candidates', summary.duplicateCandidateCount) +
+        '</section>'),
+      panel('Today’s Work', renderQueue(records, function(r) { return r.workflowStatus === 'Reviewable records'; }, 'reviewable records')),
+      panel('Metadata Cleanup Queue', renderQueue(records, function(r) { return r.workflowStatus === 'Needs metadata cleanup'; }, 'metadata cleanup records')),
+      panel('Reference Candidate Queue', renderQueue(records, function(r) { return r.workflowStatus === 'Reference candidates'; }, 'reference candidates')),
+      panel('Source Approval Prep Queue', renderQueue(records, function(r) { return r.workflowStatus === 'Needs source approval'; }, 'source approval prep records')),
+      panel('Production Blockers Queue', renderQueue(records, function(r) { return r.productionStatus === 'Production blocked' || r.productionStatus === 'Hard blocked'; }, 'production blocked records'))
+    ].join('');
   }
 
   function renderReview(payload) {
     const records = payload.records || [];
     if (!records.length) { panels.review.innerHTML = emptyPanel('No records available for review.'); return; }
     const record = records[state.selectedIndex] || records[0];
-    panels.review.innerHTML = '<section class="panel"><select id="recordPicker">' + records.map(function(r, i) { return '<option value="' + i + '"' + (i === state.selectedIndex ? ' selected' : '') + '>Row ' + escapeHtml(r.rowNumber) + ' · ' + escapeHtml(r.fileName || 'Untitled') + '</option>'; }).join('') + '</select></section>' + renderRecord(record) + renderPrompts(record);
-    document.getElementById('recordPicker').addEventListener('change', function(event) { state.selectedIndex = Number(event.target.value); renderReview(state.dashboard); });
+    panels.review.innerHTML = [
+      panel('Selected Record Panel', renderRecordPicker(records) + renderRecord(record)),
+      panel('Permission Grid', renderPermissionGrid(record)),
+      panel('Why Blocked Panel', renderWhyBlocked(record)),
+      panel('Prompt Comparison', renderPrompts(record))
+    ].join('');
+    document.getElementById('recordPicker').addEventListener('change', function(event) {
+      state.selectedIndex = Number(event.target.value);
+      renderReview(state.dashboard);
+    });
   }
 
   function renderValidation(payload) {
     const records = payload.records || [];
-    const items = records.filter(function(r) { return r.validationWarnings.length || r.unresolvedDuplicate; }).slice(0, 50).map(function(r) { return '<li>Row ' + escapeHtml(r.rowNumber) + ': ' + escapeHtml(r.validationWarnings.map(function(w) { return w.message; }).join(' ')) + '</li>'; }).join('');
-    panels.validation.innerHTML = '<section class="panel"><h2>Validation</h2><ul>' + (items || '<li>No validation warnings in current view.</li>') + '</ul></section>';
+    const warnings = records.filter(function(r) { return r.validationWarnings.length || r.unresolvedDuplicate; });
+    panels.validation.innerHTML = [
+      panel('Validation', '<div class="badge-row">' +
+        badge('Production blocked: ' + warnings.length, warnings.length ? 'block' : '') +
+        badge('Duplicate groups: ' + (payload.duplicateCandidateGroups || []).length, (payload.duplicateCandidateGroups || []).length ? 'warn' : '') +
+        badge('No writes performed', 'good') +
+        '</div>' + renderWarningList(warnings)),
+      panel('Duplicate Review Queue', renderDuplicateGroups(payload.duplicateCandidateGroups || []))
+    ].join('');
   }
 
   function renderSource(payload) {
     const records = payload.records || [];
-    panels.source.innerHTML = records.slice(0, 50).map(function(r) { const s = r.sourceApproval || {}; return '<article class="record-card"><h2>Row ' + escapeHtml(r.rowNumber) + '</h2>' + field('Status', s.approvalStatus) + field('Evidence', linkOrText(s.approvalEvidenceUrl)) + field('Approved By', s.approvedBy) + field('Approved At', s.approvedAt) + '</article>'; }).join('') || emptyPanel('No source summary available.');
+    panels.source.innerHTML = panel('Source Approval Summary', records.slice(0, 50).map(function(r) {
+      const s = r.sourceApproval || {};
+      return '<article class="record-card"><h2>Row ' + escapeHtml(r.rowNumber) + ' · ' + escapeHtml(r.fileName || 'Untitled') + '</h2>' +
+        '<div class="badge-row">' +
+        badge('Status: ' + (s.approvalStatus || 'Unknown'), s.approvalStatus === 'approved' ? 'good' : 'warn') +
+        badge(s.approvalEvidenceUrl ? 'Evidence present' : 'Evidence missing', s.approvalEvidenceUrl ? 'good' : 'block') +
+        '</div>' +
+        field('Evidence', linkOrText(s.approvalEvidenceUrl)) +
+        field('Approved By', s.approvedBy) +
+        field('Restrictions', s.restrictions) +
+        '</article>';
+    }).join('') || '<p class="muted">No source approval summaries available.</p>');
   }
 
-  function renderHandoff(payload) { panels.handoff.innerHTML = '<section class="handoff-box">' + escapeHtml(payload.handoffText || '') + '</section>'; }
+  function renderHandoff(payload) {
+    panels.handoff.innerHTML = panel('Handoff Panel',
+      '<p class="muted">Manual review text only. No export or update action is available.</p>' +
+      '<section class="handoff-box">' + escapeHtml(payload.handoffText || '') + '</section>');
+  }
 
-  function renderRecord(r) { return '<article class="record-card"><h2>' + escapeHtml(r.fileName || 'Untitled') + '</h2><div class="badge-row">' + badge(r.reviewTier, tierClass(r.reviewTier)) + badge(r.computedExportEligible ? 'Export eligible' : 'Not export eligible', r.computedExportEligible ? 'good' : 'warn') + badge(r.computedGenerationEligible ? 'Generation eligible' : 'Not generation eligible', r.computedGenerationEligible ? 'good' : 'warn') + '</div>' + field('Drive URL', linkOrText(r.driveUrl)) + field('File ID', r.fileId) + field('Full Path', r.fullPath) + field('Blocked Reason', r.blockedReason) + '</article>'; }
-  function renderPrompts(r) { return '<section class="panel"><h2>Prompt Comparison</h2>' + promptBox('Gemini', r.prompts.gemini) + promptBox('OpenAI', r.prompts.openai) + promptBox('Copilot', r.prompts.copilot) + promptBox('Original', r.prompts.original) + promptBox('Approved Prompt', r.prompts.approved) + '</section>'; }
+  function renderRecordPicker(records) {
+    return '<select id="recordPicker" class="record-picker">' + records.map(function(r, i) {
+      return '<option value="' + i + '"' + (i === state.selectedIndex ? ' selected' : '') + '>Row ' +
+        escapeHtml(r.rowNumber) + ' · ' + escapeHtml(r.fileName || 'Untitled') + '</option>';
+    }).join('') + '</select>';
+  }
 
-  function activateTab(name) { document.querySelectorAll('.tab-button').forEach(function(b) { b.classList.toggle('is-active', b.dataset.tab === name); }); Object.keys(panels).forEach(function(k) { panels[k].classList.toggle('is-active', k === name); }); }
-  function renderMessages(warnings) { if (!warnings.length) { messagePanel.hidden = true; return; } messagePanel.hidden = false; messagePanel.textContent = warnings.join(' '); }
-  function renderFailure(error) { messagePanel.hidden = false; messagePanel.className = 'error'; messagePanel.textContent = error && error.message ? error.message : 'Dashboard failed to load.'; }
-  function metric(label, value) { return '<div class="metric"><strong>' + escapeHtml(value) + '</strong><span>' + escapeHtml(label) + '</span></div>'; }
+  function renderRecord(r) {
+    return '<article class="record-card"><h2>' + escapeHtml(r.fileName || 'Untitled') + '</h2>' +
+      '<div class="badge-row">' +
+      badge(r.reviewTier, tierClass(r.reviewTier)) +
+      badge(r.workflowStatus, statusClass(r.workflowStatus)) +
+      badge(r.productionStatus, r.productionStatus === 'Hard blocked' ? 'block' : 'warn') +
+      '</div>' +
+      field('Drive URL', linkOrText(r.driveUrl)) +
+      field('File ID', r.fileId) +
+      field('Full Path', r.fullPath) +
+      field('Next Action', r.nextAction) +
+      '</article>';
+  }
+
+  function renderPermissionGrid(r) {
+    const grid = r.permissionGrid || {};
+    return '<section class="metric-grid">' +
+      permissionMetric('Search / Preview', grid.searchPreview) +
+      permissionMetric('Metadata Cleanup', grid.metadataCleanup) +
+      permissionMetric('Internal Reference', grid.internalReference) +
+      permissionMetric('Export', grid.export) +
+      permissionMetric('Generation', grid.generation) +
+      permissionMetric('Source Approval', grid.sourceApproval) +
+      '</section>';
+  }
+
+  function renderWhyBlocked(r) {
+    return '<div class="badge-row">' +
+      badge(r.hardBlocker ? 'Hard blocker' : 'No hard blocker', r.hardBlocker ? 'block' : 'good') +
+      badge(r.productionStatus || 'Production status pending', r.productionStatus === 'Hard blocked' ? 'block' : 'warn') +
+      '</div><p>' + escapeHtml(r.whyProductionBlocked || 'Not blocked for the current computed workflow.') + '</p>';
+  }
+
+  function renderPrompts(r) {
+    return promptBox('Gemini', r.prompts.gemini) +
+      promptBox('OpenAI', r.prompts.openai) +
+      promptBox('Copilot', r.prompts.copilot) +
+      promptBox('Original', r.prompts.original) +
+      promptBox('Approved Prompt', r.prompts.approved);
+  }
+
+  function renderQueue(records, predicate, emptyLabel) {
+    const items = records.filter(predicate).slice(0, 8);
+    if (!items.length) return '<p class="muted">No ' + escapeHtml(emptyLabel) + ' in current view.</p>';
+    return '<ul class="queue-list">' + items.map(function(r) {
+      return '<li><strong>Row ' + escapeHtml(r.rowNumber) + '</strong> · ' + escapeHtml(r.fileName || 'Untitled') +
+        '<br><span>' + escapeHtml(r.nextAction || '') + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderWarningList(records) {
+    if (!records.length) return '<p class="muted">No validation warnings in current view.</p>';
+    return '<ul class="queue-list">' + records.slice(0, 50).map(function(r) {
+      const messages = r.validationWarnings.map(function(w) { return w.message; });
+      if (r.unresolvedDuplicate) messages.push('Unresolved duplicate candidate.');
+      return '<li><strong>Row ' + escapeHtml(r.rowNumber) + '</strong> · ' + escapeHtml(messages.join(' ')) + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderDuplicateGroups(groups) {
+    if (!groups.length) return '<p class="muted">No duplicate candidate groups detected.</p>';
+    return groups.slice(0, 20).map(function(group) {
+      return '<article class="record-card"><h2>' + escapeHtml(group.duplicateKey) + '</h2><p class="muted">' +
+        group.count + ' records · grouped for review only · merge not performed</p></article>';
+    }).join('');
+  }
+
+  function activateTab(name) {
+    document.querySelectorAll('.tab-button').forEach(function(b) { b.classList.toggle('is-active', b.dataset.tab === name); });
+    Object.keys(panels).forEach(function(k) { panels[k].classList.toggle('is-active', k === name); });
+  }
+
+  function renderMessages(warnings) {
+    if (!warnings.length) { messagePanel.hidden = true; return; }
+    messagePanel.hidden = false;
+    messagePanel.textContent = warnings.join(' ');
+  }
+
+  function renderFailure(error) {
+    messagePanel.hidden = false;
+    messagePanel.className = 'message-panel error';
+    messagePanel.textContent = error && error.message ? error.message : 'Dashboard failed to load.';
+  }
+
+  function panel(title, body) { return '<section class="panel"><h2>' + escapeHtml(title) + '</h2>' + body + '</section>'; }
+  function metric(label, value) { return '<div class="metric"><strong>' + escapeHtml(value || 0) + '</strong><span>' + escapeHtml(label) + '</span></div>'; }
+  function permissionMetric(label, value) { return '<div class="metric permission ' + permissionClass(value) + '"><strong>' + escapeHtml(value || 'Blocked') + '</strong><span>' + escapeHtml(label) + '</span></div>'; }
   function badge(text, kind) { return text ? '<span class="badge ' + escapeHtml(kind || '') + '">' + escapeHtml(text) + '</span>' : ''; }
   function field(label, value) { return '<div class="field"><span>' + escapeHtml(label) + '</span><span>' + (String(value || '').indexOf('<a ') === 0 ? value : escapeHtml(value || '')) + '</span></div>'; }
   function promptBox(label, value) { return '<div class="prompt-box"><strong>' + escapeHtml(label) + '</strong>\n' + escapeHtml(value || 'No value') + '</div>'; }
   function linkOrText(value) { if (!value) return ''; if (/^https?:\/\//.test(value)) return '<a href="' + escapeHtml(value) + '" target="_blank" rel="noopener">Open link</a>'; return escapeHtml(value); }
-  function emptyPanel(message) { return '<section class="panel"><p>' + escapeHtml(message) + '</p></section>'; }
+  function emptyPanel(message) { return panel('Empty', '<p>' + escapeHtml(message) + '</p>'); }
   function tierClass(tier) { if (tier === 'Tier 3') return 'good'; if (tier === 'Tier 4' || tier === 'Invalid Tier') return 'block'; return 'warn'; }
+  function statusClass(status) { if (status === 'Reviewable records') return 'good'; if (status === 'Hard blocked') return 'block'; return 'warn'; }
+  function permissionClass(value) { if (value === 'Allowed') return 'good'; if (value === 'Owner Required' || value === 'Blocked') return 'block'; return 'warn'; }
   function escapeHtml(value) { return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
 </script>
