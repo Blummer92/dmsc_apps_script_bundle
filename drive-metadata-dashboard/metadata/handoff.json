@@ -2,7 +2,7 @@
   "handoff_type": "drive_metadata_dashboard_guarded_staging_sync",
   "generated_artifact": "drive-metadata-dashboard",
   "governance_model": "limited_internal_pilot_guarded_staging_write",
-  "review_status": "staging_sync_implementation_ready_for_testing",
+  "review_status": "expanded_staging_batch_sync_ready_for_dry_run_testing",
   "production_deployment_approved": false,
   "ui_labels": {
     "view_group_label": "Workspace Views",
@@ -21,16 +21,37 @@
     "creates_or_deletes_records": false
   },
   "guarded_notion_staging_sync": {
-    "function": "syncNotionRows2To11ToStaging",
+    "ten_row_function": "syncNotionRows2To11ToStaging",
+    "expanded_batch_function": "syncNotionEligibleStagingBatchToStaging",
+    "dry_run_functions": [
+      "dryRunNotionRows2To11",
+      "dryRunNotionEligibleStagingBatch"
+    ],
     "writes_notion_staging": true,
     "writes_production_notion": false,
-    "row_scope": "2-11 only",
-    "required_mode": "STAGING_WRITE",
-    "required_write_approval": "YES_10_ROWS_ONLY",
+    "ten_row_scope": "2-11 only",
+    "expanded_scope": "eligible rows in bounded cursor batches",
+    "expanded_batch_size_default": 25,
+    "expanded_batch_size_max": 50,
+    "expanded_default_max_end_row": 454,
+    "required_ten_row_mode": "STAGING_WRITE",
+    "required_ten_row_write_approval": "YES_10_ROWS_ONLY",
+    "required_expanded_scope": "ELIGIBLE_STAGING_BATCH",
+    "required_expanded_write_approval": "YES_EXPANDED_STAGING_BATCH_ONLY",
     "required_data_source_id": "collection://bf703afb-7526-4b55-aefa-1c4976032509",
     "idempotency_key": "file_id",
-    "verify_after_write": true
+    "verify_after_write": true,
+    "sheet_write_back": false,
+    "cursor_written_to_sheet": false
   },
+  "expanded_eligibility_rules": [
+    "file_id, drive_url, and file_name must be present",
+    "do_not_include must not be true/yes/1",
+    "blocked_reason must be blank",
+    "review_tier must not be Tier 4",
+    "if notion_staging_eligible exists, it must be true/yes/1/eligible/approved",
+    "notion_staging_sync_status must not be blocked"
+  ],
   "tier_rules": [
     "Each record must have exactly one Review Tier.",
     "Tier 1 is searchable/reviewable inside dashboard only and never exportable.",
