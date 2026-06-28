@@ -67,7 +67,7 @@
     panels.review.innerHTML = panel('Selected Record', renderSelectedGeneric(records));
     panels.validation.innerHTML = panel('Read-only Validation', '<p class="muted">This sheet is not mapped to a specialized console layout yet. No write actions are available.</p>');
     panels.source.innerHTML = panel('Source Summary', '<p class="muted">No source summary layout is configured for this workspace.</p>');
-    panels.handoff.innerHTML = panel('Handoff', '<p class="muted">No handoff layout is configured for this workspace.</p>');
+    panels.handoff.innerHTML = panel('Handoff Preview', '<p class="muted">No handoff preview layout is configured for this workspace.</p>');
   }
 
   function renderDriveImagesWorkspace(payload) {
@@ -95,7 +95,7 @@
     renderDriveReview(payload);
     renderDriveValidation(payload);
     renderDriveSource(payload);
-    panels.handoff.innerHTML = panel('Handoff',
+    panels.handoff.innerHTML = panel('Handoff Preview',
       '<p class="muted">Manual review text only. No export or update action is available.</p>' +
       '<section class="handoff-box">' + escapeHtml(payload.handoffText || '') + '</section>');
   }
@@ -151,12 +151,12 @@
         metric('Completed handoffs', filterByAny(records, ['complete', 'completed', 'done']).length),
         metric('Failed handoffs', filterByAny(records, ['failed', 'error', 'blocked']).length)
       ]),
-      reviewOnlyNote('Handoff Records'),
+      reviewOnlyNote('Handoff Preview Records'),
       panel('Pending Handoffs', renderGenericQueue(filterByAny(records, ['pending', 'open', 'ready']), 'pending handoffs')),
       panel('Waiting for Review', renderGenericQueue(filterByAny(records, ['waiting', 'review']), 'handoffs waiting for review'))
     ].join('');
     panels.review.innerHTML = [
-      panel('Handoff Details', renderSelectedGeneric(records)),
+      panel('Handoff Preview Details', renderSelectedGeneric(records)),
       panel('Next Owner', renderFieldQueue(records, ['next_owner', 'owner', 'assigned_to'], 'No owner fields detected.')),
       panel('Workflow Status', renderFieldQueue(records, ['workflow_status', 'handoff_status', 'status', 'review_status'], 'No workflow status fields detected.'))
     ].join('');
@@ -164,7 +164,7 @@
     panels.source.innerHTML = panel('Waiting for Review', renderGenericQueue(filterByAny(records, ['waiting', 'review']), 'handoffs waiting for review'));
     panels.handoff.innerHTML = [
       panel('Completed Handoffs', renderGenericQueue(filterByAny(records, ['complete', 'completed', 'done']), 'completed handoffs')),
-      panel('Handoff Details', renderSelectedGeneric(records))
+      panel('Handoff Preview Details', renderSelectedGeneric(records))
     ].join('');
   }
 
