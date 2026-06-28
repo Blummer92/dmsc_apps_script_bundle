@@ -36,8 +36,9 @@
   "blocked_until_review": true,
   "recommended_next_agent": "Dashboard Sync Agent",
   "limited_handoff_scope": {
-    "integration_mode": "Add to existing Apps Script repo/project as a separate module with registry-specific filenames.",
-    "client_ui_contract": "Use Client.html as the render file. BuilderRegistryUi.html injects window.START_HERE_REPORT before Client.html runs.",
+    "integration_mode": "Add to existing Apps Script repo/project as a separate module with registry-specific filenames under src/registry-support/.",
+    "runtime_file_reference_rule": "Because clasp rootDir is src, Apps Script template/include references use registry-support/<filename>.",
+    "client_ui_contract": "Use Client.html as the render file. BuilderRegistryUi.html injects window.START_HERE_REPORT before loading registry-support/Client.",
     "entrypoint_policy": "Do not replace an existing doGet(). Use getBuilderStartHereHtml() from an approved existing router.",
     "module_files": [
       "BuilderRegistry.gs",
