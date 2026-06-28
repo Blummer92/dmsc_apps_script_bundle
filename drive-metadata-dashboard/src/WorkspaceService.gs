@@ -28,14 +28,14 @@ var WorkspaceService = (function() {
       review: ['Selected Record'],
       validation: ['Read-only Validation'],
       source: ['Source Summary'],
-      handoff: ['Handoff']
+      handoff: ['Handoff Preview']
     };
     const defaultTabLabels = {
       scan: 'Overview',
       review: 'Review',
       validation: 'Validation',
       source: 'Source Summary',
-      handoff: 'Handoff'
+      handoff: 'Handoff Preview'
     };
 
     const definitions = {};
@@ -47,32 +47,32 @@ var WorkspaceService = (function() {
         review: 'Metadata',
         validation: 'Duplicates',
         source: 'Source Prep',
-        handoff: 'Handoff'
+        handoff: 'Handoff Preview'
       },
       sections: {
         scan: ['Status Header', "Today's Work", 'Metadata Cleanup', 'Reference Candidates', 'Source Approval Prep', 'Production Blockers'],
         review: ['Selected Record', 'Permission Grid'],
         validation: ['Metadata Cleanup', 'Duplicate Review', 'Production Blockers'],
         source: ['Source Approval Prep'],
-        handoff: ['Handoff']
+        handoff: ['Handoff Preview']
       }
     };
     definitions[normalize_(WORKSPACES.HANDOFF_RECORDS)] = {
-      modeLabel: 'Handoff Review',
+      modeLabel: 'Handoff Preview Review',
       statusLabel: 'Preview/review workspace for manual handoff tracking. Owner writes remain outside this console.',
       tabLabels: {
         scan: 'Overview',
         review: 'Pending',
         validation: 'Waiting Review',
         source: 'Completed',
-        handoff: 'Failed'
+        handoff: 'Handoff Preview'
       },
       sections: {
         scan: ['Pending Handoffs', 'Waiting for Review'],
-        review: ['Handoff Details', 'Next Owner', 'Workflow Status'],
+        review: ['Handoff Preview Details', 'Next Owner', 'Workflow Status'],
         validation: ['Failed Handoffs'],
         source: ['Waiting for Review'],
-        handoff: ['Completed Handoffs', 'Handoff Details']
+        handoff: ['Completed Handoffs', 'Handoff Preview Details']
       }
     };
     definitions[normalize_(WORKSPACES.PROJECT_LOGS)] = {
@@ -83,7 +83,7 @@ var WorkspaceService = (function() {
         review: 'Activity',
         validation: 'Errors',
         source: 'Performance',
-        handoff: 'Versions'
+        handoff: 'Handoff Preview'
       },
       sections: {
         scan: ['Recent Activity', 'Performance'],
@@ -101,7 +101,7 @@ var WorkspaceService = (function() {
         review: 'Agents',
         validation: 'Contracts',
         source: 'Missing',
-        handoff: 'Permissions'
+        handoff: 'Handoff Preview'
       },
       sections: {
         scan: ['Connected Agents', 'Contract Status'],
@@ -119,7 +119,7 @@ var WorkspaceService = (function() {
         review: 'Recent',
         validation: 'Pending',
         source: 'Versions',
-        handoff: 'Rollback'
+        handoff: 'Handoff Preview'
       },
       sections: {
         scan: ['Recent Changes', 'Version Timeline'],
