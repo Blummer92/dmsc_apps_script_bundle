@@ -45,15 +45,19 @@ function main() {
     process.exit(1);
   }
 
-  summary.preflightPassed = true;
-
   const statusBefore = runClasp('status');
-  checkTrackedFiles(statusBefore.stdout + '\n' + statusBefore.stderr);
+  if (failures.length) {
+    printSummary();
+    process.exit(statusBefore.status || 1);
+  }
 
+  checkTrackedFiles(statusBefore.stdout + '\n' + statusBefore.stderr);
   if (!summary.requiredFilesTracked) {
     printSummary();
     process.exit(1);
   }
+
+  summary.preflightPassed = true;
 
   const pushResult = runClasp('push');
   summary.pushCompleted = pushResult.status === 0;
@@ -64,8 +68,13 @@ function main() {
     process.exit(pushResult.status || 1);
   }
 
-  runClasp('status');
+  const statusAfter = runClasp('status');
+  if (statusAfter.status !== 0) {
+    summary.pushCompleted = false;
+  }
+
   printSummary();
+  process.exit(failures.length ? 1 : 0);
 }
 
 function checkProjectFolder() {
@@ -78,7 +87,7 @@ function checkProjectFolder() {
 function checkClaspConfig() {
   const claspPath = resolve(process.cwd(), '.clasp.json');
   if (!existsSync(claspPath)) {
-    failures.push('Missing .clasp.json. Fix: cd ' + EXPECTED_PROJECT_ROOT + ' && printf \'{\\n  "scriptId": "' + EXPECTED_SCRIPT_ID + '",\\n  "rootDir": "."\\n}\\n\' > .clasp.json');
+    failures.push('Missing .clasp.json. Fix: cd ' + EXPECTED_PROJECT_ROOT + ' && cp .clasp.json.example .clasp.json');
     return;
   }
 
@@ -92,7 +101,7 @@ function checkClaspConfig() {
 
   summary.correctScriptId = config.scriptId === EXPECTED_SCRIPT_ID;
   if (!summary.correctScriptId) {
-    failures.push('Wrong scriptId in .clasp.json. Fix: cd ' + EXPECTED_PROJECT_ROOT + ' && node -e "const fs=require(\'fs\'); const p=\'.clasp.json\'; const c=JSON.parse(fs.readFileSync(p,\'utf8\')); c.scriptId=\'' + EXPECTED_SCRIPT_ID + '\'; c.rootDir=\'.\'; fs.writeFileSync(p, JSON.stringify(c,null,2)+\'\\n\');"');
+    failures.push('Wrong scriptId in .clasp.json. Fix: cd ' + EXPECTED_PROJECT_ROOT + ' && cp .clasp.json.example .clasp.json');
   }
 }
 
@@ -170,7 +179,7 @@ function printSummary() {
   console.log('Exact Apps Script function names to test next:');
   TEST_FUNCTIONS.forEach((fn) => console.log('- ' + fn));
   if (failures.length) {
-    console.log('Exact command to start fixing: cd ' + EXPECTED_PROJECT_ROOT + ' && git pull && npm run clasp:preflight-push');
+    console.log('Exact command to start fixing: cd ' + EXPECTED_PROJECT_ROOT + ' && git pull && cp .clasp.json.example .clasp.json && npm run clasp:preflight-push');
   }
   console.log('Production deployment approved: No');
   console.log('Notion sync executed by this script: No');
