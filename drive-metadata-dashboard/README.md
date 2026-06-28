@@ -4,7 +4,7 @@ Read-only Apps Script sidebar for reviewing Drive image metadata under the appro
 
 ## Purpose
 
-The dashboard can display sheet metadata, preview Drive file links, compare prompt fields, show validation warnings, group duplicate candidates for review, show DM Source Library approval status/evidence as a read-only summary, and generate handoff text for manual review.
+The dashboard can display sheet metadata, preview Drive file links, compare prompt fields, show validation warnings, group duplicate candidates for review, show DM Source Library approval status/evidence as a read-only summary, and generate handoff preview text for manual review.
 
 The dashboard cannot approve, write, merge, export, promote, or update records.
 
@@ -29,13 +29,15 @@ drive-metadata-dashboard
   .clasp.json.example
 ```
 
-## Sidebar Tabs
+## Workspace Views
+
+These controls are navigation tabs only. They switch between read-only review views and do not approve, export, generate, merge, overwrite prompts, edit Drive, write back to Sheets, write to Notion, or update curriculum readiness.
 
 - Scan
 - Review
 - Validation
-- Source Approval Summary
-- Handoff
+- Source Summary
+- Handoff Preview
 
 ## Required Script Properties
 
