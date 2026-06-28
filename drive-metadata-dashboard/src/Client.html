@@ -10,6 +10,7 @@
   const messagePanel = document.getElementById('messagePanel');
   const configStatus = document.getElementById('configStatus');
   const workspaceName = document.getElementById('workspaceName');
+  const workspaceMode = document.getElementById('workspaceMode');
 
   document.querySelectorAll('.tab-button').forEach(function(button) {
     button.addEventListener('click', function() { activateTab(button.dataset.tab); });
@@ -32,8 +33,19 @@
     state.dashboard = payload;
     const workspace = payload.workspace || {};
     workspaceName.textContent = workspace.activeSheetName || workspace.name || 'Unknown Workspace';
+    workspaceMode.textContent = 'Workspace mode: ' + (workspace.modeLabel || 'Preview');
+    applyWorkspaceTabLabels(workspace.tabLabels || {});
     renderMessages(payload.summary.warnings || []);
     renderWorkspace(payload);
+  }
+
+  function applyWorkspaceTabLabels(labels) {
+    document.querySelectorAll('.tab-button').forEach(function(button) {
+      const label = labels[button.dataset.tab];
+      if (label) {
+        button.textContent = label;
+      }
+    });
   }
 
   function renderWorkspace(payload) {
@@ -207,6 +219,7 @@
       '<p class="muted">' + escapeHtml(workspace.statusLabel || 'Read-only workspace') + '</p>' +
       '<div class="badge-row">' +
       badge('Current workspace: ' + (workspace.activeSheetName || workspace.name || 'Unknown'), workspace.supported === false ? 'warn' : 'good') +
+      badge('Workspace mode: ' + (workspace.modeLabel || 'Preview'), 'good') +
       badge('Read-only', 'good') +
       '</div>' +
       '<section class="metric-grid">' + metrics.join('') + '</section>');
