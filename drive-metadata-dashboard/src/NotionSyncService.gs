@@ -2,27 +2,26 @@ var NotionSyncService = (function() {
   const TARGET_DATA_SOURCE_ID = 'collection://bf703afb-7526-4b55-aefa-1c4976032509';
   const NOTION_API_BASE_URL = 'https://api.notion.com/v1';
   const NOTION_VERSION = '2022-06-28';
-  const WRITE_APPROVAL_VALUE = 'YES_10_ROWS_ONLY';
+  const TEN_ROW_SCOPE = 'TEN_ROW_APPROVAL';
+  const EXPANDED_SCOPE = 'ELIGIBLE_STAGING_BATCH';
+  const TEN_ROW_WRITE_APPROVAL_VALUE = 'YES_10_ROWS_ONLY';
+  const EXPANDED_WRITE_APPROVAL_VALUE = 'YES_EXPANDED_STAGING_BATCH_ONLY';
+  const DEFAULT_BATCH_SIZE = 25;
+  const MAX_BATCH_SIZE = 50;
+  const DEFAULT_EXPANDED_MAX_END_ROW = 454;
+  const NOTION_REQUEST_DELAY_MS = 350;
 
   function buildRows2To11Payloads() {
     const context = getSyncContext_();
-    validateReadScope_(context);
+    validateTenRowReadScope_(context);
+    const payloads = buildPayloadsForRange_(context, context.startRow, context.endRow, {
+      requireEligibleRows: false,
+      testScope: 'DM Source Library Pilot rows 2-11',
+      pilotReviewScope: '10-row limited Notion payload validation only',
+      expectedCount: 10
+    }).payloads;
 
-    const readResult = SheetReadService.readSpreadsheetRowsById(
-      context.spreadsheetId,
-      context.sheetName,
-      context.startRow,
-      context.endRow
-    );
-    if (readResult.warnings.length) {
-      throw new Error('Blocked: ' + readResult.warnings.join(' '));
-    }
-
-    const payloads = readResult.records.map(function(record) {
-      return buildPayloadFromRecord_(record, context);
-    });
-
-    validatePayloads_(payloads);
+    validatePayloads_(payloads, 10);
     return payloads;
   }
 
@@ -43,9 +42,97 @@ var NotionSyncService = (function() {
 
   function syncRows2To11ToStaging() {
     const context = getSyncContext_();
-    validateWriteScope_(context);
+    validateTenRowWriteScope_(context);
 
     const payloads = buildRows2To11Payloads();
+    const result = syncPayloadsToStaging_(context, payloads, 10);
+    Logger.log('STAGING WRITE COMPLETE - Not production sync.');
+    Logger.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  function dryRunEligibleStagingBatch() {
+    const context = getSyncContext_();
+    if (context.mode !== 'DRY_RUN') {
+      throw new Error('Blocked: expanded dry run only runs when DM_NOTION_SYNC_MODE is DRY_RUN.');
+    }
+    validateExpandedReadScope_(context);
+
+    const batch = buildExpandedBatch_(context);
+    const result = buildBatchSummary_(context, batch, []);
+    Logger.log('EXPANDED STAGING DRY RUN ONLY - No Notion write executed.');
+    Logger.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  function syncEligibleStagingBatchToStaging() {
+    const context = getSyncContext_();
+    validateExpandedWriteScope_(context);
+
+    const batch = buildExpandedBatch_(context);
+    if (!batch.payloads.length) {
+      const emptyResult = buildBatchSummary_(context, batch, []);
+      Logger.log('EXPANDED STAGING BATCH COMPLETE - No eligible payloads in this batch.');
+      Logger.log(JSON.stringify(emptyResult, null, 2));
+      return emptyResult;
+    }
+
+    const syncResult = syncPayloadsToStaging_(context, batch.payloads, null);
+    const result = buildBatchSummary_(context, batch, syncResult.synced, syncResult.verified);
+    Logger.log('EXPANDED STAGING BATCH WRITE COMPLETE - Not production sync.');
+    Logger.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  function buildExpandedBatch_(context) {
+    const batchStartRow = context.cursorRow;
+    const batchEndRow = Math.min(context.endRow, batchStartRow + context.batchSize - 1);
+    const testScope = 'DM Source Library eligible staging batch rows ' + batchStartRow + '-' + batchEndRow;
+    const batch = buildPayloadsForRange_(context, batchStartRow, batchEndRow, {
+      requireEligibleRows: true,
+      testScope: testScope,
+      pilotReviewScope: 'Expanded guarded Notion staging batch validation only',
+      expectedCount: null
+    });
+    batch.batch_start_row = batchStartRow;
+    batch.batch_end_row = batchEndRow;
+    batch.next_cursor_row = batchEndRow < context.endRow ? batchEndRow + 1 : null;
+    batch.batch_size = context.batchSize;
+    batch.max_end_row = context.maxEndRow;
+    return batch;
+  }
+
+  function buildPayloadsForRange_(context, startRow, endRow, options) {
+    const readResult = SheetReadService.readSpreadsheetRowsById(
+      context.spreadsheetId,
+      context.sheetName,
+      startRow,
+      endRow
+    );
+    if (readResult.warnings.length) {
+      throw new Error('Blocked: ' + readResult.warnings.join(' '));
+    }
+
+    const skipped = [];
+    const payloads = [];
+    readResult.records.forEach(function(record) {
+      const eligibility = options.requireEligibleRows ? getExpandedEligibility_(record) : { eligible: true, reason: '' };
+      if (!eligibility.eligible) {
+        skipped.push({ source_row: record.rowNumber, reason: eligibility.reason, file_id: record.file_id || '' });
+        return;
+      }
+      payloads.push(buildPayloadFromRecord_(record, context, options));
+    });
+
+    validatePayloads_(payloads, options.expectedCount);
+    return {
+      payloads: payloads,
+      skipped: skipped,
+      read_count: readResult.records.length
+    };
+  }
+
+  function syncPayloadsToStaging_(context, payloads, expectedCount) {
     const databaseId = getDatabaseId_(context);
     const database = notionRequest_(context, 'get', '/databases/' + encodeURIComponent(databaseId));
     const schema = database.properties || {};
@@ -67,6 +154,7 @@ var NotionSyncService = (function() {
     const verified = verifySyncedPayloads_(context, databaseId, schema, payloads);
     const result = {
       mode: context.mode,
+      sync_scope: context.syncScope,
       target_database_id: databaseId,
       target_data_source_id: context.dataSourceId,
       synced_count: synced.length,
@@ -75,17 +163,41 @@ var NotionSyncService = (function() {
       verified: verified
     };
 
-    if (result.synced_count !== 10 || result.verified_count !== 10) {
-      throw new Error('Blocked: expected 10 synced and verified pages. Result: ' + JSON.stringify(result));
+    if (expectedCount && (result.synced_count !== expectedCount || result.verified_count !== expectedCount)) {
+      throw new Error('Blocked: expected ' + expectedCount + ' synced and verified pages. Result: ' + JSON.stringify(result));
+    }
+    if (result.synced_count !== result.verified_count) {
+      throw new Error('Blocked: synced and verified counts do not match. Result: ' + JSON.stringify(result));
     }
 
-    Logger.log('STAGING WRITE COMPLETE - Not production sync.');
-    Logger.log(JSON.stringify(result, null, 2));
     return result;
+  }
+
+  function buildBatchSummary_(context, batch, synced, verified) {
+    return {
+      mode: context.mode,
+      sync_scope: context.syncScope,
+      target_data_source_id: context.dataSourceId,
+      batch_start_row: batch.batch_start_row,
+      batch_end_row: batch.batch_end_row,
+      next_cursor_row: batch.next_cursor_row,
+      read_count: batch.read_count,
+      eligible_payload_count: batch.payloads.length,
+      skipped_count: batch.skipped.length,
+      skipped: batch.skipped,
+      synced_count: (synced || []).length,
+      verified_count: (verified || []).length,
+      synced: synced || [],
+      verified: verified || [],
+      payloads: context.mode === 'DRY_RUN' ? batch.payloads : []
+    };
   }
 
   function getSyncContext_() {
     const props = PropertiesService.getScriptProperties();
+    const startRow = Number(props.getProperty('DM_NOTION_SYNC_START_ROW') || 2);
+    const endRow = Number(props.getProperty('DM_NOTION_SYNC_END_ROW') || 11);
+    const batchSize = Number(props.getProperty('DM_NOTION_SYNC_BATCH_SIZE') || DEFAULT_BATCH_SIZE);
     return {
       spreadsheetId: props.getProperty('DM_SOURCE_LIBRARY_SPREADSHEET_ID'),
       sheetName: props.getProperty('DM_SOURCE_LIBRARY_SHEET_NAME'),
@@ -96,16 +208,18 @@ var NotionSyncService = (function() {
       titleProperty: props.getProperty('DM_NOTION_TITLE_PROPERTY') || 'file_name',
       fileIdProperty: props.getProperty('DM_NOTION_FILE_ID_PROPERTY') || 'file_id',
       writeApproval: props.getProperty('DM_NOTION_STAGING_WRITE_APPROVED'),
-      startRow: Number(props.getProperty('DM_NOTION_SYNC_START_ROW') || 2),
-      endRow: Number(props.getProperty('DM_NOTION_SYNC_END_ROW') || 11),
+      expandedWriteApproval: props.getProperty('DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED'),
+      startRow: startRow,
+      endRow: endRow,
+      cursorRow: Number(props.getProperty('DM_NOTION_SYNC_CURSOR_ROW') || startRow),
+      maxEndRow: Number(props.getProperty('DM_NOTION_SYNC_MAX_END_ROW') || DEFAULT_EXPANDED_MAX_END_ROW),
+      batchSize: batchSize,
+      syncScope: props.getProperty('DM_NOTION_SYNC_SCOPE') || TEN_ROW_SCOPE,
       mode: props.getProperty('DM_NOTION_SYNC_MODE') || 'DRY_RUN'
     };
   }
 
-  function validateReadScope_(context) {
-    if (context.startRow !== 2 || context.endRow !== 11) {
-      throw new Error('Blocked: row scope must be exactly rows 2-11. Got ' + context.startRow + '-' + context.endRow + '.');
-    }
+  function validateBaseContext_(context) {
     if (context.dataSourceId !== TARGET_DATA_SOURCE_ID) {
       throw new Error('Blocked: wrong Notion data source target: ' + context.dataSourceId);
     }
@@ -114,20 +228,62 @@ var NotionSyncService = (function() {
     }
   }
 
-  function validateWriteScope_(context) {
-    validateReadScope_(context);
+  function validateTenRowReadScope_(context) {
+    validateBaseContext_(context);
+    if (context.syncScope !== TEN_ROW_SCOPE) {
+      throw new Error('Blocked: 10-row sync requires DM_NOTION_SYNC_SCOPE=' + TEN_ROW_SCOPE + '.');
+    }
+    if (context.startRow !== 2 || context.endRow !== 11) {
+      throw new Error('Blocked: row scope must be exactly rows 2-11. Got ' + context.startRow + '-' + context.endRow + '.');
+    }
+  }
+
+  function validateTenRowWriteScope_(context) {
+    validateTenRowReadScope_(context);
     if (context.mode !== 'STAGING_WRITE') {
       throw new Error('Blocked: staging sync only runs when DM_NOTION_SYNC_MODE is STAGING_WRITE.');
     }
-    if (context.writeApproval !== WRITE_APPROVAL_VALUE) {
-      throw new Error('Blocked: set DM_NOTION_STAGING_WRITE_APPROVED to ' + WRITE_APPROVAL_VALUE + ' before staging write.');
+    if (context.writeApproval !== TEN_ROW_WRITE_APPROVAL_VALUE) {
+      throw new Error('Blocked: set DM_NOTION_STAGING_WRITE_APPROVED to ' + TEN_ROW_WRITE_APPROVAL_VALUE + ' before staging write.');
     }
     if (!context.notionToken) {
       throw new Error('Blocked: missing DM_NOTION_API_TOKEN script property.');
     }
   }
 
-  function buildPayloadFromRecord_(record, context) {
+  function validateExpandedReadScope_(context) {
+    validateBaseContext_(context);
+    if (context.syncScope !== EXPANDED_SCOPE) {
+      throw new Error('Blocked: expanded staging batch requires DM_NOTION_SYNC_SCOPE=' + EXPANDED_SCOPE + '.');
+    }
+    if (context.startRow < 2 || context.endRow < context.startRow) {
+      throw new Error('Blocked: expanded staging row range must start at row 2 or later and end after the start row.');
+    }
+    if (context.endRow > context.maxEndRow) {
+      throw new Error('Blocked: expanded staging end row ' + context.endRow + ' exceeds DM_NOTION_SYNC_MAX_END_ROW ' + context.maxEndRow + '.');
+    }
+    if (context.cursorRow < context.startRow || context.cursorRow > context.endRow) {
+      throw new Error('Blocked: cursor row must be within the configured expanded range. Got ' + context.cursorRow + '.');
+    }
+    if (!Number.isFinite(context.batchSize) || context.batchSize < 1 || context.batchSize > MAX_BATCH_SIZE) {
+      throw new Error('Blocked: DM_NOTION_SYNC_BATCH_SIZE must be between 1 and ' + MAX_BATCH_SIZE + '.');
+    }
+  }
+
+  function validateExpandedWriteScope_(context) {
+    validateExpandedReadScope_(context);
+    if (context.mode !== 'STAGING_WRITE') {
+      throw new Error('Blocked: expanded staging sync only runs when DM_NOTION_SYNC_MODE is STAGING_WRITE.');
+    }
+    if (context.expandedWriteApproval !== EXPANDED_WRITE_APPROVAL_VALUE) {
+      throw new Error('Blocked: set DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED to ' + EXPANDED_WRITE_APPROVAL_VALUE + ' before expanded staging write.');
+    }
+    if (!context.notionToken) {
+      throw new Error('Blocked: missing DM_NOTION_API_TOKEN script property.');
+    }
+  }
+
+  function buildPayloadFromRecord_(record, context, options) {
     const sourceRow = record.rowNumber;
     const fileId = record.file_id;
     const driveUrl = record.drive_url;
@@ -148,7 +304,7 @@ var NotionSyncService = (function() {
         drive_url: String(driveUrl),
         prompt_status: 'Present',
         pilot_review_status: String(pilotReviewStatus || 'Approved for read-only Notion review'),
-        pilot_review_scope: '10-row limited Notion payload validation only',
+        pilot_review_scope: options.pilotReviewScope,
         pilot_review_approved_by: 'zachaey blumsrien',
         pilot_review_approval_date: '2026-06-28',
         pilot_review_notes: 'Limited staging/test metadata mapping only. Not production-ready.',
@@ -156,15 +312,38 @@ var NotionSyncService = (function() {
         source_library_linkage_status: 'Exact File ID',
         production_source_approval_status: 'Not approved',
         generation_clearance: 'Not approved',
-        test_scope: 'DM Source Library Pilot rows 2-11',
+        test_scope: options.testScope,
+        staging_sync_scope: context.syncScope,
         source_row: sourceRow
       }
     };
   }
 
-  function validatePayloads_(payloads) {
-    if (payloads.length !== 10) {
-      throw new Error('Blocked: expected exactly 10 payloads, got ' + payloads.length);
+  function getExpandedEligibility_(record) {
+    if (!record.file_id || !record.drive_url || !record.file_name) {
+      return { eligible: false, reason: 'missing file_id, drive_url, or file_name' };
+    }
+    if (isTruthy_(record.do_not_include)) {
+      return { eligible: false, reason: 'do_not_include is true' };
+    }
+    if (String(record.blocked_reason || '').trim()) {
+      return { eligible: false, reason: 'blocked_reason is present' };
+    }
+    if (normalize_(record.review_tier) === 'tier_4' || normalize_(record.review_tier) === '4') {
+      return { eligible: false, reason: 'Tier 4 is blocked' };
+    }
+    if (record.notion_staging_eligible && !isTruthy_(record.notion_staging_eligible)) {
+      return { eligible: false, reason: 'notion_staging_eligible is not true' };
+    }
+    if (normalize_(record.notion_staging_sync_status) === 'blocked') {
+      return { eligible: false, reason: 'notion_staging_sync_status is blocked' };
+    }
+    return { eligible: true, reason: '' };
+  }
+
+  function validatePayloads_(payloads, expectedCount) {
+    if (expectedCount && payloads.length !== expectedCount) {
+      throw new Error('Blocked: expected exactly ' + expectedCount + ' payloads, got ' + payloads.length);
     }
 
     const fileIds = payloads.map(function(payload) { return payload.properties.file_id; });
@@ -273,6 +452,7 @@ var NotionSyncService = (function() {
     }
 
     const response = UrlFetchApp.fetch(NOTION_API_BASE_URL + path, options);
+    throttleNotionRequest_();
     const status = response.getResponseCode();
     const text = response.getContentText();
     const parsed = text ? JSON.parse(text) : {};
@@ -282,9 +462,25 @@ var NotionSyncService = (function() {
     return parsed;
   }
 
+  function throttleNotionRequest_() {
+    if (typeof Utilities !== 'undefined' && Utilities.sleep) {
+      Utilities.sleep(NOTION_REQUEST_DELAY_MS);
+    }
+  }
+
+  function isTruthy_(value) {
+    return ['true', 'yes', 'y', '1', 'eligible', 'approved'].indexOf(normalize_(value)) !== -1;
+  }
+
+  function normalize_(value) {
+    return String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  }
+
   return {
     buildRows2To11Payloads: buildRows2To11Payloads,
     dryRunRows2To11: dryRunRows2To11,
-    syncRows2To11ToStaging: syncRows2To11ToStaging
+    syncRows2To11ToStaging: syncRows2To11ToStaging,
+    dryRunEligibleStagingBatch: dryRunEligibleStagingBatch,
+    syncEligibleStagingBatchToStaging: syncEligibleStagingBatchToStaging
   };
 })();
