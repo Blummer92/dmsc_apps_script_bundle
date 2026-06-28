@@ -4,8 +4,7 @@ var SheetReadService = (function() {
       return readActiveSpreadsheetRecords(sheetName, maxRows);
     }
 
-    const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
-    return readSpreadsheetRecords(spreadsheet, sheetName, maxRows);
+    return readSpreadsheetRecordsById(spreadsheetId, sheetName, maxRows);
   }
 
   function readConfiguredOrActiveRecords(spreadsheetId, sheetName, maxRows) {
@@ -24,6 +23,26 @@ var SheetReadService = (function() {
       };
     }
     return readSpreadsheetRecords(spreadsheet, sheetName, maxRows);
+  }
+
+  function readSpreadsheetRecordsById(spreadsheetId, sheetName, maxRows) {
+    if (!spreadsheetId) {
+      return {
+        records: [],
+        warnings: ['Spreadsheet ID is unavailable.'],
+        headers: []
+      };
+    }
+
+    const rowLimit = Math.max(1, Number(maxRows || 0) + 1);
+    const range = quoteSheetName_(sheetName) + '!1:' + rowLimit;
+    const response = Sheets.Spreadsheets.Values.get(spreadsheetId, range, {
+      valueRenderOption: 'FORMATTED_VALUE',
+      dateTimeRenderOption: 'FORMATTED_STRING'
+    });
+    const values = response.values || [];
+
+    return valuesToRecords_(values, sheetName);
   }
 
   function getActiveSheetName() {
@@ -64,6 +83,18 @@ var SheetReadService = (function() {
     }
 
     const values = sheet.getRange(1, 1, lastRow, lastColumn).getValues();
+    return valuesToRecords_(values, sheetName);
+  }
+
+  function valuesToRecords_(values, sheetName) {
+    if (!values.length || !values[0] || !values[0].length) {
+      return {
+        records: [],
+        warnings: ['Sheet is empty: ' + sheetName],
+        headers: []
+      };
+    }
+
     const headers = values[0].map(normalizeHeader_);
     const records = values
       .slice(1)
@@ -108,6 +139,10 @@ var SheetReadService = (function() {
       .replace(/^_+|_+$/g, '');
   }
 
+  function quoteSheetName_(sheetName) {
+    return "'" + String(sheetName || '').replace(/'/g, "''") + "'";
+  }
+
   function formatCellValue_(value) {
     if (value instanceof Date) {
       return value.toISOString();
@@ -123,6 +158,7 @@ var SheetReadService = (function() {
     readConfiguredOrActiveRecords: readConfiguredOrActiveRecords,
     readActiveSpreadsheetRecords: readActiveSpreadsheetRecords,
     readSpreadsheetRecords: readSpreadsheetRecords,
+    readSpreadsheetRecordsById: readSpreadsheetRecordsById,
     getActiveSheetName: getActiveSheetName
   };
 })();
