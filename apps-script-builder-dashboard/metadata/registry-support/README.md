@@ -67,17 +67,18 @@ Blocking Issue
 
 1. Open the existing Apps Script project or repo.
 2. Keep the files isolated under `src/registry-support/` for this MVP.
-3. Do not replace an existing `doGet()`.
-4. If UI routing is later approved, call `getBuilderStartHereHtml()` from the existing router.
-5. In Apps Script project settings, add this Script Property:
+3. Because clasp uses `rootDir: "src"`, Apps Script runtime template references use `registry-support/<filename>`.
+4. Do not replace an existing `doGet()`.
+5. If UI routing is later approved, call `getBuilderStartHereHtml()` from the existing router.
+6. In Apps Script project settings, add this Script Property:
 
 ```txt
 REGISTRY_SPREADSHEET_ID = your Google Sheet ID
 ```
 
-6. Confirm the registry spreadsheet has a tab named `Apps Script Project Registry`.
-7. Run `validateAppsScriptProjectRegistry()`.
-8. Run `runBuilderStartHere()`.
+7. Confirm the registry spreadsheet has a tab named `Apps Script Project Registry`.
+8. Run `validateAppsScriptProjectRegistry()`.
+9. Run `runBuilderStartHere()`.
 
 ## Apps Script Functions
 
@@ -92,13 +93,29 @@ REGISTRY_SPREADSHEET_ID = your Google Sheet ID
 
 ## UI Contract
 
+`getBuilderStartHereHtml()` loads the template with:
+
+```js
+HtmlService.createTemplateFromFile('registry-support/BuilderRegistryUi')
+```
+
 `BuilderRegistryUi.html` assigns:
 
 ```js
 window.START_HERE_REPORT
 ```
 
-before loading `Client.html`.
+before loading:
+
+```js
+builderRegistryInclude_('registry-support/Client')
+```
+
+It also includes styles with:
+
+```js
+builderRegistryInclude_('registry-support/BuilderRegistryStyles')
+```
 
 The server generates this report shape:
 
