@@ -139,6 +139,7 @@
         metric('Completed handoffs', filterByAny(records, ['complete', 'completed', 'done']).length),
         metric('Failed handoffs', filterByAny(records, ['failed', 'error', 'blocked']).length)
       ]),
+      reviewOnlyNote('Handoff Records'),
       panel('Pending Handoffs', renderGenericQueue(filterByAny(records, ['pending', 'open', 'ready']), 'pending handoffs')),
       panel('Waiting for Review', renderGenericQueue(filterByAny(records, ['waiting', 'review']), 'handoffs waiting for review'))
     ].join('');
@@ -159,6 +160,7 @@
     const records = payload.records || [];
     panels.scan.innerHTML = [
       renderWorkspaceHeader(payload, [metric('Log rows', records.length), metric('Errors', filterByAny(records, ['error', 'failed']).length)]),
+      reviewOnlyNote('Project Logs'),
       panel('Recent Activity', renderGenericQueue(records.slice(0, 12), 'recent activity')),
       panel('Performance', renderFieldQueue(records, ['duration', 'runtime', 'latency', 'performance'], 'No performance fields detected.'))
     ].join('');
@@ -172,6 +174,7 @@
     const records = payload.records || [];
     panels.scan.innerHTML = [
       renderWorkspaceHeader(payload, [metric('Connected agents', records.length), metric('Missing contracts', filterByAny(records, ['missing', 'not configured']).length)]),
+      reviewOnlyNote('Agent Data Contracts'),
       panel('Connected Agents', renderFieldQueue(records, ['agent', 'agent_name', 'connected_agent', 'owner_agent'], 'No connected agent fields detected.')),
       panel('Contract Status', renderFieldQueue(records, ['contract_status', 'status', 'review_status'], 'No contract status fields detected.'))
     ].join('');
@@ -188,6 +191,7 @@
     const records = payload.records || [];
     panels.scan.innerHTML = [
       renderWorkspaceHeader(payload, [metric('Changes', records.length), metric('Pending changes', filterByAny(records, ['pending', 'open']).length)]),
+      reviewOnlyNote('Change Log'),
       panel('Recent Changes', renderGenericQueue(records.slice(0, 12), 'recent changes')),
       panel('Version Timeline', renderFieldQueue(records, ['version', 'date', 'changed_at', 'commit', 'sha'], 'No version timeline fields detected.'))
     ].join('');
@@ -206,6 +210,11 @@
       badge('Read-only', 'good') +
       '</div>' +
       '<section class="metric-grid">' + metrics.join('') + '</section>');
+  }
+
+  function reviewOnlyNote(workspaceLabel) {
+    return panel(workspaceLabel + ' Preview/Review Workspace',
+      '<p class="muted">Display-only surface. Owner writes, approvals, exports, generation, merges, prompt overwrites, and readiness updates remain outside this console.</p>');
   }
 
   function renderRecordPicker(records) {
