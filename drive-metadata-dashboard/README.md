@@ -4,7 +4,7 @@ Read-only Apps Script sidebar for reviewing Drive image metadata under the appro
 
 ## Purpose
 
-The dashboard can display sheet metadata, preview Drive file links, compare prompt fields, show validation warnings, group duplicate candidates for review, show DM Source Library approval status/evidence as a read-only summary, and generate handoff text for manual review.
+The dashboard can display sheet metadata, preview Drive file links, compare prompt fields, show validation warnings, group duplicate candidates for review, show DM Source Library approval status/evidence as a read-only summary, and show handoff preview text for manual review.
 
 The dashboard cannot approve, write, merge, export, promote, or update records.
 
@@ -25,17 +25,20 @@ drive-metadata-dashboard
   metadata/schema-map.json
   appsscript.json
   README.md
+  PILOT_CHECKLIST.md
   .claspignore
   .clasp.json.example
 ```
 
-## Sidebar Tabs
+## Workspace Views
+
+These controls are navigation tabs only. They switch between read-only review views and do not approve, export, generate, merge, overwrite prompts, edit Drive, write back to Sheets, write to Notion, or update curriculum readiness.
 
 - Scan
 - Review
 - Validation
-- Source Approval Summary
-- Handoff
+- Source Summary
+- Handoff Preview
 
 ## Required Script Properties
 
@@ -59,6 +62,10 @@ Every record must have exactly one Review Tier.
 ## Forbidden Behavior
 
 This project must not include source approval, DM Source Library writes, Notion writes, Drive file edits, Google Sheets row edits, duplicate merge, prompt overwrite, eligibility promotion, readiness updates, blocked-record export, or record creation/deletion.
+
+## Pilot Packaging
+
+Limited internal pilot guidance is tracked in `PILOT_CHECKLIST.md`. This pilot package does not approve production deployment.
 
 ## clasp Deployment
 
