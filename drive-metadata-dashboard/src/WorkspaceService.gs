@@ -28,14 +28,14 @@ var WorkspaceService = (function() {
       review: ['Selected Record'],
       validation: ['Read-only Validation'],
       source: ['Source Summary'],
-      handoff: ['Handoff']
+      handoff: ['Handoff Preview']
     };
     const defaultTabLabels = {
       scan: 'Overview',
       review: 'Review',
       validation: 'Validation',
       source: 'Source Summary',
-      handoff: 'Handoff'
+      handoff: 'Handoff Preview'
     };
 
     const definitions = {};
@@ -47,14 +47,14 @@ var WorkspaceService = (function() {
         review: 'Metadata',
         validation: 'Duplicates',
         source: 'Source Prep',
-        handoff: 'Handoff'
+        handoff: 'Handoff Preview'
       },
       sections: {
         scan: ['Status Header', "Today's Work", 'Metadata Cleanup', 'Reference Candidates', 'Source Approval Prep', 'Production Blockers'],
         review: ['Selected Record', 'Permission Grid'],
         validation: ['Metadata Cleanup', 'Duplicate Review', 'Production Blockers'],
         source: ['Source Approval Prep'],
-        handoff: ['Handoff']
+        handoff: ['Handoff Preview']
       }
     };
     definitions[normalize_(WORKSPACES.HANDOFF_RECORDS)] = {
