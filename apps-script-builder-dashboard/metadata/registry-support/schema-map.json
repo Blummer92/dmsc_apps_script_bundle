@@ -1,11 +1,12 @@
 {
   "schema_name": "apps_script_project_registry_minimum_viable_support_module",
-  "schema_version": "0.3.1",
-  "last_prepared_at": "2026-06-27T23:34:00Z",
+  "schema_version": "0.3.2",
+  "last_prepared_at": "2026-06-28T00:14:00Z",
   "workspace_timezone": "America/Detroit",
   "safe_mode": true,
   "integration_mode": "existing_apps_script_repo_module",
   "registry_sheet_name": "Apps Script Project Registry",
+  "runtime_file_reference_rule": "Files remain under src/registry-support/ and Apps Script template/include references use registry-support/<filename> because clasp rootDir is src.",
   "module_files": [
     "BuilderRegistry.gs",
     "BuilderValidation.gs",
@@ -89,9 +90,9 @@
   },
   "ui_contract": {
     "global_object": "window.START_HERE_REPORT",
-    "html_template": "BuilderRegistryUi.html",
-    "style_template": "BuilderRegistryStyles.html",
-    "client_template": "Client.html",
+    "html_template": "registry-support/BuilderRegistryUi",
+    "style_template": "registry-support/BuilderRegistryStyles",
+    "client_template": "registry-support/Client",
     "server_html_helper": "getBuilderStartHereHtml",
     "does_not_replace_do_get": true,
     "summary_fields": [
