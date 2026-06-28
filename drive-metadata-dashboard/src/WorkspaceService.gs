@@ -8,6 +8,13 @@ var WorkspaceService = (function() {
   });
 
   const DEFAULT_WORKSPACE = WORKSPACES.DRIVE_IMAGES;
+  const RUNTIME_TAB_LABELS = Object.freeze({
+    scan: 'Scan',
+    review: 'Review',
+    validation: 'Validation',
+    source: 'Source Summary',
+    handoff: 'Handoff Preview'
+  });
 
   function detectWorkspace(activeSheetName) {
     const sheetName = activeSheetName || DEFAULT_WORKSPACE;
@@ -30,25 +37,12 @@ var WorkspaceService = (function() {
       source: ['Source Summary'],
       handoff: ['Handoff Preview']
     };
-    const defaultTabLabels = {
-      scan: 'Overview',
-      review: 'Review',
-      validation: 'Validation',
-      source: 'Source Summary',
-      handoff: 'Handoff Preview'
-    };
 
     const definitions = {};
     definitions[normalize_(WORKSPACES.DRIVE_IMAGES)] = {
       modeLabel: 'Drive Metadata',
       statusLabel: 'Drive image metadata workflow',
-      tabLabels: {
-        scan: 'Overview',
-        review: 'Metadata',
-        validation: 'Duplicates',
-        source: 'Source Prep',
-        handoff: 'Handoff Preview'
-      },
+      tabLabels: RUNTIME_TAB_LABELS,
       sections: {
         scan: ['Status Header', "Today's Work", 'Metadata Cleanup', 'Reference Candidates', 'Source Approval Prep', 'Production Blockers'],
         review: ['Selected Record', 'Permission Grid'],
@@ -60,13 +54,7 @@ var WorkspaceService = (function() {
     definitions[normalize_(WORKSPACES.HANDOFF_RECORDS)] = {
       modeLabel: 'Handoff Preview Review',
       statusLabel: 'Preview/review workspace for manual handoff tracking. Owner writes remain outside this console.',
-      tabLabels: {
-        scan: 'Overview',
-        review: 'Pending',
-        validation: 'Waiting Review',
-        source: 'Completed',
-        handoff: 'Handoff Preview'
-      },
+      tabLabels: RUNTIME_TAB_LABELS,
       sections: {
         scan: ['Pending Handoffs', 'Waiting for Review'],
         review: ['Handoff Preview Details', 'Next Owner', 'Workflow Status'],
@@ -78,13 +66,7 @@ var WorkspaceService = (function() {
     definitions[normalize_(WORKSPACES.PROJECT_LOGS)] = {
       modeLabel: 'Project Logs',
       statusLabel: 'Preview/review workspace for operational logs. Owner writes remain outside this console.',
-      tabLabels: {
-        scan: 'Overview',
-        review: 'Activity',
-        validation: 'Errors',
-        source: 'Performance',
-        handoff: 'Handoff Preview'
-      },
+      tabLabels: RUNTIME_TAB_LABELS,
       sections: {
         scan: ['Recent Activity', 'Performance'],
         review: ['Agent Activity Timeline'],
@@ -96,13 +78,7 @@ var WorkspaceService = (function() {
     definitions[normalize_(WORKSPACES.AGENT_DATA_CONTRACTS)] = {
       modeLabel: 'Agent Contracts',
       statusLabel: 'Preview/review workspace for agent data contracts. Owner writes remain outside this console.',
-      tabLabels: {
-        scan: 'Overview',
-        review: 'Agents',
-        validation: 'Contracts',
-        source: 'Missing',
-        handoff: 'Handoff Preview'
-      },
+      tabLabels: RUNTIME_TAB_LABELS,
       sections: {
         scan: ['Connected Agents', 'Contract Status'],
         review: ['Version Compatibility', 'Permission Matrix'],
@@ -114,13 +90,7 @@ var WorkspaceService = (function() {
     definitions[normalize_(WORKSPACES.CHANGE_LOG)] = {
       modeLabel: 'Change Log',
       statusLabel: 'Preview/review workspace for change management. Owner writes remain outside this console.',
-      tabLabels: {
-        scan: 'Overview',
-        review: 'Recent',
-        validation: 'Pending',
-        source: 'Versions',
-        handoff: 'Handoff Preview'
-      },
+      tabLabels: RUNTIME_TAB_LABELS,
       sections: {
         scan: ['Recent Changes', 'Version Timeline'],
         review: ['Pending Changes'],
@@ -133,7 +103,7 @@ var WorkspaceService = (function() {
     const definition = definitions[key] || {
       modeLabel: 'Preview',
       statusLabel: 'Unmapped sheet workspace',
-      tabLabels: defaultTabLabels,
+      tabLabels: RUNTIME_TAB_LABELS,
       sections: unsupportedSections
     };
 
