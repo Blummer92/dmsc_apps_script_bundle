@@ -18,6 +18,7 @@ drive-metadata-dashboard
   src/GovernanceService.gs
   src/HandoffService.gs
   src/SheetReadService.gs
+  src/NotionDryRun.gs
   src/Ui.html
   src/Styles.html
   src/Client.html
@@ -49,6 +50,17 @@ These controls are navigation tabs only. They switch between read-only review vi
 | `DM_SOURCE_LIBRARY_SPREADSHEET_ID` | No | Source approval lookup spreadsheet. |
 | `DM_SOURCE_LIBRARY_SHEET_NAME` | No | Defaults to `DM Source Library`. |
 | `DRIVE_METADATA_RESULT_LIMIT` | No | Number of metadata rows to read. |
+| `DM_NOTION_STAGING_DATA_SOURCE_ID` | For dry run | Must be the approved staging data source ID for `dryRunNotionRows2To11`. |
+| `DM_NOTION_STAGING_DATABASE_URL` | For dry run | Staging database URL included in dry-run payload output. |
+| `DM_NOTION_SYNC_MODE` | For dry run | Must be `DRY_RUN`. |
+| `DM_NOTION_SYNC_START_ROW` | For dry run | Must be `2`. |
+| `DM_NOTION_SYNC_END_ROW` | For dry run | Must be `11`. |
+
+## Read-Only Spreadsheet Access
+
+Configured spreadsheet IDs are read through the Google Sheets advanced service using the `spreadsheets.readonly` OAuth scope. Bound-sheet reads still use `SpreadsheetApp.getActiveSpreadsheet()` for the active spreadsheet context.
+
+Enable the Google Sheets advanced service in Apps Script if it is not already enabled, then reauthorize the project when prompted. Do not replace the read-only scope with full spreadsheet write scope for pilot testing.
 
 ## Tier Logic
 
