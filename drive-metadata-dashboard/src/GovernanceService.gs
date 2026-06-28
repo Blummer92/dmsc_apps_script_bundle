@@ -36,6 +36,7 @@ var GovernanceService = (function() {
       );
 
       return {
+        rawData: record,
         rowNumber: record.rowNumber,
         fileName: record.file_name || record.filename || record.name || '',
         fileId: record.file_id || '',
