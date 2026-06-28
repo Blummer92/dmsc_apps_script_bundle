@@ -24,6 +24,16 @@ var GovernanceService = (function() {
       const blocked = !tier || tier === 'Tier 4' || hasBlocker || unresolvedDuplicate;
       const computedExportEligible = tier === 'Tier 3' && sourceApproved && evidenceExists && !blocked;
       const computedGenerationEligible = computedExportEligible && approvedPromptExists && !unresolvedDuplicate;
+      const statusModel = buildStatusModel_(
+        record,
+        tier,
+        warnings,
+        unresolvedDuplicate,
+        sourceApproval,
+        computedExportEligible,
+        computedGenerationEligible,
+        blocked
+      );
 
       return {
         rowNumber: record.rowNumber,
@@ -39,6 +49,12 @@ var GovernanceService = (function() {
         unresolvedDuplicate: unresolvedDuplicate,
         blocked: blocked,
         blockedReason: buildBlockedReason_(tier, warnings, unresolvedDuplicate),
+        workflowStatus: statusModel.workflowStatus,
+        productionStatus: statusModel.productionStatus,
+        nextAction: statusModel.nextAction,
+        hardBlocker: statusModel.hardBlocker,
+        whyProductionBlocked: statusModel.whyProductionBlocked,
+        permissionGrid: statusModel.permissionGrid,
         computedExportEligible: computedExportEligible,
         computedGenerationEligible: computedGenerationEligible,
         sourceApproval: sourceApproval,
@@ -73,6 +89,14 @@ var GovernanceService = (function() {
     let blockedCount = 0;
     let exportEligibleCount = 0;
     let generationEligibleCount = 0;
+    const workflowCounts = {
+      reviewableRecords: 0,
+      needsMetadataCleanup: 0,
+      referenceCandidates: 0,
+      needsSourceApproval: 0,
+      productionBlocked: 0,
+      hardBlocked: 0
+    };
 
     (records || []).forEach(function(record) {
       if (record.reviewTier === 'Tier 1') tierCounts.tier1 += 1;
@@ -84,6 +108,12 @@ var GovernanceService = (function() {
       if (record.blocked) blockedCount += 1;
       if (record.computedExportEligible) exportEligibleCount += 1;
       if (record.computedGenerationEligible) generationEligibleCount += 1;
+      if (record.workflowStatus === 'Reviewable records') workflowCounts.reviewableRecords += 1;
+      if (record.workflowStatus === 'Needs metadata cleanup') workflowCounts.needsMetadataCleanup += 1;
+      if (record.workflowStatus === 'Reference candidates') workflowCounts.referenceCandidates += 1;
+      if (record.workflowStatus === 'Needs source approval') workflowCounts.needsSourceApproval += 1;
+      if (record.productionStatus === 'Production blocked') workflowCounts.productionBlocked += 1;
+      if (record.productionStatus === 'Hard blocked') workflowCounts.hardBlocked += 1;
     });
 
     return {
@@ -96,6 +126,7 @@ var GovernanceService = (function() {
       duplicateCandidateCount: duplicateGroups.reduce(function(total, group) { return total + group.count; }, 0),
       duplicateGroupCount: duplicateGroups.length,
       blockedCount: blockedCount,
+      workflowCounts: workflowCounts,
       exportEligibleCount: exportEligibleCount,
       generationEligibleCount: generationEligibleCount,
       lastScanPreviewAt: new Date().toISOString()
@@ -216,6 +247,78 @@ var GovernanceService = (function() {
     if (tier === 'Tier 1') reasons.push('Tier 1 records are never exportable.');
     if (tier === 'Tier 2') reasons.push('Tier 2 records are reference-only.');
     return reasons.join(' ');
+  }
+
+  function buildStatusModel_(record, tier, warnings, unresolvedDuplicate, sourceApproval, computedExportEligible, computedGenerationEligible, blocked) {
+    const blockerMessages = warnings
+      .filter(function(warning) { return warning.severity === 'blocker'; })
+      .map(function(warning) { return warning.message; });
+    const hasMissingRequiredMetadata = warnings.some(function(warning) {
+      return ['Missing File ID', 'Missing Drive URL', 'Each record must have exactly one Review Tier.'].indexOf(warning.message) !== -1;
+    });
+    const needsSourceApproval = tier === 'Tier 3' && !sourceApproval.approvalEvidenceUrl;
+    const hardBlocker = tier === 'Tier 4' || !tier || hasMissingRequiredMetadata;
+    let workflowStatus = 'Reviewable records';
+    let productionStatus = computedExportEligible ? 'Production ready candidate' : 'Production blocked';
+    let nextAction = 'Review metadata and prompt proposal.';
+
+    if (hardBlocker) {
+      workflowStatus = 'Hard blocked';
+      productionStatus = 'Hard blocked';
+      nextAction = tier === 'Tier 4'
+        ? 'Keep audit-visible only; do not export or generate.'
+        : 'Fix required metadata before review can continue.';
+    } else if (hasMissingRequiredMetadata || warnings.some(function(w) { return w.message.indexOf('Missing') === 0; })) {
+      workflowStatus = 'Needs metadata cleanup';
+      nextAction = 'Complete missing metadata fields in the governed source workflow.';
+    } else if (tier === 'Tier 2') {
+      workflowStatus = 'Reference candidates';
+      productionStatus = 'Reference only';
+      nextAction = 'Use internally as reference only; do not generate.';
+    } else if (needsSourceApproval) {
+      workflowStatus = 'Needs source approval';
+      nextAction = 'Prepare source approval evidence in DM Source Library.';
+    } else if (unresolvedDuplicate) {
+      workflowStatus = 'Duplicate review';
+      nextAction = 'Review duplicate candidate group; do not merge automatically.';
+    } else if (computedGenerationEligible) {
+      workflowStatus = 'Reviewable records';
+      productionStatus = 'Generation eligible candidate';
+      nextAction = 'Ready for manual governance handoff review.';
+    } else if (computedExportEligible) {
+      workflowStatus = 'Reviewable records';
+      productionStatus = 'Export eligible candidate';
+      nextAction = 'Review Approved Prompt before generation use.';
+    }
+
+    return {
+      workflowStatus: workflowStatus,
+      productionStatus: productionStatus,
+      nextAction: nextAction,
+      hardBlocker: hardBlocker,
+      whyProductionBlocked: buildWhyBlocked_(productionStatus, blockerMessages, unresolvedDuplicate, needsSourceApproval, record),
+      permissionGrid: buildPermissionGrid_(tier, hasMissingRequiredMetadata, needsSourceApproval, unresolvedDuplicate, computedExportEligible, computedGenerationEligible, hardBlocker)
+    };
+  }
+
+  function buildWhyBlocked_(productionStatus, blockerMessages, unresolvedDuplicate, needsSourceApproval, record) {
+    const reasons = blockerMessages.slice();
+    if (unresolvedDuplicate) reasons.push('Unresolved duplicate candidate.');
+    if (needsSourceApproval) reasons.push('DM Source Library approval evidence is missing.');
+    if (!record.approved_prompt) reasons.push('Approved Prompt is missing for prompt-based generation.');
+    if (productionStatus === 'Reference only') reasons.push('Tier 2 is internal reference only.');
+    return reasons.join(' ') || 'Not blocked for the current computed workflow.';
+  }
+
+  function buildPermissionGrid_(tier, hasMissingRequiredMetadata, needsSourceApproval, unresolvedDuplicate, computedExportEligible, computedGenerationEligible, hardBlocker) {
+    return {
+      searchPreview: hardBlocker && tier !== 'Tier 4' ? 'Candidate' : 'Allowed',
+      metadataCleanup: hasMissingRequiredMetadata ? 'Owner Required' : 'Candidate',
+      internalReference: tier === 'Tier 2' ? 'Allowed' : 'Candidate',
+      export: computedExportEligible ? 'Candidate' : 'Blocked',
+      generation: computedGenerationEligible ? 'Candidate' : 'Blocked',
+      sourceApproval: needsSourceApproval ? 'Owner Required' : 'Blocked'
+    };
   }
 
   function candidateKeys_(record) {
