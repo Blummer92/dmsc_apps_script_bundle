@@ -2,7 +2,12 @@
   "handoff_type": "drive_metadata_dashboard_read_only_implementation",
   "generated_artifact": "drive-metadata-dashboard",
   "governance_model": "approved_tiered_read_only",
-  "review_status": "approved_with_revisions_for_read_only_code_implementation",
+  "review_status": "limited_internal_pilot_packaging_only",
+  "production_deployment_approved": false,
+  "ui_labels": {
+    "view_group_label": "Workspace Views",
+    "handoff_tab_label": "Handoff Preview"
+  },
   "read_only_enforcement": {
     "writes_google_sheets": false,
     "writes_drive": false,
