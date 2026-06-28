@@ -37,7 +37,7 @@ function getDashboardBootstrap() {
   return {
     appName: APP_CONFIG.APP_NAME,
     readOnly: true,
-    tabs: ['Scan', 'Review', 'Validation', 'Source Summary', 'Handoff'],
+    tabs: ['Scan', 'Review', 'Validation', 'Source Summary', 'Handoff Preview'],
     expectedFields: getExpectedFields(),
     configStatus: {
       hasDashboardSpreadsheet: Boolean(config.dashboardSpreadsheetId),
