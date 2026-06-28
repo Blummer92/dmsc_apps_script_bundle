@@ -28,37 +28,18 @@ function dryRunNotionRows2To11() {
     throw new Error('Blocked: missing required dry-run script properties.');
   }
 
-  const ss = SpreadsheetApp.openById(spreadsheetId);
-  const sheet = ss.getSheetByName(sheetName);
+  const records = SheetReadService
+    .readSpreadsheetRecordsById(spreadsheetId, sheetName, endRow - 1)
+    .records
+    .filter(record => record.rowNumber >= startRow && record.rowNumber <= endRow);
 
-  if (!sheet) {
-    throw new Error(`Sheet not found: ${sheetName}`);
-  }
+  const payloads = records.map(record => {
+    const sourceRow = record.rowNumber;
 
-  const headerRow = 1;
-  const lastColumn = sheet.getLastColumn();
-  const headers = sheet.getRange(headerRow, 1, 1, lastColumn).getValues()[0];
-
-  const rowCount = endRow - startRow + 1;
-  const rows = sheet.getRange(startRow, 1, rowCount, lastColumn).getValues();
-
-  const headerIndex = {};
-  headers.forEach((header, index) => {
-    if (header) headerIndex[String(header).trim()] = index;
-  });
-
-  function getValue(row, columnName) {
-    const index = headerIndex[columnName];
-    return index === undefined ? '' : row[index];
-  }
-
-  const payloads = rows.map((row, offset) => {
-    const sourceRow = startRow + offset;
-
-    const fileId = getValue(row, 'file_id');
-    const driveUrl = getValue(row, 'drive_url');
-    const fileName = getValue(row, 'file_name');
-    const pilotReviewStatus = getValue(row, 'pilot_review_status');
+    const fileId = record.file_id;
+    const driveUrl = record.drive_url;
+    const fileName = record.file_name;
+    const pilotReviewStatus = record.pilot_review_status;
 
     if (!fileId || !driveUrl || !fileName) {
       throw new Error(`Blocked: missing file_id, drive_url, or file_name on source row ${sourceRow}`);
