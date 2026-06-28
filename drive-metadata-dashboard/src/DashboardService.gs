@@ -4,9 +4,7 @@ var DriveMetadataDashboardService = (function() {
     const warnings = [];
     const activeSheetName = SheetReadService.getActiveSheetName();
     const workspace = WorkspaceService.detectWorkspace(activeSheetName);
-    const targetSheetName = config.dashboardSpreadsheetId
-      ? config.metadataSheetName
-      : (activeSheetName || config.metadataSheetName);
+    const targetSheetName = activeSheetName || config.metadataSheetName;
 
     const metadataRead = SheetReadService.readConfiguredOrActiveRecords(
       config.dashboardSpreadsheetId,
