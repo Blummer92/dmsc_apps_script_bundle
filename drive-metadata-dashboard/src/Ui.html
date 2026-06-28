@@ -6,22 +6,36 @@
   </head>
   <body>
     <main class="app-shell">
-      <h1>Drive Metadata Dashboard</h1>
-      <p id="configStatus">Loading configuration...</p>
-      <nav class="tabs">
+      <header class="app-header">
+        <div>
+          <h1>Digital Media Operations Console</h1>
+          <p class="workspace-kicker">Current Workspace:</p>
+          <h2 id="workspaceName">Detecting workspace...</h2>
+          <p id="configStatus">Loading configuration...</p>
+        </div>
+      </header>
+
+      <section class="readonly-banner">
+        Read-only governance mode: this tool does not approve sources, overwrite prompts, merge duplicates, export blocked records, promote eligibility, or update curriculum readiness.
+      </section>
+
+      <nav class="tabs" aria-label="Dashboard tabs">
         <button class="tab-button is-active" data-tab="scan" type="button">Scan</button>
         <button class="tab-button" data-tab="review" type="button">Review</button>
         <button class="tab-button" data-tab="validation" type="button">Validation</button>
         <button class="tab-button" data-tab="source" type="button">Source Summary</button>
         <button class="tab-button" data-tab="handoff" type="button">Handoff</button>
       </nav>
-      <section id="messagePanel" hidden></section>
+
+      <section id="messagePanel" class="message-panel" hidden></section>
+
       <section id="scan" class="tab-panel is-active"></section>
       <section id="review" class="tab-panel"></section>
       <section id="validation" class="tab-panel"></section>
       <section id="source" class="tab-panel"></section>
       <section id="handoff" class="tab-panel"></section>
     </main>
+
     <?!= include('src/Client'); ?>
   </body>
 </html>
