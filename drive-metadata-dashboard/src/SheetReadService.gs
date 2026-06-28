@@ -1,7 +1,24 @@
 var SheetReadService = (function() {
   function readRecords(spreadsheetId, sheetName, maxRows) {
-    if (!spreadsheetId) return { records: [], warnings: ['Spreadsheet ID is not configured.'], headers: [] };
+    if (!spreadsheetId) {
+      return readActiveSpreadsheetRecords(sheetName, maxRows);
+    }
     const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+    return readSpreadsheetRecords(spreadsheet, sheetName, maxRows);
+  }
+
+  function readActiveSpreadsheetRecords(sheetName, maxRows) {
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+    if (!spreadsheet) {
+      return { records: [], warnings: ['Active spreadsheet is unavailable. Open the bound spreadsheet and launch the sidebar from the custom menu.'], headers: [] };
+    }
+    return readSpreadsheetRecords(spreadsheet, sheetName, maxRows);
+  }
+
+  function readSpreadsheetRecords(spreadsheet, sheetName, maxRows) {
+    if (!spreadsheet) {
+      return { records: [], warnings: ['Spreadsheet is unavailable.'], headers: [] };
+    }
     const sheet = spreadsheet.getSheetByName(sheetName);
     if (!sheet) return { records: [], warnings: ['Sheet not found: ' + sheetName], headers: [] };
     const lastRow = Math.min(sheet.getLastRow(), maxRows + 1);
@@ -28,7 +45,7 @@ var SheetReadService = (function() {
   }
 
   function normalizeHeader_(header) {
-    return String(header || '').toLowerCase().trim().replace(/[\/]+/g, ' ').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    return String(header || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   }
 
   function formatCellValue_(value) {
@@ -37,5 +54,9 @@ var SheetReadService = (function() {
     return String(value);
   }
 
-  return { readRecords: readRecords };
+  return {
+    readRecords: readRecords,
+    readActiveSpreadsheetRecords: readActiveSpreadsheetRecords,
+    readSpreadsheetRecords: readSpreadsheetRecords
+  };
 })();
