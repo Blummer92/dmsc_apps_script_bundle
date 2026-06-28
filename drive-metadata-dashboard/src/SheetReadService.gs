@@ -26,6 +26,11 @@ var SheetReadService = (function() {
   }
 
   function readSpreadsheetRecordsById(spreadsheetId, sheetName, maxRows) {
+    const rowLimit = Math.max(1, Number(maxRows || 0) + 1);
+    return readSpreadsheetRowsById(spreadsheetId, sheetName, 2, rowLimit);
+  }
+
+  function readSpreadsheetRowsById(spreadsheetId, sheetName, startRow, endRow) {
     if (!spreadsheetId) {
       return {
         records: [],
@@ -34,15 +39,30 @@ var SheetReadService = (function() {
       };
     }
 
-    const rowLimit = Math.max(1, Number(maxRows || 0) + 1);
-    const range = quoteSheetName_(sheetName) + '!1:' + rowLimit;
+    if (!sheetName) {
+      return {
+        records: [],
+        warnings: ['Sheet name is unavailable.'],
+        headers: []
+      };
+    }
+
+    ensureSheetsApi_();
+
+    const firstDataRow = Math.max(2, Number(startRow || 2));
+    const lastDataRow = Math.max(firstDataRow, Number(endRow || firstDataRow));
+    const range = quoteSheetName_(sheetName) + '!1:' + lastDataRow;
     const response = Sheets.Spreadsheets.Values.get(spreadsheetId, range, {
       valueRenderOption: 'FORMATTED_VALUE',
-      dateTimeRenderOption: 'FORMATTED_STRING'
+      dateTimeRenderOption: 'FORMATTED_STRING',
+      majorDimension: 'ROWS'
     });
     const values = response.values || [];
-
-    return valuesToRecords_(values, sheetName);
+    const result = valuesToRecords_(values, sheetName);
+    result.records = result.records.filter(function(record) {
+      return record.rowNumber >= firstDataRow && record.rowNumber <= lastDataRow;
+    });
+    return result;
   }
 
   function getActiveSheetName() {
@@ -143,6 +163,12 @@ var SheetReadService = (function() {
     return "'" + String(sheetName || '').replace(/'/g, "''") + "'";
   }
 
+  function ensureSheetsApi_() {
+    if (typeof Sheets === 'undefined' || !Sheets.Spreadsheets || !Sheets.Spreadsheets.Values) {
+      throw new Error('Blocked: Google Sheets advanced service is not enabled. Enable the Sheets API advanced service and keep the spreadsheets.readonly scope.');
+    }
+  }
+
   function formatCellValue_(value) {
     if (value instanceof Date) {
       return value.toISOString();
@@ -159,6 +185,7 @@ var SheetReadService = (function() {
     readActiveSpreadsheetRecords: readActiveSpreadsheetRecords,
     readSpreadsheetRecords: readSpreadsheetRecords,
     readSpreadsheetRecordsById: readSpreadsheetRecordsById,
+    readSpreadsheetRowsById: readSpreadsheetRowsById,
     getActiveSheetName: getActiveSheetName
   };
 })();
