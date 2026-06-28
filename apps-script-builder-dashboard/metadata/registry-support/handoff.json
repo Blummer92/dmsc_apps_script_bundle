@@ -1,0 +1,76 @@
+{
+  "handoff_type": "apps_script_metadata_sync_review",
+  "requesting_agent": "Google Apps Script Builder Agent",
+  "generated_artifact": "apps-script-project-registry-support module",
+  "github_repo_or_branch": "feature/apps-script-project-registry",
+  "google_workspace_targets": [
+    "Google Sheets",
+    "Google Apps Script",
+    "Optional Apps Script Web App"
+  ],
+  "notion_databases_in_scope": [],
+  "records_to_create_or_update": [],
+  "canonical_metadata_fields_needed": [
+    "Script Project Name",
+    "Apps Script Project ID",
+    "Script URL",
+    "Drive File ID",
+    "GitHub Repository",
+    "Branch",
+    "Builder Status",
+    "Next Action",
+    "Blocking Issue"
+  ],
+  "possible_duplicate_fields": [
+    "GitHub Repository",
+    "Branch",
+    "Drive File ID",
+    "Builder Status",
+    "Next Action",
+    "Blocking Issue"
+  ],
+  "possible_duplicate_records": [],
+  "duplicate_risk_note": "Duplicate risk is not cleared. It remains pending live dashboard review because source-control, Drive metadata, builder queue, next-action, and blocker fields may already exist elsewhere.",
+  "source_of_truth_assumption": "No production source-of-truth ownership is assumed. This project reads a lightweight registry only.",
+  "sync_question_for_dashboard_agent": "Confirm whether these registry fields are safe as a builder-facing metadata contract, which dashboard or database owns each field, whether any duplicate fields already exist, and whether any field should remain summary-only before production sync or dashboard automation is added.",
+  "blocked_until_review": true,
+  "recommended_next_agent": "Dashboard Sync Agent",
+  "limited_handoff_scope": {
+    "integration_mode": "Add to existing Apps Script repo/project as a separate module with registry-specific filenames under src/registry-support/.",
+    "runtime_file_reference_rule": "Because clasp rootDir is src, Apps Script template/include references use registry-support/<filename>.",
+    "client_ui_contract": "Use Client.html as the render file. BuilderRegistryUi.html injects window.START_HERE_REPORT before loading registry-support/Client.",
+    "entrypoint_policy": "Do not replace an existing doGet(). Use getBuilderStartHereHtml() from an approved existing router.",
+    "module_files": [
+      "BuilderRegistry.gs",
+      "BuilderValidation.gs",
+      "BuilderStartHere.gs",
+      "BuilderRegistryConfig.gs",
+      "BuilderRegistryServices.gs",
+      "BuilderRegistryUi.html",
+      "BuilderRegistryStyles.html",
+      "Client.html"
+    ],
+    "build_only": [
+      "Apps Script Project Registry support",
+      "Builder Start Here workflow",
+      "Metadata validation helpers",
+      "Safe governance handoff packet"
+    ],
+    "do_not_implement_yet": [
+      "Full deployment queue",
+      "Production status model",
+      "Large schema migration",
+      "Duplicate cleanup",
+      "Automated production writes",
+      "Advanced rollups",
+      "Generated prompt formulas"
+    ],
+    "safe_defaults": [
+      "Read-only first",
+      "No production writes unless explicitly approved",
+      "No deleting or renaming fields",
+      "No migration without human review",
+      "Log all missing metadata"
+    ]
+  }
+}

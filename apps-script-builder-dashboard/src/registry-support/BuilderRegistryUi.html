@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <base target="_top">
+    <title>Builder Start Here</title>
+    <?!= builderRegistryInclude_('registry-support/BuilderRegistryStyles'); ?>
+  </head>
+  <body>
+    <main class="page">
+      <header class="header">
+        <p class="eyebrow">Read-only registry support</p>
+        <h1>Builder Start Here</h1>
+        <p class="summary" id="summary">Loading registry status...</p>
+      </header>
+
+      <section class="section">
+        <h2>Ready Projects</h2>
+        <div id="readyProjects" class="project-list"></div>
+      </section>
+
+      <section class="section">
+        <h2>Blocked Projects</h2>
+        <div id="blockedProjects" class="project-list"></div>
+      </section>
+
+      <section class="section">
+        <h2>Projects Missing Metadata</h2>
+        <div id="projectsMissingMetadata" class="project-list"></div>
+      </section>
+    </main>
+
+    <script>
+      window.START_HERE_REPORT = <?!= reportJson ?>;
+    </script>
+    <?!= builderRegistryInclude_('registry-support/Client'); ?>
+  </body>
+</html>
