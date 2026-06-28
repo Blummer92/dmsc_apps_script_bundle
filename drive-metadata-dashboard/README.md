@@ -24,6 +24,7 @@ drive-metadata-dashboard
   src/Styles.html
   src/Client.html
   scripts/clasp-sync.mjs
+  scripts/codespaces-clasp-preflight-push.mjs
   metadata/handoff.json
   metadata/schema-map.json
   appsscript.json
@@ -101,6 +102,52 @@ This project must not include source approval, DM Source Library writes, Drive f
 
 Limited internal pilot guidance is tracked in `PILOT_CHECKLIST.md`. This pilot package does not approve production deployment.
 
+## Codespaces clasp Preflight Push
+
+Use this workflow when syncing from GitHub Codespaces to the bound Apps Script project.
+
+```bash
+cd /workspaces/dmsc_apps_script_bundle/drive-metadata-dashboard
+git pull
+cp .clasp.json.example .clasp.json
+npm run clasp:login
+npm run clasp:preflight-push
+```
+
+The preflight script checks all of the following before pushing:
+
+- current folder is exactly `/workspaces/dmsc_apps_script_bundle/drive-metadata-dashboard`
+- `.clasp.json` exists
+- `.clasp.json` uses Script ID `1r8ZxoTdefHTE59qW9NuZqeBJHZhqg4XlKxNvV0fKP3u5uQa7Ov8vjKLr`
+- no nested duplicate project folder should be used for pushing
+- `src/NotionDryRun.gs`, `src/SheetReadService.gs`, `src/NotionSyncService.gs`, and `appsscript.json` are present
+- `npx @google/clasp status` shows the required files as tracked
+- `npx @google/clasp push` completes
+- a second clasp status runs after push
+
+If preflight fails because `.clasp.json` is missing, run:
+
+```bash
+cd /workspaces/dmsc_apps_script_bundle/drive-metadata-dashboard
+cp .clasp.json.example .clasp.json
+npm run clasp:preflight-push
+```
+
+If preflight fails because files are missing, run:
+
+```bash
+cd /workspaces/dmsc_apps_script_bundle/drive-metadata-dashboard
+git pull
+npm run clasp:preflight-push
+```
+
+After pushing, reload Apps Script and test these functions manually:
+
+- `dryRunNotionRows2To11`
+- `syncNotionRows2To11ToStaging`
+
+Do not run the staging sync until the required staging script properties are set. This workflow does not run Notion sync, modify Drive Images, create production records, or approve production deployment.
+
 ## clasp Deployment
 
 Login once:
@@ -112,14 +159,14 @@ npm run clasp:login
 Push this project to an existing Apps Script project by providing the Script ID from Apps Script Project Settings:
 
 ```bash
-SCRIPT_ID="PASTE_SCRIPT_ID_HERE" npm run clasp:push
+SCRIPT_ID="1r8ZxoTdefHTE59qW9NuZqeBJHZhqg4XlKxNvV0fKP3u5uQa7Ov8vjKLr" npm run clasp:push
 ```
 
 Check deployment status or open the Apps Script project:
 
 ```bash
-SCRIPT_ID="PASTE_SCRIPT_ID_HERE" npm run clasp:status
-SCRIPT_ID="PASTE_SCRIPT_ID_HERE" npm run clasp:open
+SCRIPT_ID="1r8ZxoTdefHTE59qW9NuZqeBJHZhqg4XlKxNvV0fKP3u5uQa7Ov8vjKLr" npm run clasp:status
+SCRIPT_ID="1r8ZxoTdefHTE59qW9NuZqeBJHZhqg4XlKxNvV0fKP3u5uQa7Ov8vjKLr" npm run clasp:open
 ```
 
 The helper writes `.clasp.json` locally from `SCRIPT_ID`. That local file is intentionally not committed.
