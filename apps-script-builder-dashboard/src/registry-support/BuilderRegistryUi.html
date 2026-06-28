@@ -3,7 +3,7 @@
   <head>
     <base target="_top">
     <title>Builder Start Here</title>
-    <?!= builderRegistryInclude_('BuilderRegistryStyles'); ?>
+    <?!= builderRegistryInclude_('registry-support/BuilderRegistryStyles'); ?>
   </head>
   <body>
     <main class="page">
@@ -32,6 +32,6 @@
     <script>
       window.START_HERE_REPORT = <?!= reportJson ?>;
     </script>
-    <?!= builderRegistryInclude_('Client'); ?>
+    <?!= builderRegistryInclude_('registry-support/Client'); ?>
   </body>
 </html>
