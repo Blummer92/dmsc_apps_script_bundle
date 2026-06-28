@@ -28,12 +28,12 @@ function dryRunNotionRows2To11() {
     throw new Error('Blocked: missing required dry-run script properties.');
   }
 
-  const records = SheetReadService
-    .readSpreadsheetRecordsById(spreadsheetId, sheetName, endRow - 1)
-    .records
-    .filter(record => record.rowNumber >= startRow && record.rowNumber <= endRow);
+  const readResult = SheetReadService.readSpreadsheetRowsById(spreadsheetId, sheetName, startRow, endRow);
+  if (readResult.warnings.length) {
+    throw new Error('Blocked: ' + readResult.warnings.join(' '));
+  }
 
-  const payloads = records.map(record => {
+  const payloads = readResult.records.map(record => {
     const sourceRow = record.rowNumber;
 
     const fileId = record.file_id;
