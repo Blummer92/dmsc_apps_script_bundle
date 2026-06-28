@@ -7,6 +7,12 @@ var SheetReadService = (function() {
     return readSpreadsheetRecords(spreadsheet, sheetName, maxRows);
   }
 
+  function readConfiguredOrActiveRecords(spreadsheetId, sheetName, maxRows) {
+    return spreadsheetId
+      ? readRecords(spreadsheetId, sheetName, maxRows)
+      : readActiveSpreadsheetRecords(sheetName, maxRows);
+  }
+
   function readActiveSpreadsheetRecords(sheetName, maxRows) {
     const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
     if (!spreadsheet) {
@@ -56,6 +62,7 @@ var SheetReadService = (function() {
 
   return {
     readRecords: readRecords,
+    readConfiguredOrActiveRecords: readConfiguredOrActiveRecords,
     readActiveSpreadsheetRecords: readActiveSpreadsheetRecords,
     readSpreadsheetRecords: readSpreadsheetRecords
   };
