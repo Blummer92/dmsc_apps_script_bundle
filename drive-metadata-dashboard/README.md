@@ -19,6 +19,7 @@ drive-metadata-dashboard
   src/HandoffService.gs
   src/SheetReadService.gs
   src/NotionDryRun.gs
+  src/NotionSyncService.gs
   src/Ui.html
   src/Styles.html
   src/Client.html
@@ -50,17 +51,36 @@ These controls are navigation tabs only. They switch between read-only review vi
 | `DM_SOURCE_LIBRARY_SPREADSHEET_ID` | No | Source approval lookup spreadsheet. |
 | `DM_SOURCE_LIBRARY_SHEET_NAME` | No | Defaults to `DM Source Library`. |
 | `DRIVE_METADATA_RESULT_LIMIT` | No | Number of metadata rows to read. |
-| `DM_NOTION_STAGING_DATA_SOURCE_ID` | For dry run | Must be the approved staging data source ID for `dryRunNotionRows2To11`. |
-| `DM_NOTION_STAGING_DATABASE_URL` | For dry run | Staging database URL included in dry-run payload output. |
-| `DM_NOTION_SYNC_MODE` | For dry run | Must be `DRY_RUN`. |
-| `DM_NOTION_SYNC_START_ROW` | For dry run | Must be `2`. |
-| `DM_NOTION_SYNC_END_ROW` | For dry run | Must be `11`. |
+| `DM_NOTION_STAGING_DATA_SOURCE_ID` | For dry run or staging sync | Must be the approved staging data source ID for rows 2-11. |
+| `DM_NOTION_STAGING_DATABASE_URL` | For dry run or staging sync | Staging database URL used to identify the Notion database. |
+| `DM_NOTION_STAGING_DATABASE_ID` | Optional | Explicit Notion database ID; used instead of parsing the URL when present. |
+| `DM_NOTION_API_TOKEN` | For staging sync only | Notion integration token with access to the staging database. |
+| `DM_NOTION_SYNC_MODE` | For dry run or staging sync | Use `DRY_RUN` for validation or `STAGING_WRITE` for guarded staging sync. |
+| `DM_NOTION_STAGING_WRITE_APPROVED` | For staging sync only | Must be `YES_10_ROWS_ONLY`. |
+| `DM_NOTION_SYNC_START_ROW` | For dry run or staging sync | Must be `2`. |
+| `DM_NOTION_SYNC_END_ROW` | For dry run or staging sync | Must be `11`. |
+| `DM_NOTION_TITLE_PROPERTY` | Optional | Defaults to `file_name`. |
+| `DM_NOTION_FILE_ID_PROPERTY` | Optional | Defaults to `file_id`; used for create/update idempotency. |
 
 ## Read-Only Spreadsheet Access
 
 Configured spreadsheet IDs are read through the Google Sheets advanced service using the `spreadsheets.readonly` OAuth scope. Bound-sheet reads still use `SpreadsheetApp.getActiveSpreadsheet()` for the active spreadsheet context.
 
 Enable the Google Sheets advanced service in Apps Script if it is not already enabled, then reauthorize the project when prompted. Do not replace the read-only scope with full spreadsheet write scope for pilot testing.
+
+## Notion Staging Sync
+
+`dryRunNotionRows2To11()` builds and logs the 10 approved row payloads without writing to Notion.
+
+`syncNotionRows2To11ToStaging()` writes only to the configured Notion staging database. It is blocked unless all guards pass:
+
+- `DM_NOTION_SYNC_MODE` is `STAGING_WRITE`.
+- `DM_NOTION_STAGING_WRITE_APPROVED` is `YES_10_ROWS_ONLY`.
+- Rows are exactly `2-11`.
+- The staging data source ID is exactly `collection://bf703afb-7526-4b55-aefa-1c4976032509`.
+- A Notion token is configured.
+
+The staging sync creates or updates pages by `file_id`, verifies the 10 synced pages by querying Notion, and returns a sync summary. It is not production deployment and does not grant export, generation, prompt overwrite, production source approval, readiness updates, or full Notion sync activation.
 
 ## Tier Logic
 
@@ -73,7 +93,7 @@ Every record must have exactly one Review Tier.
 
 ## Forbidden Behavior
 
-This project must not include source approval, DM Source Library writes, Notion writes, Drive file edits, Google Sheets row edits, duplicate merge, prompt overwrite, eligibility promotion, readiness updates, blocked-record export, or record creation/deletion.
+This project must not include source approval, DM Source Library writes, Drive file edits, Google Sheets row edits, duplicate merge, prompt overwrite, eligibility promotion, readiness updates, blocked-record export, or record creation/deletion.
 
 ## Pilot Packaging
 
