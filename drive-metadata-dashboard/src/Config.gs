@@ -18,9 +18,10 @@ var APP_CONFIG = Object.freeze({
 function getRuntimeConfig() {
   const properties = PropertiesService.getScriptProperties();
   const configuredLimit = Number(properties.getProperty(APP_CONFIG.PROPERTIES.RESULT_LIMIT));
-  const configuredDashboardId = properties.getProperty(APP_CONFIG.PROPERTIES.DASHBOARD_SPREADSHEET_ID);
+  const configuredDashboardId = properties.getProperty(APP_CONFIG.PROPERTIES.DASHBOARD_SPREADSHEET_ID) || '';
   return {
-    dashboardSpreadsheetId: configuredDashboardId || getActiveSpreadsheetId_(),
+    dashboardSpreadsheetId: configuredDashboardId,
+    useActiveDashboardSpreadsheet: !configuredDashboardId,
     metadataSheetName: properties.getProperty(APP_CONFIG.PROPERTIES.METADATA_SHEET_NAME) || APP_CONFIG.DEFAULT_METADATA_SHEET_NAME,
     sourceLibrarySpreadsheetId: properties.getProperty(APP_CONFIG.PROPERTIES.SOURCE_LIBRARY_SPREADSHEET_ID) || '',
     sourceLibrarySheetName: properties.getProperty(APP_CONFIG.PROPERTIES.SOURCE_LIBRARY_SHEET_NAME) || APP_CONFIG.DEFAULT_SOURCE_LIBRARY_SHEET_NAME,
@@ -40,14 +41,4 @@ function getExpectedFields() {
     APPROVED_PROMPT: 'approved_prompt',
     DUPLICATE_RESOLUTION_STATUS: 'duplicate_resolution_status'
   };
-}
-
-function getActiveSpreadsheetId_() {
-  try {
-    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
-    return spreadsheet ? spreadsheet.getId() : '';
-  } catch (error) {
-    console.warn('Unable to read active spreadsheet ID.', { message: error.message });
-    return '';
-  }
 }
