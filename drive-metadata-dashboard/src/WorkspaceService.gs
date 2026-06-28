@@ -30,10 +30,25 @@ var WorkspaceService = (function() {
       source: ['Source Summary'],
       handoff: ['Handoff']
     };
+    const defaultTabLabels = {
+      scan: 'Overview',
+      review: 'Review',
+      validation: 'Validation',
+      source: 'Source Summary',
+      handoff: 'Handoff'
+    };
 
     const definitions = {};
     definitions[normalize_(WORKSPACES.DRIVE_IMAGES)] = {
+      modeLabel: 'Drive Metadata',
       statusLabel: 'Drive image metadata workflow',
+      tabLabels: {
+        scan: 'Overview',
+        review: 'Metadata',
+        validation: 'Duplicates',
+        source: 'Source Prep',
+        handoff: 'Handoff'
+      },
       sections: {
         scan: ['Status Header', "Today's Work", 'Metadata Cleanup', 'Reference Candidates', 'Source Approval Prep', 'Production Blockers'],
         review: ['Selected Record', 'Permission Grid'],
@@ -43,7 +58,15 @@ var WorkspaceService = (function() {
       }
     };
     definitions[normalize_(WORKSPACES.HANDOFF_RECORDS)] = {
+      modeLabel: 'Handoff Review',
       statusLabel: 'Preview/review workspace for manual handoff tracking. Owner writes remain outside this console.',
+      tabLabels: {
+        scan: 'Overview',
+        review: 'Pending',
+        validation: 'Waiting Review',
+        source: 'Completed',
+        handoff: 'Failed'
+      },
       sections: {
         scan: ['Pending Handoffs', 'Waiting for Review'],
         review: ['Handoff Details', 'Next Owner', 'Workflow Status'],
@@ -53,7 +76,15 @@ var WorkspaceService = (function() {
       }
     };
     definitions[normalize_(WORKSPACES.PROJECT_LOGS)] = {
+      modeLabel: 'Project Logs',
       statusLabel: 'Preview/review workspace for operational logs. Owner writes remain outside this console.',
+      tabLabels: {
+        scan: 'Overview',
+        review: 'Activity',
+        validation: 'Errors',
+        source: 'Performance',
+        handoff: 'Versions'
+      },
       sections: {
         scan: ['Recent Activity', 'Performance'],
         review: ['Agent Activity Timeline'],
@@ -63,7 +94,15 @@ var WorkspaceService = (function() {
       }
     };
     definitions[normalize_(WORKSPACES.AGENT_DATA_CONTRACTS)] = {
+      modeLabel: 'Agent Contracts',
       statusLabel: 'Preview/review workspace for agent data contracts. Owner writes remain outside this console.',
+      tabLabels: {
+        scan: 'Overview',
+        review: 'Agents',
+        validation: 'Contracts',
+        source: 'Missing',
+        handoff: 'Permissions'
+      },
       sections: {
         scan: ['Connected Agents', 'Contract Status'],
         review: ['Version Compatibility', 'Permission Matrix'],
@@ -73,7 +112,15 @@ var WorkspaceService = (function() {
       }
     };
     definitions[normalize_(WORKSPACES.CHANGE_LOG)] = {
+      modeLabel: 'Change Log',
       statusLabel: 'Preview/review workspace for change management. Owner writes remain outside this console.',
+      tabLabels: {
+        scan: 'Overview',
+        review: 'Recent',
+        validation: 'Pending',
+        source: 'Versions',
+        handoff: 'Rollback'
+      },
       sections: {
         scan: ['Recent Changes', 'Version Timeline'],
         review: ['Pending Changes'],
@@ -84,7 +131,9 @@ var WorkspaceService = (function() {
     };
 
     const definition = definitions[key] || {
+      modeLabel: 'Preview',
       statusLabel: 'Unmapped sheet workspace',
+      tabLabels: defaultTabLabels,
       sections: unsupportedSections
     };
 
@@ -92,7 +141,9 @@ var WorkspaceService = (function() {
       name: workspaceName,
       activeSheetName: sheetName,
       supported: Boolean(definitions[key]),
+      modeLabel: definition.modeLabel,
       statusLabel: definition.statusLabel,
+      tabLabels: definition.tabLabels,
       sections: definition.sections,
       supportedWorkspaces: Object.keys(WORKSPACES).map(function(keyName) {
         return WORKSPACES[keyName];
