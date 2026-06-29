@@ -13,6 +13,26 @@ var NotionSyncService = (function() {
   const MAX_BATCH_SIZE = 50;
   const DEFAULT_EXPANDED_MAX_END_ROW = 454;
   const NOTION_REQUEST_DELAY_MS = 350;
+  const OPTIONAL_SYNC_SOURCE_FIELDS = [
+    'approved_prompt',
+    'proposed_cleaned_prompt',
+    'original_image_prompt',
+    'openai_guessed_prompt',
+    'gemini_guessed_prompt',
+    'copilot_prompt_guess',
+    'asset_label',
+    'asset_category',
+    'unit_visual_system',
+    'fast_sort_tags',
+    'visual_consistency_notes',
+    'review_tier',
+    'source_approval_status',
+    'source_restrictions',
+    'do_not_include',
+    'blocked_reason',
+    'duplicate_resolution_status',
+    'agent_notes'
+  ];
 
   function buildRows2To11Payloads() {
     const context = getSyncContext_();
@@ -211,6 +231,7 @@ var NotionSyncService = (function() {
       titleProperty: props.getProperty('DM_NOTION_TITLE_PROPERTY') || 'file_name',
       fileIdProperty: props.getProperty('DM_NOTION_FILE_ID_PROPERTY') || 'file_id',
       driveUrlProperty: props.getProperty('DM_NOTION_DRIVE_URL_PROPERTY') || 'drive_url',
+      fieldMappings: parseFieldMappings_(props.getProperty('DM_NOTION_FIELD_MAPPINGS')),
       writeApproval: props.getProperty('DM_NOTION_STAGING_WRITE_APPROVED'),
       expandedWriteApproval: props.getProperty('DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED'),
       visualAssetLibraryWriteApproval: props.getProperty('DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED'),
@@ -310,29 +331,40 @@ var NotionSyncService = (function() {
       throw new Error('Blocked: missing file_id, drive_url, or file_name on source row ' + sourceRow);
     }
 
+    const properties = {
+      file_name: String(fileName),
+      file_id: String(fileId),
+      drive_url: String(driveUrl),
+      prompt_status: 'Present',
+      pilot_review_status: String(pilotReviewStatus || 'Approved for read-only Notion review'),
+      pilot_review_scope: options.pilotReviewScope,
+      pilot_review_approved_by: 'zachaey blumsrien',
+      pilot_review_approval_date: '2026-06-28',
+      pilot_review_notes: 'Limited staging/test metadata mapping only. Not production-ready.',
+      notion_payload_validation_status: 'Validated',
+      source_library_linkage_status: 'Exact File ID',
+      production_source_approval_status: 'Not approved',
+      generation_clearance: 'Not approved',
+      test_scope: options.testScope,
+      staging_sync_scope: context.syncScope,
+      source_row: sourceRow
+    };
+    addOptionalSourceProperties_(properties, record);
+
     return {
       source_row: sourceRow,
       target_data_source_id: context.dataSourceId,
       target_database_url: context.databaseUrl,
-      properties: {
-        file_name: String(fileName),
-        file_id: String(fileId),
-        drive_url: String(driveUrl),
-        prompt_status: 'Present',
-        pilot_review_status: String(pilotReviewStatus || 'Approved for read-only Notion review'),
-        pilot_review_scope: options.pilotReviewScope,
-        pilot_review_approved_by: 'zachaey blumsrien',
-        pilot_review_approval_date: '2026-06-28',
-        pilot_review_notes: 'Limited staging/test metadata mapping only. Not production-ready.',
-        notion_payload_validation_status: 'Validated',
-        source_library_linkage_status: 'Exact File ID',
-        production_source_approval_status: 'Not approved',
-        generation_clearance: 'Not approved',
-        test_scope: options.testScope,
-        staging_sync_scope: context.syncScope,
-        source_row: sourceRow
-      }
+      properties: properties
     };
+  }
+
+  function addOptionalSourceProperties_(properties, record) {
+    OPTIONAL_SYNC_SOURCE_FIELDS.forEach(function(field) {
+      if (record[field] && String(record[field]).trim()) {
+        properties[field] = String(record[field]);
+      }
+    });
   }
 
   function getExpandedEligibility_(record) {
@@ -423,10 +455,28 @@ var NotionSyncService = (function() {
     return { property: propertyName, rich_text: { equals: String(value) } };
   }
 
+  function parseFieldMappings_(rawValue) {
+    if (!rawValue || !String(rawValue).trim()) {
+      return {};
+    }
+    try {
+      const parsed = JSON.parse(rawValue);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('mapping must be a JSON object');
+      }
+      return parsed;
+    } catch (error) {
+      throw new Error('Blocked: DM_NOTION_FIELD_MAPPINGS must be valid JSON object mapping source fields to Notion properties. ' + error.message);
+    }
+  }
+
   function getNotionSchemaName_(sourceName, context) {
     if (sourceName === 'file_name') return context.titleProperty;
     if (sourceName === 'file_id') return context.fileIdProperty;
     if (sourceName === 'drive_url') return context.driveUrlProperty;
+    if (context.fieldMappings && context.fieldMappings[sourceName]) {
+      return String(context.fieldMappings[sourceName]);
+    }
     return sourceName;
   }
 
