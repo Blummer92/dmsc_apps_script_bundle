@@ -10,6 +10,7 @@ var VisualAssetLibraryWriteService = (function() {
   const MAX_BATCH_SIZE = 50;
   const DEFAULT_EXPANDED_MAX_END_ROW = 454;
   const NOTION_REQUEST_DELAY_MS = 350;
+  const NOTION_RICH_TEXT_CHUNK_LENGTH = 1900;
 
   function syncEligibleBatch() {
     const context = getContext_();
@@ -127,7 +128,7 @@ var VisualAssetLibraryWriteService = (function() {
     addProperty_(properties, skipped, schema, context.titleProperty, record.file_name, 'file_name');
     addProperty_(properties, skipped, schema, context.fileIdProperty, record.file_id, 'file_id');
     addProperty_(properties, skipped, schema, context.driveUrlProperty, record.drive_url || buildDriveUrlFromFileId_(record.file_id), 'drive_url');
-    ['Alt text', 'Prompt source', 'Keywords', 'Asset type', 'Style family', 'Instructional purpose', 'Accessibility notes'].forEach(function(fieldName) {
+    ['Alt text', 'AI prompt', 'Prompt source text', 'Prompt source', 'Keywords', 'Asset type', 'Style family', 'Instructional purpose', 'Accessibility notes'].forEach(function(fieldName) {
       const field = metadata.fields[fieldName] || { value: '', sourceColumn: '', reason: 'no mapped metadata value available' };
       addProperty_(properties, skipped, schema, fieldName, field.value, field.sourceColumn, field.reason);
     });
@@ -194,7 +195,7 @@ var VisualAssetLibraryWriteService = (function() {
     const propertyType = propertySchema.type;
     const stringValue = String(value || '');
     if (propertyType === 'title') return { title: [{ text: { content: stringValue } }] };
-    if (propertyType === 'rich_text') return { rich_text: [{ text: { content: stringValue } }] };
+    if (propertyType === 'rich_text') return { rich_text: buildRichTextItems_(stringValue) };
     if (propertyType === 'url') return { url: stringValue || null };
     if (propertyType === 'number') return { number: Number(value) };
     if (propertyType === 'date') return { date: stringValue ? { start: stringValue } : null };
@@ -205,7 +206,17 @@ var VisualAssetLibraryWriteService = (function() {
       return { multi_select: values.map(function(item) { return { name: String(item) }; }) };
     }
     if (propertyType === 'checkbox') return { checkbox: Boolean(value) };
-    return { rich_text: [{ text: { content: stringValue } }] };
+    return { rich_text: buildRichTextItems_(stringValue) };
+  }
+
+  function buildRichTextItems_(value) {
+    const text = String(value || '');
+    if (!text) return [];
+    const chunks = [];
+    for (let start = 0; start < text.length; start += NOTION_RICH_TEXT_CHUNK_LENGTH) {
+      chunks.push({ text: { content: text.slice(start, start + NOTION_RICH_TEXT_CHUNK_LENGTH) } });
+    }
+    return chunks;
   }
 
   function findExistingPageByFileId_(context, databaseId, schema, fileId) {
