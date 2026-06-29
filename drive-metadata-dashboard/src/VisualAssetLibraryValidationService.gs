@@ -109,6 +109,8 @@ var VisualAssetLibraryValidationService = (function() {
     addRow_(rows, schema, context.fileIdProperty, record.file_id, 'file_id', record, page);
     addRow_(rows, schema, context.driveUrlProperty, record.drive_url || buildDriveUrlFromFileId_(record.file_id), 'drive_url', record, page);
     addMetadataRow_(rows, schema, 'Alt text', metadata, record, page);
+    addMetadataRow_(rows, schema, 'AI prompt', metadata, record, page);
+    addMetadataRow_(rows, schema, 'Prompt source text', metadata, record, page);
     addMetadataRow_(rows, schema, 'Prompt source', metadata, record, page);
     addMetadataRow_(rows, schema, 'Keywords', metadata, record, page);
     addMetadataRow_(rows, schema, 'Asset type', metadata, record, page);
