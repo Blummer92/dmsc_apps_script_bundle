@@ -1,11 +1,14 @@
 var NotionSyncService = (function() {
-  const TARGET_DATA_SOURCE_ID = 'collection://bf703afb-7526-4b55-aefa-1c4976032509';
+  const STAGING_DATA_SOURCE_ID = 'collection://bf703afb-7526-4b55-aefa-1c4976032509';
+  const VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID = 'collection://da5cba48-50fd-4377-9790-8df8f6f2c7dd';
+  const APPROVED_DATA_SOURCE_IDS = [STAGING_DATA_SOURCE_ID, VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID];
   const NOTION_API_BASE_URL = 'https://api.notion.com/v1';
   const NOTION_VERSION = '2022-06-28';
   const TEN_ROW_SCOPE = 'TEN_ROW_APPROVAL';
   const EXPANDED_SCOPE = 'ELIGIBLE_STAGING_BATCH';
   const TEN_ROW_WRITE_APPROVAL_VALUE = 'YES_10_ROWS_ONLY';
   const EXPANDED_WRITE_APPROVAL_VALUE = 'YES_EXPANDED_STAGING_BATCH_ONLY';
+  const VISUAL_ASSET_LIBRARY_WRITE_APPROVAL_VALUE = 'YES_VISUAL_ASSET_LIBRARY_ONLY';
   const DEFAULT_BATCH_SIZE = 25;
   const MAX_BATCH_SIZE = 50;
   const DEFAULT_EXPANDED_MAX_END_ROW = 454;
@@ -209,6 +212,7 @@ var NotionSyncService = (function() {
       fileIdProperty: props.getProperty('DM_NOTION_FILE_ID_PROPERTY') || 'file_id',
       writeApproval: props.getProperty('DM_NOTION_STAGING_WRITE_APPROVED'),
       expandedWriteApproval: props.getProperty('DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED'),
+      visualAssetLibraryWriteApproval: props.getProperty('DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED'),
       startRow: startRow,
       endRow: endRow,
       cursorRow: Number(props.getProperty('DM_NOTION_SYNC_CURSOR_ROW') || startRow),
@@ -220,7 +224,7 @@ var NotionSyncService = (function() {
   }
 
   function validateBaseContext_(context) {
-    if (context.dataSourceId !== TARGET_DATA_SOURCE_ID) {
+    if (APPROVED_DATA_SOURCE_IDS.indexOf(context.dataSourceId) === -1) {
       throw new Error('Blocked: wrong Notion data source target: ' + context.dataSourceId);
     }
     if (!context.spreadsheetId || !context.sheetName || !context.databaseUrl) {
@@ -246,6 +250,7 @@ var NotionSyncService = (function() {
     if (context.writeApproval !== TEN_ROW_WRITE_APPROVAL_VALUE) {
       throw new Error('Blocked: set DM_NOTION_STAGING_WRITE_APPROVED to ' + TEN_ROW_WRITE_APPROVAL_VALUE + ' before staging write.');
     }
+    validateTargetWriteApproval_(context);
     if (!context.notionToken) {
       throw new Error('Blocked: missing DM_NOTION_API_TOKEN script property.');
     }
@@ -278,8 +283,18 @@ var NotionSyncService = (function() {
     if (context.expandedWriteApproval !== EXPANDED_WRITE_APPROVAL_VALUE) {
       throw new Error('Blocked: set DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED to ' + EXPANDED_WRITE_APPROVAL_VALUE + ' before expanded staging write.');
     }
+    validateTargetWriteApproval_(context);
     if (!context.notionToken) {
       throw new Error('Blocked: missing DM_NOTION_API_TOKEN script property.');
+    }
+  }
+
+  function validateTargetWriteApproval_(context) {
+    if (context.dataSourceId !== VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID) {
+      return;
+    }
+    if (context.visualAssetLibraryWriteApproval !== VISUAL_ASSET_LIBRARY_WRITE_APPROVAL_VALUE) {
+      throw new Error('Blocked: set DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED to ' + VISUAL_ASSET_LIBRARY_WRITE_APPROVAL_VALUE + ' before Visual Asset Library write.');
     }
   }
 
