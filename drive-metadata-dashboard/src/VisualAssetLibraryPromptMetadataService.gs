@@ -1,5 +1,7 @@
 var VisualAssetLibraryPromptMetadataService = (function() {
   const GUESSED_PROMPT_APPROVAL_VALUE = 'YES_GUESSED_PROMPTS_APPROVED';
+  const MAX_NOTION_RICH_TEXT_CONTENT_LENGTH = 1900;
+  const TRUNCATION_NOTICE = '\n\n[Truncated for Notion rich text limit. Review full source prompt in the source sheet.]';
   const PROMPT_SOURCES = [
     { field: 'approved_prompt', label: 'Approved Prompt', guessed: false },
     { field: 'proposed_cleaned_prompt', label: 'Proposed Cleaned Prompt', guessed: false },
@@ -83,7 +85,7 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     return {
       prompt: prompt,
       fields: {
-        'Alt text': { value: altTextValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
+        'Alt text': { value: capNotionRichText_(altTextValue), sourceColumn: prompt.sourceColumn, reason: prompt.reason },
         'Prompt source': { value: prompt.sourceLabel, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
         'Keywords': {
           value: parseKeywords_(fastSortTags),
@@ -92,17 +94,17 @@ var VisualAssetLibraryPromptMetadataService = (function() {
         },
         'Asset type': normalizeControlledValue_('Asset type', assetCategory, sourceColumnFor_('asset_category', parsed, prompt, sourceSuffix)),
         'Style family': {
-          value: unitVisualSystem,
+          value: capNotionRichText_(unitVisualSystem),
           sourceColumn: sourceColumnFor_('unit_visual_system', parsed, prompt, sourceSuffix),
           reason: unitVisualSystem ? '' : 'no style family source value available'
         },
         'Instructional purpose': {
-          value: assetLabel,
+          value: capNotionRichText_(assetLabel),
           sourceColumn: sourceColumnFor_('asset_label', parsed, prompt, sourceSuffix),
           reason: assetLabel ? '' : 'no instructional purpose source value available'
         },
         'Accessibility notes': {
-          value: visualConsistencyNotes,
+          value: capNotionRichText_(visualConsistencyNotes),
           sourceColumn: sourceColumnFor_('visual_consistency_notes', parsed, prompt, sourceSuffix),
           reason: visualConsistencyNotes ? '' : 'no accessibility or visual consistency source value available'
         }
@@ -170,6 +172,13 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     if (!text) return [];
     const tags = text.split(/[,;\n]+/).map(function(tag) { return tag.trim(); }).filter(Boolean);
     return Array.from(new Set(tags));
+  }
+
+  function capNotionRichText_(value) {
+    const text = String(value || '').trim();
+    if (text.length <= MAX_NOTION_RICH_TEXT_CONTENT_LENGTH) return text;
+    const maxBodyLength = Math.max(0, MAX_NOTION_RICH_TEXT_CONTENT_LENGTH - TRUNCATION_NOTICE.length);
+    return text.slice(0, maxBodyLength).trim() + TRUNCATION_NOTICE;
   }
 
   function firstNonEmpty_() {
