@@ -83,16 +83,8 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     return {
       prompt: prompt,
       fields: {
-        'Alt text': {
-          value: altTextValue,
-          sourceColumn: prompt.sourceColumn,
-          reason: prompt.reason
-        },
-        'Prompt source': {
-          value: prompt.sourceLabel,
-          sourceColumn: prompt.sourceColumn,
-          reason: prompt.reason
-        },
+        'Alt text': { value: altTextValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
+        'Prompt source': { value: prompt.sourceLabel, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
         'Keywords': {
           value: parseKeywords_(fastSortTags),
           sourceColumn: sourceColumnFor_('fast_sort_tags', parsed, prompt, sourceSuffix),
@@ -132,13 +124,7 @@ var VisualAssetLibraryPromptMetadataService = (function() {
           reason: 'guessed prompt excluded; set DM_VISUAL_ASSET_LIBRARY_ALLOW_GUESSED_PROMPTS=' + GUESSED_PROMPT_APPROVAL_VALUE
         };
       }
-      return {
-        value: value,
-        sourceColumn: source.field,
-        sourceLabel: source.label,
-        guessed: source.guessed,
-        reason: ''
-      };
+      return { value: value, sourceColumn: source.field, sourceLabel: source.label, guessed: source.guessed, reason: '' };
     }
     return {
       value: '',
@@ -158,37 +144,24 @@ var VisualAssetLibraryPromptMetadataService = (function() {
         ? new RegExp('(?:^|\\n)\\s*' + escapeRegExp_(label) + '\\s*:\\s*([\\s\\S]*?)(?=\\n\\s*(?:' + nextLabels + ')\\s*:|$)', 'i')
         : new RegExp('(?:^|\\n)\\s*' + escapeRegExp_(label) + '\\s*:\\s*([\\s\\S]*)$', 'i');
       const match = text.match(pattern);
-      if (match && match[1]) {
-        sections[label] = match[1].trim();
-      }
+      if (match && match[1]) sections[label] = match[1].trim();
     });
     return sections;
   }
 
   function sourceColumnFor_(fieldName, parsed, prompt, sourceSuffix) {
-    if (String(arguments.length > 1 ? arguments[0] : '').indexOf(' ') !== -1) return fieldName;
-    if (fieldName && arguments.length) {
-      const sourceLabel = SOURCE_LABELS[fieldName];
-      if (sourceLabel && parsed[sourceLabel]) {
-        return prompt.sourceColumn + ' -> ' + sourceLabel + sourceSuffix;
-      }
-    }
+    const sourceLabel = SOURCE_LABELS[fieldName];
+    if (sourceLabel && parsed[sourceLabel]) return prompt.sourceColumn + ' -> ' + sourceLabel + sourceSuffix;
     return fieldName || '';
   }
 
   function normalizeControlledValue_(fieldName, rawValue, sourceColumn) {
     const value = String(rawValue || '').trim();
-    if (!value) {
-      return { value: '', sourceColumn: sourceColumn || '', reason: 'no reviewed source value available' };
-    }
+    if (!value) return { value: '', sourceColumn: sourceColumn || '', reason: 'no reviewed source value available' };
     const direct = CONTROLLED_OPTIONS[fieldName] || [];
-    if (direct.indexOf(value) !== -1) {
-      return { value: value, sourceColumn: sourceColumn || '', reason: '' };
-    }
+    if (direct.indexOf(value) !== -1) return { value: value, sourceColumn: sourceColumn || '', reason: '' };
     const alias = (CONTROLLED_ALIASES[fieldName] || {})[normalize_(value)];
-    if (alias) {
-      return { value: alias, sourceColumn: sourceColumn || '', reason: '' };
-    }
+    if (alias) return { value: alias, sourceColumn: sourceColumn || '', reason: '' };
     return { value: '', sourceColumn: sourceColumn || '', reason: 'source value is outside approved options: ' + value };
   }
 
@@ -208,15 +181,12 @@ var VisualAssetLibraryPromptMetadataService = (function() {
   }
 
   function escapeRegExp_(value) {
-    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return String(value).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   }
 
   function normalize_(value) {
     return String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
   }
 
-  return {
-    build: build,
-    CONTROLLED_OPTIONS: CONTROLLED_OPTIONS
-  };
+  return { build: build, CONTROLLED_OPTIONS: CONTROLLED_OPTIONS };
 })();
