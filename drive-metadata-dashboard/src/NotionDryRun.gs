@@ -13,3 +13,7 @@ function dryRunNotionEligibleStagingBatch() {
 function syncNotionEligibleStagingBatchToStaging() {
   return NotionSyncService.syncEligibleStagingBatchToStaging();
 }
+
+function auditVisualAssetLibrarySync() {
+  return NotionSyncService.auditVisualAssetLibrarySync();
+}
