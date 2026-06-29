@@ -210,6 +210,7 @@ var NotionSyncService = (function() {
       notionToken: props.getProperty('DM_NOTION_API_TOKEN') || props.getProperty('NOTION_API_TOKEN'),
       titleProperty: props.getProperty('DM_NOTION_TITLE_PROPERTY') || 'file_name',
       fileIdProperty: props.getProperty('DM_NOTION_FILE_ID_PROPERTY') || 'file_id',
+      driveUrlProperty: props.getProperty('DM_NOTION_DRIVE_URL_PROPERTY') || 'drive_url',
       writeApproval: props.getProperty('DM_NOTION_STAGING_WRITE_APPROVED'),
       expandedWriteApproval: props.getProperty('DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED'),
       visualAssetLibraryWriteApproval: props.getProperty('DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED'),
@@ -422,10 +423,17 @@ var NotionSyncService = (function() {
     return { property: propertyName, rich_text: { equals: String(value) } };
   }
 
+  function getNotionSchemaName_(sourceName, context) {
+    if (sourceName === 'file_name') return context.titleProperty;
+    if (sourceName === 'file_id') return context.fileIdProperty;
+    if (sourceName === 'drive_url') return context.driveUrlProperty;
+    return sourceName;
+  }
+
   function buildNotionProperties_(schema, sourceProperties, context) {
     const properties = {};
     Object.keys(sourceProperties).forEach(function(name) {
-      const schemaName = name === 'file_name' ? context.titleProperty : name;
+      const schemaName = getNotionSchemaName_(name, context);
       const propertySchema = schema[schemaName];
       if (!propertySchema) return;
       properties[schemaName] = formatNotionProperty_(propertySchema.type, sourceProperties[name]);
