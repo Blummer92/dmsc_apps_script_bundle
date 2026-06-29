@@ -8,66 +8,6 @@ var VisualAssetLibraryValidationService = (function() {
   const MAX_BATCH_SIZE = 50;
   const DEFAULT_EXPANDED_MAX_END_ROW = 454;
   const NOTION_REQUEST_DELAY_MS = 350;
-  const CONTROLLED_OPTIONS = {
-    'Asset type': ['icon', 'diagram', 'worksheet image', 'slide image', 'process visual', 'poster visual'],
-    'Approved use': ['worksheet', 'slide', 'poster', 'student-facing', 'teacher-facing'],
-    'Reuse status': ['approved', 'draft', 'needs revision', 'retired'],
-    'Cognitive load rating': ['low', 'medium', 'high']
-  };
-  const CONTROLLED_ALIASES = {
-    'Asset type': {
-      icon: 'icon',
-      icons: 'icon',
-      icon_set: 'icon',
-      diagram: 'diagram',
-      worksheet: 'worksheet image',
-      worksheet_image: 'worksheet image',
-      slide: 'slide image',
-      slide_image: 'slide image',
-      process: 'process visual',
-      process_visual: 'process visual',
-      poster: 'poster visual',
-      poster_visual: 'poster visual'
-    },
-    'Approved use': {
-      worksheet: 'worksheet',
-      worksheets: 'worksheet',
-      slide: 'slide',
-      slides: 'slide',
-      poster: 'poster',
-      posters: 'poster',
-      student: 'student-facing',
-      student_facing: 'student-facing',
-      teacher: 'teacher-facing',
-      teacher_facing: 'teacher-facing'
-    },
-    'Reuse status': {
-      approved: 'approved',
-      source_approved: 'approved',
-      draft: 'draft',
-      needs_revision: 'needs revision',
-      revision_needed: 'needs revision',
-      retired: 'retired'
-    },
-    'Cognitive load rating': {
-      low: 'low',
-      medium: 'medium',
-      med: 'medium',
-      high: 'high'
-    }
-  };
-  const ACCESSIBILITY_KEYWORDS = [
-    'accessibility',
-    'accessible',
-    'alt text',
-    'screen reader',
-    'clarity',
-    'clear',
-    'legible',
-    'readable',
-    'contrast',
-    'cognitive load'
-  ];
 
   function dryRunFieldValidationOnly() {
     const context = getContext_();
@@ -109,10 +49,7 @@ var VisualAssetLibraryValidationService = (function() {
     Logger.log('VISUAL ASSET LIBRARY FIELD VALIDATION ONLY - No Notion write executed.');
     Logger.log(JSON.stringify(summary, null, 2));
     logJsonInChunks_(validation, 6000);
-    return {
-      summary: summary,
-      field_validation: validation
-    };
+    return { summary: summary, field_validation: validation };
   }
 
   function getContext_() {
@@ -141,36 +78,20 @@ var VisualAssetLibraryValidationService = (function() {
   }
 
   function validateContext_(context) {
-    if (context.mode !== 'DRY_RUN') {
-      throw new Error('Blocked: field validation only runs when DM_NOTION_SYNC_MODE is DRY_RUN.');
-    }
-    if (context.syncScope !== EXPANDED_SCOPE) {
-      throw new Error('Blocked: field validation requires DM_NOTION_SYNC_SCOPE=' + EXPANDED_SCOPE + '.');
-    }
-    if (context.dataSourceId !== VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID) {
-      throw new Error('Blocked: field validation only runs against the approved Visual Asset Library data source.');
-    }
-    if (!context.spreadsheetId || !context.sheetName || !context.databaseUrl || !context.notionToken) {
-      throw new Error('Blocked: missing required source sheet, Notion target, or token configuration.');
-    }
-    if (!Number.isFinite(context.batchSize) || context.batchSize < 1 || context.batchSize > MAX_BATCH_SIZE) {
-      throw new Error('Blocked: DM_NOTION_SYNC_BATCH_SIZE must be between 1 and ' + MAX_BATCH_SIZE + '.');
-    }
-    if (context.cursorRow < context.startRow || context.cursorRow > context.endRow) {
-      throw new Error('Blocked: cursor row must be within the configured range.');
-    }
-    if (context.endRow > context.maxEndRow) {
-      throw new Error('Blocked: expanded staging end row exceeds DM_NOTION_SYNC_MAX_END_ROW.');
-    }
+    if (context.mode !== 'DRY_RUN') throw new Error('Blocked: field validation only runs when DM_NOTION_SYNC_MODE is DRY_RUN.');
+    if (context.syncScope !== EXPANDED_SCOPE) throw new Error('Blocked: field validation requires DM_NOTION_SYNC_SCOPE=' + EXPANDED_SCOPE + '.');
+    if (context.dataSourceId !== VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID) throw new Error('Blocked: field validation only runs against the approved Visual Asset Library data source.');
+    if (!context.spreadsheetId || !context.sheetName || !context.databaseUrl || !context.notionToken) throw new Error('Blocked: missing required source sheet, Notion target, or token configuration.');
+    if (!Number.isFinite(context.batchSize) || context.batchSize < 1 || context.batchSize > MAX_BATCH_SIZE) throw new Error('Blocked: DM_NOTION_SYNC_BATCH_SIZE must be between 1 and ' + MAX_BATCH_SIZE + '.');
+    if (context.cursorRow < context.startRow || context.cursorRow > context.endRow) throw new Error('Blocked: cursor row must be within the configured range.');
+    if (context.endRow > context.maxEndRow) throw new Error('Blocked: expanded staging end row exceeds DM_NOTION_SYNC_MAX_END_ROW.');
   }
 
   function readBatch_(context) {
     const batchStartRow = context.cursorRow;
     const batchEndRow = Math.min(context.endRow, batchStartRow + context.batchSize - 1);
     const readResult = SheetReadService.readSpreadsheetRowsById(context.spreadsheetId, context.sheetName, batchStartRow, batchEndRow);
-    if (readResult.warnings.length) {
-      throw new Error('Blocked: ' + readResult.warnings.join(' '));
-    }
+    if (readResult.warnings.length) throw new Error('Blocked: ' + readResult.warnings.join(' '));
     return {
       startRow: batchStartRow,
       endRow: batchEndRow,
@@ -179,66 +100,39 @@ var VisualAssetLibraryValidationService = (function() {
     };
   }
 
-  function getEligibility_(record) {
-    if (!record.file_id || !record.drive_url || !record.file_name) {
-      return { eligible: false, reason: 'missing file_id, drive_url, or file_name' };
-    }
-    if (isTruthy_(record.do_not_include)) {
-      return { eligible: false, reason: 'do_not_include is true' };
-    }
-    if (String(record.blocked_reason || '').trim()) {
-      return { eligible: false, reason: 'blocked_reason is present' };
-    }
-    if (normalize_(record.review_tier) === 'tier_4' || normalize_(record.review_tier) === '4') {
-      return { eligible: false, reason: 'Tier 4 is blocked' };
-    }
-    if (record.notion_staging_eligible && !isTruthy_(record.notion_staging_eligible)) {
-      return { eligible: false, reason: 'notion_staging_eligible is not true' };
-    }
-    if (normalize_(record.notion_staging_sync_status) === 'blocked') {
-      return { eligible: false, reason: 'notion_staging_sync_status is blocked' };
-    }
-    return { eligible: true, reason: '' };
-  }
-
   function buildFieldRows_(record, schema, context, page) {
     const rows = [];
+    const metadata = VisualAssetLibraryPromptMetadataService.build(record, {
+      allowGuessedPrompts: context.allowGuessedPrompts
+    });
     addRow_(rows, schema, context.titleProperty, record.file_name, 'file_name', record, page);
     addRow_(rows, schema, context.fileIdProperty, record.file_id, 'file_id', record, page);
     addRow_(rows, schema, context.driveUrlProperty, record.drive_url || buildDriveUrlFromFileId_(record.file_id), 'drive_url', record, page);
-
-    const altText = pickPromptValue_(record, context);
-    addRow_(rows, schema, 'Alt text', altText.value, altText.sourceColumn, record, page, altText.reason);
-
-    const accessibilityNotes = pickAccessibilityNotes_(record.visual_consistency_notes);
-    addRow_(rows, schema, 'Accessibility notes', accessibilityNotes.value, accessibilityNotes.sourceColumn, record, page, accessibilityNotes.reason);
-
-    const assetType = normalizeControlledValue_('Asset type', record.asset_category);
-    addRow_(rows, schema, 'Asset type', assetType.value, 'asset_category', record, page, assetType.reason);
-
-    const keywords = parseKeywords_(record.fast_sort_tags);
-    addRow_(rows, schema, 'Keywords', keywords.value, 'fast_sort_tags', record, page, keywords.reason);
-
-    addRow_(rows, schema, 'Style family', record.unit_visual_system, 'unit_visual_system', record, page);
-
-    const approvedUse = pickFirstSourceValue_(record, ['approved_use', 'source_approved_use', 'use_boundary', 'source_use_boundary']);
-    const normalizedApprovedUse = normalizeControlledValue_('Approved use', approvedUse.value);
-    addRow_(rows, schema, 'Approved use', normalizedApprovedUse.value, approvedUse.sourceColumn, record, page, normalizedApprovedUse.reason);
-
-    const reuseStatus = pickFirstSourceValue_(record, ['reuse_status', 'source_reuse_status', 'source_review_outcome']);
-    const normalizedReuseStatus = normalizeControlledValue_('Reuse status', reuseStatus.value);
-    addRow_(rows, schema, 'Reuse status', normalizedReuseStatus.value, reuseStatus.sourceColumn, record, page, normalizedReuseStatus.reason);
-
-    addRow_(rows, schema, 'Instructional purpose', record.asset_label, 'asset_label', record, page);
-    const unitMaterial = pickFirstSourceValue_(record, ['unit_lesson_material_type', 'unit_lesson_material', 'material_type', 'unit_name', 'lesson_name']);
-    addRow_(rows, schema, 'Unit / lesson / material type', unitMaterial.value, unitMaterial.sourceColumn, record, page);
-    const version = pickFirstSourceValue_(record, ['version', 'asset_version', 'source_version']);
-    addRow_(rows, schema, 'Version', version.value, version.sourceColumn, record, page);
-    const cognitiveLoad = pickFirstSourceValue_(record, ['reviewed_cognitive_load_rating', 'cognitive_load_rating', 'source_cognitive_load_rating']);
-    const normalizedCognitiveLoad = normalizeControlledValue_('Cognitive load rating', cognitiveLoad.value);
-    addRow_(rows, schema, 'Cognitive load rating', normalizedCognitiveLoad.value, cognitiveLoad.sourceColumn, record, page, normalizedCognitiveLoad.reason);
+    addMetadataRow_(rows, schema, 'Alt text', metadata, record, page);
+    addMetadataRow_(rows, schema, 'Prompt source', metadata, record, page);
+    addMetadataRow_(rows, schema, 'Keywords', metadata, record, page);
+    addMetadataRow_(rows, schema, 'Asset type', metadata, record, page);
+    addMetadataRow_(rows, schema, 'Style family', metadata, record, page);
+    addMetadataRow_(rows, schema, 'Instructional purpose', metadata, record, page);
+    addMetadataRow_(rows, schema, 'Accessibility notes', metadata, record, page);
+    addControlledRow_(rows, schema, 'Approved use', record, ['approved_use', 'source_approved_use', 'use_boundary', 'source_use_boundary'], page);
+    addControlledRow_(rows, schema, 'Reuse status', record, ['reuse_status', 'source_reuse_status', 'source_review_outcome'], page);
+    addRow_(rows, schema, 'Unit / lesson / material type', pickFirstSourceValue_(record, ['unit_lesson_material_type', 'unit_lesson_material', 'material_type', 'unit_name', 'lesson_name']).value, 'unit_lesson_material_type | unit_lesson_material | material_type | unit_name | lesson_name', record, page);
+    addRow_(rows, schema, 'Version', pickFirstSourceValue_(record, ['version', 'asset_version', 'source_version']).value, 'version | asset_version | source_version', record, page);
+    addControlledRow_(rows, schema, 'Cognitive load rating', record, ['reviewed_cognitive_load_rating', 'cognitive_load_rating', 'source_cognitive_load_rating'], page);
     addRow_(rows, schema, 'Thumbnail', '', '', record, page, 'left empty until thumbnail technical strategy is confirmed');
     return rows;
+  }
+
+  function addMetadataRow_(rows, schema, fieldName, metadata, record, page) {
+    const field = metadata.fields[fieldName] || { value: '', sourceColumn: '', reason: 'no mapped metadata value available' };
+    addRow_(rows, schema, fieldName, field.value, field.sourceColumn, record, page, field.reason);
+  }
+
+  function addControlledRow_(rows, schema, fieldName, record, sourceColumns, page) {
+    const source = pickFirstSourceValue_(record, sourceColumns);
+    const normalized = normalizeControlledValue_(fieldName, source.value, source.sourceColumn);
+    addRow_(rows, schema, fieldName, normalized.value, normalized.sourceColumn, record, page, normalized.reason);
   }
 
   function addRow_(rows, schema, fieldName, value, sourceColumn, record, page, skipReason) {
@@ -273,18 +167,52 @@ var VisualAssetLibraryValidationService = (function() {
     rows.push(row);
   }
 
+  function normalizeControlledValue_(fieldName, rawValue, sourceColumn) {
+    const options = VisualAssetLibraryPromptMetadataService.CONTROLLED_OPTIONS[fieldName] || [];
+    const value = String(rawValue || '').trim();
+    if (!value) return { value: '', sourceColumn: sourceColumn || '', reason: 'no reviewed source value available' };
+    if (options.indexOf(value) !== -1) return { value: value, sourceColumn: sourceColumn || '', reason: '' };
+    const normalized = normalize_(value);
+    const aliases = {
+      approved: 'approved', source_approved: 'approved', draft: 'draft', needs_revision: 'needs revision', revision_needed: 'needs revision', retired: 'retired',
+      worksheet: 'worksheet', slide: 'slide', poster: 'poster', student_facing: 'student-facing', teacher_facing: 'teacher-facing',
+      low: 'low', medium: 'medium', med: 'medium', high: 'high'
+    };
+    if (aliases[normalized] && options.indexOf(aliases[normalized]) !== -1) return { value: aliases[normalized], sourceColumn: sourceColumn || '', reason: '' };
+    return { value: '', sourceColumn: sourceColumn || '', reason: 'source value is outside approved options: ' + value };
+  }
+
+  function validateNotionOption_(propertySchema, fieldName, value) {
+    if (propertySchema.type !== 'select' && propertySchema.type !== 'status' && propertySchema.type !== 'multi_select') return { ok: true, reason: '' };
+    const values = Array.isArray(value) ? value : [value];
+    const approvedOptions = VisualAssetLibraryPromptMetadataService.CONTROLLED_OPTIONS[fieldName];
+    const schemaOptions = getSchemaOptions_(propertySchema);
+    const invalid = values.filter(function(item) {
+      if (approvedOptions && approvedOptions.indexOf(item) === -1) return true;
+      return schemaOptions.length && schemaOptions.indexOf(item) === -1;
+    });
+    if (invalid.length) return { ok: false, reason: 'value is outside approved/schema options: ' + invalid.join(', ') };
+    return { ok: true, reason: '' };
+  }
+
   function findExistingPageByFileId_(context, databaseId, schema, fileId) {
     const fileIdProperty = schema[context.fileIdProperty];
-    if (!fileIdProperty) {
-      throw new Error('Blocked: Notion database is missing file ID property: ' + context.fileIdProperty);
-    }
+    if (!fileIdProperty) throw new Error('Blocked: Notion database is missing file ID property: ' + context.fileIdProperty);
     const filter = buildEqualsFilter_(context.fileIdProperty, fileIdProperty.type, fileId);
     const result = notionRequest_(context, 'post', '/databases/' + encodeURIComponent(databaseId) + '/query', { filter: filter, page_size: 2 });
     const pages = result.results || [];
-    if (pages.length > 1) {
-      throw new Error('Blocked: duplicate Notion pages found for file_id ' + fileId);
-    }
+    if (pages.length > 1) throw new Error('Blocked: duplicate Notion pages found for file_id ' + fileId);
     return pages[0] || null;
+  }
+
+  function getEligibility_(record) {
+    if (!record.file_id || !record.drive_url || !record.file_name) return { eligible: false, reason: 'missing file_id, drive_url, or file_name' };
+    if (isTruthy_(record.do_not_include)) return { eligible: false, reason: 'do_not_include is true' };
+    if (String(record.blocked_reason || '').trim()) return { eligible: false, reason: 'blocked_reason is present' };
+    if (normalize_(record.review_tier) === 'tier_4' || normalize_(record.review_tier) === '4') return { eligible: false, reason: 'Tier 4 is blocked' };
+    if (record.notion_staging_eligible && !isTruthy_(record.notion_staging_eligible)) return { eligible: false, reason: 'notion_staging_eligible is not true' };
+    if (normalize_(record.notion_staging_sync_status) === 'blocked') return { eligible: false, reason: 'notion_staging_sync_status is blocked' };
+    return { eligible: true, reason: '' };
   }
 
   function buildEqualsFilter_(propertyName, propertyType, value) {
@@ -296,30 +224,6 @@ var VisualAssetLibraryValidationService = (function() {
     return { property: propertyName, rich_text: { equals: String(value) } };
   }
 
-  function pickPromptValue_(record, context) {
-    const approved = pickFirstSourceValue_(record, ['approved_prompt', 'proposed_cleaned_prompt', 'original_image_prompt']);
-    if (approved.value) return approved;
-    if (!context.allowGuessedPrompts) {
-      return { value: '', sourceColumn: 'openai_guessed_prompt/gemini_guessed_prompt/copilot_prompt_guess', reason: 'guessed prompt excluded by default; approval flag is not enabled' };
-    }
-    const guessed = pickFirstSourceValue_(record, ['openai_guessed_prompt', 'gemini_guessed_prompt', 'copilot_prompt_guess']);
-    if (!guessed.value) return { value: '', sourceColumn: '', reason: 'no prompt source available' };
-    return { value: 'Guessed prompt, requires review: ' + guessed.value, sourceColumn: guessed.sourceColumn, reason: '' };
-  }
-
-  function pickAccessibilityNotes_(value) {
-    const text = String(value || '').trim();
-    if (!text) return { value: '', sourceColumn: 'visual_consistency_notes', reason: 'no reviewed accessibility or clarity note available' };
-    const normalized = text.toLowerCase();
-    const hasAccessibilitySignal = ACCESSIBILITY_KEYWORDS.some(function(keyword) {
-      return normalized.indexOf(keyword) !== -1;
-    });
-    if (!hasAccessibilitySignal) {
-      return { value: '', sourceColumn: 'visual_consistency_notes', reason: 'visual_consistency_notes is not accessibility/clarity-specific' };
-    }
-    return { value: text, sourceColumn: 'visual_consistency_notes', reason: '' };
-  }
-
   function pickFirstSourceValue_(record, sourceNames) {
     for (let i = 0; i < sourceNames.length; i += 1) {
       const name = sourceNames[i];
@@ -327,40 +231,6 @@ var VisualAssetLibraryValidationService = (function() {
       if (value) return { value: value, sourceColumn: name };
     }
     return { value: '', sourceColumn: sourceNames.join(' | ') };
-  }
-
-  function normalizeControlledValue_(fieldName, rawValue) {
-    const value = String(rawValue || '').trim();
-    if (!value) return { value: '', reason: 'no reviewed source value available' };
-    const direct = CONTROLLED_OPTIONS[fieldName] || [];
-    if (direct.indexOf(value) !== -1) return { value: value, reason: '' };
-    const alias = (CONTROLLED_ALIASES[fieldName] || {})[normalize_(value)];
-    if (alias) return { value: alias, reason: '' };
-    return { value: '', reason: 'source value is outside approved options: ' + value };
-  }
-
-  function parseKeywords_(rawValue) {
-    const text = String(rawValue || '').trim();
-    if (!text) return { value: [], reason: 'no reviewed keyword source value available' };
-    const tags = text.split(/[,;\n]+/).map(function(tag) { return tag.trim(); }).filter(Boolean);
-    return { value: Array.from(new Set(tags)), reason: '' };
-  }
-
-  function validateNotionOption_(propertySchema, fieldName, value) {
-    if (propertySchema.type !== 'select' && propertySchema.type !== 'status' && propertySchema.type !== 'multi_select') {
-      return { ok: true, reason: '' };
-    }
-    const values = Array.isArray(value) ? value : [value];
-    const approvedOptions = CONTROLLED_OPTIONS[fieldName];
-    const schemaOptions = getSchemaOptions_(propertySchema);
-    const invalid = values.filter(function(item) {
-      if (approvedOptions && approvedOptions.indexOf(item) === -1) return true;
-      return schemaOptions.length && schemaOptions.indexOf(item) === -1;
-    });
-    if (invalid.length) {
-      return { ok: false, reason: 'value is outside approved/schema options: ' + invalid.join(', ') };
-    }
-    return { ok: true, reason: '' };
   }
 
   function getSchemaOptions_(propertySchema) {
@@ -394,59 +264,13 @@ var VisualAssetLibraryValidationService = (function() {
     return normalizeNotionId_(match[0]);
   }
 
-  function normalizeNotionId_(value) {
-    return String(value || '').replace(/-/g, '');
-  }
-
-  function notionRequest_(context, method, path, body) {
-    const options = {
-      method: method,
-      muteHttpExceptions: true,
-      headers: {
-        Authorization: 'Bearer ' + context.notionToken,
-        'Notion-Version': NOTION_VERSION
-      }
-    };
-    if (body) {
-      options.contentType = 'application/json';
-      options.payload = JSON.stringify(body);
-    }
-    const response = UrlFetchApp.fetch(NOTION_API_BASE_URL + path, options);
-    throttleNotionRequest_();
-    const status = response.getResponseCode();
-    const text = response.getContentText();
-    if (status < 200 || status >= 300) {
-      throw new Error('Notion API error ' + status + ': ' + text);
-    }
-    return text ? JSON.parse(text) : {};
-  }
-
-  function throttleNotionRequest_() {
-    if (typeof Utilities !== 'undefined' && Utilities.sleep) {
-      Utilities.sleep(NOTION_REQUEST_DELAY_MS);
-    }
-  }
-
-  function buildDriveUrlFromFileId_(fileId) {
-    const cleanFileId = String(fileId || '').trim();
-    return cleanFileId ? 'https://drive.google.com/file/d/' + cleanFileId + '/view' : '';
-  }
-
-  function buildNotionPageUrl_(pageId) {
-    const cleanId = String(pageId || '').replace(/-/g, '');
-    return cleanId ? 'https://www.notion.so/' + cleanId : '';
-  }
-
-  function normalizeValue_(value) {
-    if (Array.isArray(value)) return value.filter(function(item) { return String(item || '').trim(); });
-    if (value === null || value === undefined) return '';
-    return String(value).trim();
-  }
-
-  function shortenForLog_(value) {
-    const text = String(value === null || value === undefined ? '' : value);
-    return text.length > 240 ? text.slice(0, 237) + '...' : text;
-  }
+  function normalizeNotionId_(value) { return String(value || '').replace(/-/g, ''); }
+  function buildDriveUrlFromFileId_(fileId) { const cleanFileId = String(fileId || '').trim(); return cleanFileId ? 'https://drive.google.com/file/d/' + cleanFileId + '/view' : ''; }
+  function buildNotionPageUrl_(pageId) { const cleanId = String(pageId || '').replace(/-/g, ''); return cleanId ? 'https://www.notion.so/' + cleanId : ''; }
+  function normalizeValue_(value) { if (Array.isArray(value)) return value.filter(function(item) { return String(item || '').trim(); }); if (value === null || value === undefined) return ''; return String(value).trim(); }
+  function shortenForLog_(value) { const text = String(value === null || value === undefined ? '' : value); return text.length > 240 ? text.slice(0, 237) + '...' : text; }
+  function isTruthy_(value) { return ['true', 'yes', 'y', '1', 'eligible', 'approved'].indexOf(normalize_(value)) !== -1; }
+  function normalize_(value) { return String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); }
 
   function logJsonInChunks_(value, chunkSize) {
     const json = JSON.stringify(value, null, 2);
@@ -456,15 +280,16 @@ var VisualAssetLibraryValidationService = (function() {
     }
   }
 
-  function isTruthy_(value) {
-    return ['true', 'yes', 'y', '1', 'eligible', 'approved'].indexOf(normalize_(value)) !== -1;
+  function notionRequest_(context, method, path, body) {
+    const options = { method: method, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + context.notionToken, 'Notion-Version': NOTION_VERSION } };
+    if (body) { options.contentType = 'application/json'; options.payload = JSON.stringify(body); }
+    const response = UrlFetchApp.fetch(NOTION_API_BASE_URL + path, options);
+    if (typeof Utilities !== 'undefined' && Utilities.sleep) Utilities.sleep(NOTION_REQUEST_DELAY_MS);
+    const status = response.getResponseCode();
+    const text = response.getContentText();
+    if (status < 200 || status >= 300) throw new Error('Notion API error ' + status + ': ' + text);
+    return text ? JSON.parse(text) : {};
   }
 
-  function normalize_(value) {
-    return String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  }
-
-  return {
-    dryRunFieldValidationOnly: dryRunFieldValidationOnly
-  };
+  return { dryRunFieldValidationOnly: dryRunFieldValidationOnly };
 })();
