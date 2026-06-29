@@ -14,6 +14,9 @@ function dryRunNotionEligibleStagingBatch() {
 }
 
 function syncNotionEligibleStagingBatchToStaging() {
+  if (isVisualAssetLibraryTarget_()) {
+    return VisualAssetLibraryWriteService.syncEligibleBatch();
+  }
   return NotionSyncService.syncEligibleStagingBatchToStaging();
 }
 
