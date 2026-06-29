@@ -1,6 +1,7 @@
 var VisualAssetLibraryPromptMetadataService = (function() {
   const GUESSED_PROMPT_APPROVAL_VALUE = 'YES_GUESSED_PROMPTS_APPROVED';
   const MAX_NOTION_RICH_TEXT_CONTENT_LENGTH = 1900;
+  const MAX_ALT_TEXT_LENGTH = 360;
   const TRUNCATION_NOTICE = '\n\n[Truncated for Notion rich text limit. Review full source prompt in the source sheet.]';
   const PROMPT_SOURCES = [
     { field: 'approved_prompt', label: 'Approved Prompt', guessed: false },
@@ -78,14 +79,15 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     const unitVisualSystem = firstNonEmpty_(record.unit_visual_system, parsed['Unit / Visual System']);
     const fastSortTags = firstNonEmpty_(record.fast_sort_tags, parsed['Fast Sort Tags']);
     const visualConsistencyNotes = firstNonEmpty_(record.visual_consistency_notes, parsed['Visual Consistency Notes']);
-    const altTextValue = prompt.value && prompt.sourceLabel
-      ? '[' + prompt.sourceLabel + ' - review required] ' + prompt.value
-      : prompt.value;
+    const fullPromptValue = buildFullPromptText_(prompt);
+    const altTextValue = buildShortAltText_(record, assetLabel, assetCategory, unitVisualSystem, visualConsistencyNotes);
 
     return {
       prompt: prompt,
       fields: {
-        'Alt text': { value: capNotionRichText_(altTextValue), sourceColumn: prompt.sourceColumn, reason: prompt.reason },
+        'Alt text': { value: altTextValue, sourceColumn: prompt.sourceColumn, reason: altTextValue ? '' : prompt.reason },
+        'AI prompt': { value: fullPromptValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
+        'Prompt source text': { value: fullPromptValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
         'Prompt source': { value: prompt.sourceLabel, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
         'Keywords': {
           value: parseKeywords_(fastSortTags),
@@ -172,6 +174,35 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     if (!text) return [];
     const tags = text.split(/[,;\n]+/).map(function(tag) { return tag.trim(); }).filter(Boolean);
     return Array.from(new Set(tags));
+  }
+
+  function buildShortAltText_(record, assetLabel, assetCategory, unitVisualSystem, visualConsistencyNotes) {
+    const subject = firstNonEmpty_(assetLabel, record.file_name, 'Visual asset');
+    const context = unitVisualSystem ? ' for ' + unitVisualSystem : '';
+    const category = assetCategory ? ' ' + assetCategory.toLowerCase() : '';
+    const note = firstSentence_(visualConsistencyNotes);
+    const firstSentence = subject + context + '.';
+    const secondSentence = note || ('This' + category + ' is included for visual review and instructional asset tracking.');
+    return capAltText_(firstSentence + ' ' + secondSentence);
+  }
+
+  function buildFullPromptText_(prompt) {
+    if (!prompt.value) return '';
+    const reviewLabel = prompt.sourceLabel ? '[' + prompt.sourceLabel + (prompt.guessed ? ' - review required' : '') + ']' : '[Prompt source]';
+    return reviewLabel + '\n\n' + prompt.value;
+  }
+
+  function firstSentence_(value) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return '';
+    const match = text.match(/^(.+?[.!?])(?:\s|$)/);
+    return match ? match[1].trim() : text;
+  }
+
+  function capAltText_(value) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (text.length <= MAX_ALT_TEXT_LENGTH) return text;
+    return text.slice(0, MAX_ALT_TEXT_LENGTH - 1).trim().replace(/[,.!?:;]+$/, '') + '.';
   }
 
   function capNotionRichText_(value) {
