@@ -7,6 +7,9 @@ function syncNotionRows2To11ToStaging() {
 }
 
 function dryRunNotionEligibleStagingBatch() {
+  if (isVisualAssetLibraryTarget_()) {
+    return VisualAssetLibraryValidationService.dryRunFieldValidationOnly();
+  }
   return NotionSyncService.dryRunEligibleStagingBatch();
 }
 
@@ -20,4 +23,9 @@ function auditVisualAssetLibrarySync() {
 
 function dryRunVisualAssetLibraryFieldValidationOnly() {
   return VisualAssetLibraryValidationService.dryRunFieldValidationOnly();
+}
+
+function isVisualAssetLibraryTarget_() {
+  const props = PropertiesService.getScriptProperties();
+  return props.getProperty('DM_NOTION_STAGING_DATA_SOURCE_ID') === 'collection://da5cba48-50fd-4377-9790-8df8f6f2c7dd';
 }
