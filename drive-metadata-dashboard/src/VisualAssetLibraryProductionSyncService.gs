@@ -9,13 +9,28 @@ var VisualAssetLibraryProductionSyncService = (function() {
   function sync(rows) { return runRows_('SYNC', rows || getCurrentBatchRows_()); }
   function verify(rows) { return runRows_('VERIFY', rows || getCurrentBatchRows_()); }
 
+  function findNotionPagesByFileId(fileId) {
+    const context = getPreparedContext_();
+    const databaseId = getDatabaseId_(context);
+    const aliases = PropertyAliasService.resolveAll(context.schema);
+    return findNotionPagesByFileId_(context, databaseId, aliases, fileId).map(toPageSummary_);
+  }
+
+  function upsertVisualAssetPage(rowMetadata) {
+    const context = getPreparedContext_();
+    const databaseId = getDatabaseId_(context);
+    const aliases = PropertyAliasService.resolveAll(context.schema);
+    const record = Object.assign({ rowNumber: rowMetadata && rowMetadata.rowNumber || rowMetadata && rowMetadata.source_row || 0 }, rowMetadata || {});
+    const expected = buildExpected_(record, context.schema, aliases, context);
+    const result = upsertVisualAssetPage_(context, databaseId, aliases, expected, 'SYNC');
+    const verification = verifyExpectedAgainstPage_(expected, result.page);
+    return Object.assign({}, result, { verification: verification });
+  }
+
   function runRows_(operation, rows) {
     const started = new Date();
-    const context = getContext_();
-    validateContext_(context);
+    const context = getPreparedContext_();
     const databaseId = getDatabaseId_(context);
-    const database = notionRequest_(context, 'get', '/databases/' + encodeURIComponent(databaseId));
-    context.schema = database.properties || {};
     const aliases = PropertyAliasService.resolveAll(context.schema);
     const records = readRecordsForRows_(context, rows);
     const progress = [];
@@ -30,14 +45,16 @@ var VisualAssetLibraryProductionSyncService = (function() {
       const expected = buildExpected_(record, context.schema, aliases, context);
 
       try {
-        page = findExistingPageByFileId_(context, databaseId, aliases, record.file_id);
+        const matches = findNotionPagesByFileId_(context, databaseId, aliases, record.file_id);
+        if (matches.length > 1) throwDuplicatePages_(record.file_id, matches);
+        page = matches[0] || null;
         if (aliases.missing.length || aliases.ambiguous.length || expected.blockers.length) {
           verification = buildBlockedVerification_(expected, aliases, page);
           status = page ? 'partial' : 'failed';
           detail = verification.summary;
         } else if (operation === 'SYNC') {
-          const write = writeExpected_(context, databaseId, expected, page);
-          page = notionRequest_(context, 'get', '/pages/' + encodeURIComponent(write.page_id));
+          const upsert = upsertVisualAssetPage_(context, databaseId, aliases, expected, operation, matches);
+          page = upsert.page;
           verification = verifyExpectedAgainstPage_(expected, page);
           status = verification.ok ? 'synced' : 'partial';
           detail = verification.summary;
@@ -47,7 +64,7 @@ var VisualAssetLibraryProductionSyncService = (function() {
           detail = page ? verification.summary : 'No Notion page exists yet. Sync will create one.';
         }
       } catch (error) {
-        verification = buildErrorVerification_(expected, error.message || String(error));
+        verification = buildErrorVerification_(expected, error);
         status = 'failed';
         detail = error.message || String(error);
       }
@@ -68,17 +85,27 @@ var VisualAssetLibraryProductionSyncService = (function() {
     };
   }
 
+  function getPreparedContext_() {
+    const context = getContext_();
+    validateContext_(context);
+    const databaseId = getDatabaseId_(context);
+    const database = notionRequest_(context, 'get', '/databases/' + encodeURIComponent(databaseId));
+    context.schema = database.properties || {};
+    return context;
+  }
+
   function buildExpected_(record, schema, aliases, context) {
     const metadata = VisualAssetLibraryPromptMetadataService.build(record, { allowGuessedPrompts: context.allowGuessedPrompts });
     const fields = {};
     const blockers = [];
+    if (!String(record.file_id || '').trim()) blockers.push({ field: 'file_id', reason: 'Missing file_id; cannot safely upsert' });
     addExpected_(fields, aliases, 'asset_title', record.file_name);
     addExpected_(fields, aliases, 'file_id', record.file_id);
     addExpected_(fields, aliases, 'drive_link', record.drive_url || buildDriveUrl_(record.file_id));
     addExpected_(fields, aliases, 'alt_text', metadataValue_(metadata, 'Alt text'));
-    addExpected_(fields, aliases, 'ai_prompt', metadataValue_(metadata, 'AI prompt'));
-    addExpected_(fields, aliases, 'prompt_source', metadataValue_(metadata, 'Prompt source'));
-    addExpected_(fields, aliases, 'prompt_source_text', metadataValue_(metadata, 'Prompt source text'));
+    addExpected_(fields, aliases, 'ai_prompt', metadataValue_(metadata, 'AI Prompt'));
+    addExpected_(fields, aliases, 'prompt_source', metadataValue_(metadata, 'Prompt Source'));
+    addExpected_(fields, aliases, 'prompt_source_text', metadataValue_(metadata, 'Prompt Source Text'));
     addExpected_(fields, aliases, 'accessibility_notes', metadataValue_(metadata, 'Accessibility notes'));
     addExpected_(fields, aliases, 'instructional_purpose', metadataValue_(metadata, 'Instructional purpose'));
     addExpected_(fields, aliases, 'style_family', metadataValue_(metadata, 'Style family'));
@@ -107,7 +134,11 @@ var VisualAssetLibraryProductionSyncService = (function() {
     fields[canonical] = { canonical: canonical, property: property, value: value };
   }
 
-  function writeExpected_(context, databaseId, expected, page) {
+  function upsertVisualAssetPage_(context, databaseId, aliases, expected, operation, existingMatches) {
+    const fileId = expected.record.file_id;
+    const matches = existingMatches || findNotionPagesByFileId_(context, databaseId, aliases, fileId);
+    if (matches.length > 1) throwDuplicatePages_(fileId, matches);
+    const page = matches[0] || null;
     const properties = {};
     Object.keys(expected.fields).forEach(function(canonical) {
       const field = expected.fields[canonical];
@@ -116,7 +147,34 @@ var VisualAssetLibraryProductionSyncService = (function() {
     const response = page
       ? notionRequest_(context, 'patch', '/pages/' + encodeURIComponent(page.id), { properties: properties })
       : notionRequest_(context, 'post', '/pages', { parent: { database_id: databaseId }, properties: properties });
-    return { page_id: response.id, page_url: response.url || buildNotionPageUrl_(response.id) };
+    const verifiedPage = notionRequest_(context, 'get', '/pages/' + encodeURIComponent(response.id));
+    return { action: page ? 'updated' : 'created', page_id: response.id, page_url: response.url || buildNotionPageUrl_(response.id), page: verifiedPage };
+  }
+
+  function findNotionPagesByFileId_(context, databaseId, aliases, fileId) {
+    const cleanFileId = String(fileId || '').trim();
+    if (!cleanFileId) throw new Error('Missing file_id; cannot safely upsert');
+    const property = aliases.resolved.file_id;
+    if (!property) throw new Error('Missing Notion file_id property alias.');
+    const schema = context.schema[property];
+    const pages = [];
+    let cursor = null;
+    do {
+      const body = { filter: buildEqualsFilter_(property, schema.type, cleanFileId), page_size: 100 };
+      if (cursor) body.start_cursor = cursor;
+      const result = notionRequest_(context, 'post', '/databases/' + encodeURIComponent(databaseId) + '/query', body);
+      Array.prototype.push.apply(pages, result.results || []);
+      cursor = result.has_more ? result.next_cursor : null;
+    } while (cursor);
+    return pages;
+  }
+
+  function throwDuplicatePages_(fileId, pages) {
+    const urls = pages.map(function(page) { return page.url || buildNotionPageUrl_(page.id); }).filter(Boolean);
+    const error = new Error('Duplicate Notion pages found for file_id ' + fileId + ': ' + urls.join(', '));
+    error.duplicatePageUrls = urls;
+    error.duplicatePageIds = pages.map(function(page) { return page.id; });
+    throw error;
   }
 
   function verifyExpectedAgainstPage_(expected, page) {
@@ -154,20 +212,25 @@ var VisualAssetLibraryProductionSyncService = (function() {
     return verification;
   }
 
-  function buildErrorVerification_(expected, message) {
+  function buildErrorVerification_(expected, error) {
+    const message = error && error.message ? error.message : String(error);
     const fieldResults = Object.keys(expected.fields || {}).map(function(canonical) {
       const field = expected.fields[canonical];
       return { field: field.property, canonical: canonical, ok: false, expected: stringify_(field.value), actual: '', reason: message };
     });
-    return buildVerification_(fieldResults, fieldResults.map(function(item) { return item.field; }), [], [message]);
+    const verification = buildVerification_(fieldResults, fieldResults.map(function(item) { return item.field; }), [], [message]);
+    verification.duplicate_page_urls = error && error.duplicatePageUrls ? error.duplicatePageUrls : [];
+    return verification;
   }
 
   function buildProgressItem_(record, page, status, detail, verification, operation, started) {
+    const notes = unique_(verification.notes.concat(verification.field_results.filter(function(item) { return !item.ok; }).map(function(item) { return item.field + ': ' + item.reason; })));
     return {
       source_row: record.rowNumber,
       file_id: record.file_id || '',
       file_name: record.file_name || '',
       notion_page_url: page ? page.url || buildNotionPageUrl_(page.id) : '',
+      duplicate_page_urls: verification.duplicate_page_urls || [],
       status: status,
       color: colorForStatus_(status),
       label: labelForStatus_(status),
@@ -176,7 +239,7 @@ var VisualAssetLibraryProductionSyncService = (function() {
       complete_fields: verification.ok_count,
       total_fields: verification.total,
       missing_fields: unique_(verification.missing_fields.concat(verification.mismatched_fields)),
-      validation_notes: unique_(verification.notes.concat(verification.field_results.filter(function(item) { return !item.ok; }).map(function(item) { return item.field + ': ' + item.reason; }))),
+      validation_notes: notes,
       field_results: verification.field_results.map(function(item) { return { field: item.field, ok: item.ok, changed: !item.ok, reason: item.reason, expected: item.expected, actual: item.actual }; }),
       stages: buildStages_(status, operation),
       duration_ms: new Date().getTime() - started.getTime()
@@ -222,16 +285,6 @@ var VisualAssetLibraryProductionSyncService = (function() {
     const rows = [];
     for (let row = Number(panel.batch_start_row); row <= Number(panel.batch_end_row); row += 1) rows.push(row);
     return rows;
-  }
-
-  function findExistingPageByFileId_(context, databaseId, aliases, fileId) {
-    const property = aliases.resolved.file_id;
-    if (!property) throw new Error('Missing Notion file_id property alias.');
-    const schema = context.schema[property];
-    const result = notionRequest_(context, 'post', '/databases/' + encodeURIComponent(databaseId) + '/query', { filter: buildEqualsFilter_(property, schema.type, fileId), page_size: 2 });
-    const pages = result.results || [];
-    if (pages.length > 1) throw new Error('Duplicate Notion pages found for file_id ' + fileId);
-    return pages[0] || null;
   }
 
   function formatProperty_(schema, value) {
@@ -295,6 +348,7 @@ var VisualAssetLibraryProductionSyncService = (function() {
     return match[0].replace(/-/g, '');
   }
 
+  function toPageSummary_(page) { return { page_id: page.id, page_url: page.url || buildNotionPageUrl_(page.id), created_time: page.created_time || '', last_edited_time: page.last_edited_time || '' }; }
   function metadataValue_(metadata, fieldName) { return (metadata.fields[fieldName] || {}).value; }
   function stringify_(value) { return Array.isArray(value) ? value.map(String).sort().join(', ') : String(value === null || value === undefined ? '' : value).trim(); }
   function toArray_(value) { return Array.isArray(value) ? value.map(String).filter(Boolean) : String(value || '').split(/[,;\n]+/).map(function(item) { return item.trim(); }).filter(Boolean); }
@@ -308,8 +362,22 @@ var VisualAssetLibraryProductionSyncService = (function() {
   function unique_(values) { return Array.from(new Set(values || [])); }
 
   function buildHistoryEntry_(record, operation, item, verification, started) {
-    return { timestamp: new Date().toISOString(), row: record.rowNumber, image: record.file_name || record.file_id || '', operation: operation, changed_fields: (item.field_results || []).filter(function(field) { return field.changed; }).map(function(field) { return field.field; }), skipped_fields: verification.field_results.filter(function(field) { return !field.ok; }).map(function(field) { return field.field; }), reason: item.validation_notes.join(' | '), duration_ms: new Date().getTime() - started.getTime(), verification_result: verification.ok ? 'PASS' : 'FAIL', sync_percent: item.sync_percent };
+    return { timestamp: new Date().toISOString(), row: record.rowNumber, image: record.file_name || record.file_id || '', operation: operation, changed_fields: (item.field_results || []).filter(function(field) { return field.changed; }).map(function(field) { return field.field; }), skipped_fields: verification.field_results.filter(function(field) { return !field.ok; }).map(function(field) { return field.field; }), reason: item.validation_notes.join(' | '), duration_ms: new Date().getTime() - started.getTime(), verification_result: verification.ok ? 'PASS' : 'FAIL', sync_percent: item.sync_percent, duplicate_page_urls: item.duplicate_page_urls || [] };
   }
 
-  return { dryRun: dryRun, sync: sync, verify: verify };
+  return {
+    dryRun: dryRun,
+    sync: sync,
+    verify: verify,
+    findNotionPagesByFileId: findNotionPagesByFileId,
+    upsertVisualAssetPage: upsertVisualAssetPage
+  };
 })();
+
+function findNotionPagesByFileId(fileId) {
+  return VisualAssetLibraryProductionSyncService.findNotionPagesByFileId(fileId);
+}
+
+function upsertVisualAssetPage(rowMetadata) {
+  return VisualAssetLibraryProductionSyncService.upsertVisualAssetPage(rowMetadata);
+}
