@@ -9,11 +9,14 @@ const REQUIRED_FILES = [
   'src/NotionDryRun.gs',
   'src/SheetReadService.gs',
   'src/NotionSyncService.gs',
+  'src/VisualAssetLibrarySyncManagerService.gs',
   'src/VisualAssetLibrarySyncControl.gs',
   'src/ClientVisualSyncPatch.html',
   'appsscript.json'
 ];
 const TEST_FUNCTIONS = [
+  'getVisualAssetLibrarySyncManager',
+  'runVisualAssetLibrarySyncManager',
   'getVisualAssetLibrarySyncPanel',
   'runVisualAssetLibrarySyncBatch',
   'advanceVisualAssetLibrarySyncBatch',
