@@ -3,15 +3,15 @@ var PropertyAliasService = (function() {
     asset_title: ['Asset title', 'Asset Title', 'Title', 'Name', 'Asset Name'],
     asset_type: ['Asset type', 'Asset Type', 'Type', 'Asset Category', 'Category'],
     keywords: ['Keywords', 'Keyword', 'Tags', 'Fast Sort Tags', 'Search Keywords'],
-    ai_prompt: ['AI prompt', 'AI Prompt', 'Prompt', 'Prompt Text', 'AI_Metadata', 'AI Metadata'],
+    ai_prompt: ['AI Prompt', 'AI prompt', 'Prompt', 'Prompt Text', 'Prompt Source Text', 'Prompt source text', 'AI_Metadata', 'AI Metadata'],
     alt_text: ['Alt text', 'Alt Text', 'Alternative Text', 'Accessibility Alt Text'],
     accessibility_notes: ['Accessibility notes', 'Accessibility Notes', 'Accessibility', 'Visual Consistency Notes', 'Clarity Notes'],
     instructional_purpose: ['Instructional purpose', 'Instructional Purpose', 'Purpose', 'Asset Label', 'Learning Purpose'],
     style_family: ['Style family', 'Style Family', 'Visual System', 'Unit / Visual System', 'Design System'],
     file_id: ['file_id', 'File ID', 'Drive File ID', 'Google Drive File ID'],
     drive_link: ['Source file link in Google Drive', 'Drive Link', 'Drive URL', 'Google Drive URL', 'drive_url'],
-    prompt_source: ['Prompt source', 'Prompt Source', 'Source Prompt Type'],
-    prompt_source_text: ['Prompt source text', 'Prompt Source Text', 'Prompt Text Source', 'Original Prompt Text'],
+    prompt_source: ['Prompt Source', 'Prompt source', 'Source Prompt Type', 'Prompt Source Type'],
+    prompt_source_text: ['Prompt Source Text', 'Prompt source text', 'Prompt Text Source', 'Original Prompt Text'],
     missing_fields: ['Missing Fields', 'Missing fields', 'Sync Missing Fields'],
     version: ['Version', 'Asset Version', 'source_version', 'Source Version'],
     approved_use: ['Approved use', 'Approved Use', 'Use Boundary', 'Allowed Use']
@@ -28,13 +28,14 @@ var PropertyAliasService = (function() {
     'style_family',
     'file_id',
     'drive_link',
-    'prompt_source',
-    'prompt_source_text'
+    'prompt_source'
   ];
+
+  const OPTIONAL_CANONICAL_FIELDS = ['prompt_source_text', 'missing_fields', 'version', 'approved_use'];
 
   function resolveAll(schema) {
     const result = { resolved: {}, missing: [], ambiguous: [] };
-    REQUIRED_CANONICAL_FIELDS.concat(['missing_fields', 'version', 'approved_use']).forEach(function(canonical) {
+    REQUIRED_CANONICAL_FIELDS.concat(OPTIONAL_CANONICAL_FIELDS).forEach(function(canonical) {
       const resolution = resolve(schema, canonical);
       if (resolution.ok) {
         result.resolved[canonical] = resolution.property;
@@ -102,6 +103,7 @@ var PropertyAliasService = (function() {
   return {
     ALIASES: ALIASES,
     REQUIRED_CANONICAL_FIELDS: REQUIRED_CANONICAL_FIELDS,
+    OPTIONAL_CANONICAL_FIELDS: OPTIONAL_CANONICAL_FIELDS,
     resolve: resolve,
     resolveAll: resolveAll
   };
