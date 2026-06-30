@@ -279,10 +279,19 @@
           badge('Missing: ' + ((row.missing_fields || []).length), (row.missing_fields || []).length ? 'warn' : 'good') +
           badge('Changed: ' + ((row.changed_fields || []).length), (row.changed_fields || []).length ? 'warn' : 'good') +
           (row.notion_page_url ? '<a href="' + escapeHtml(row.notion_page_url) + '" target="_blank" rel="noopener">Open Notion</a>' : '') +
+          renderDuplicateLinks(row) +
           '</div>' +
           renderFieldRows(fields) +
           '</article>';
       }).join('') + '</div>';
+    }
+
+    function renderDuplicateLinks(row) {
+      const urls = row.duplicate_page_urls || [];
+      if (!urls.length) return '';
+      return '<span class="warn">Duplicate Notion pages:</span> ' + urls.map(function(url, index) {
+        return '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Page ' + escapeHtml(index + 1) + '</a>';
+      }).join(' ');
     }
 
     function renderFieldRows(fields) {
