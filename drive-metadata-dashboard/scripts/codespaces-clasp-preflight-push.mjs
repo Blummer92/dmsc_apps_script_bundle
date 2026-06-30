@@ -9,7 +9,6 @@ const REQUIRED_FILES = [
   'src/NotionDryRun.gs',
   'src/SheetReadService.gs',
   'src/NotionSyncService.gs',
-  'src/NotionSyncService.gs',
   'src/VisualAssetLibrarySyncControl.gs',
   'src/ClientVisualSyncPatch.html',
   'appsscript.json'
