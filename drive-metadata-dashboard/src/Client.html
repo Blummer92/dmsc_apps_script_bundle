@@ -1,5 +1,5 @@
 <script>
-  const state = { dashboard: null, selectedIndex: 0 };
+  const state = { dashboard: null, selectedIndex: 0, visualSync: null, visualSyncResult: null, visualSyncBusy: false };
   const panels = {
     scan: document.getElementById('scan'),
     review: document.getElementById('review'),
@@ -18,6 +18,7 @@
 
   google.script.run.withSuccessHandler(renderBootstrap).withFailureHandler(renderFailure).getDashboardBootstrap();
   google.script.run.withSuccessHandler(renderDashboard).withFailureHandler(renderFailure).getDriveMetadataDashboard();
+  refreshVisualSyncStatus();
 
   function renderBootstrap(payload) {
     const status = payload.configStatus || {};
@@ -120,10 +121,110 @@
     const records = payload.records || [];
     const warnings = records.filter(function(r) { return r.validationWarnings.length || r.unresolvedDuplicate; });
     panels.validation.innerHTML = [
+      panel('Visual Asset Library Sync', renderVisualSyncPanel()),
       panel('Metadata Cleanup', renderWarningList(warnings)),
       panel('Duplicate Review', renderDuplicateGroups(payload.duplicateCandidateGroups || [])),
       panel('Production Blockers', renderQueue(records, function(r) { return r.blocked || r.unresolvedDuplicate; }, 'production blockers'))
     ].join('');
+    bindVisualSyncButtons();
+  }
+
+  function renderVisualSyncPanel() {
+    const sync = state.visualSync;
+    if (!sync) return '<p class="muted">Loading Visual Asset Library sync status...</p>';
+    const readyClass = sync.ready ? 'good' : 'block';
+    const batchLabel = sync.batch_start_row && sync.batch_end_row ? 'Rows ' + sync.batch_start_row + '-' + sync.batch_end_row : 'Batch not configured';
+    const result = renderVisualSyncResult();
+    const blockers = [
+      sync.target === 'Visual Asset Library' ? '' : 'Target is not Visual Asset Library',
+      sync.sync_scope === 'ELIGIBLE_STAGING_BATCH' ? '' : 'Scope is not ELIGIBLE_STAGING_BATCH',
+      sync.has_required_config ? '' : 'Missing source sheet, Notion target, or token configuration',
+      sync.has_expanded_write_approval ? '' : 'Missing expanded write approval',
+      sync.has_visual_asset_library_write_approval ? '' : 'Missing Visual Asset Library write approval'
+    ].filter(Boolean);
+    return [
+      '<div class="sync-status">',
+      '<div class="badge-row">',
+      badge(sync.ready ? 'Ready' : 'Blocked', readyClass),
+      badge(sync.target, sync.target === 'Visual Asset Library' ? 'good' : 'block'),
+      badge('Mode: ' + sync.mode, sync.mode === 'DRY_RUN' ? 'good' : 'warn'),
+      badge(sync.guessed_prompts_enabled ? 'Guessed prompts enabled' : 'Guessed prompts off', sync.guessed_prompts_enabled ? 'warn' : 'good'),
+      '</div>',
+      '<section class="metric-grid sync-metrics">',
+      metric('Current batch', batchLabel),
+      metric('Cursor row', sync.cursor_row),
+      metric('Batch size', sync.batch_size),
+      metric('Next cursor', sync.next_cursor_row || 'Done'),
+      '</section>',
+      blockers.length ? '<ul class="warning-list">' + blockers.map(function(item) { return '<li class="blocker">' + escapeHtml(item) + '</li>'; }).join('') + '</ul>' : '',
+      '<div class="sync-actions">',
+      '<button id="refreshVisualSync" class="secondary-button" type="button"' + (state.visualSyncBusy ? ' disabled' : '') + '>Refresh</button>',
+      '<button id="runVisualSync" class="primary-button" type="button"' + (!sync.ready || state.visualSyncBusy ? ' disabled' : '') + '>' + (state.visualSyncBusy ? 'Running...' : 'Validate + Write Batch') + '</button>',
+      '</div>',
+      '<p class="muted">This validates the current batch first, writes only to the approved Visual Asset Library target, advances the cursor after verification, and returns the script to dry-run mode.</p>',
+      result,
+      '</div>'
+    ].join('');
+  }
+
+  function renderVisualSyncResult() {
+    const result = state.visualSyncResult;
+    if (!result) return '';
+    if (result.error) return '<section class="sync-result error"><strong>Last run blocked</strong><p>' + escapeHtml(result.error) + '</p></section>';
+    const validation = result.validation_summary || {};
+    const write = result.write_result || {};
+    return '<section class="sync-result"><strong>Last run complete</strong>' +
+      '<div class="field-list">' +
+      field('Validated rows', (validation.batch_start_row || '') + '-' + (validation.batch_end_row || '')) +
+      field('Writable fields', validation.writable_field_count) +
+      field('Skipped rows', validation.skipped_row_count) +
+      field('Synced', write.synced_count) +
+      field('Verified', write.verified_count) +
+      field('Next cursor', write.next_cursor_row || 'Done') +
+      '</div></section>';
+  }
+
+  function bindVisualSyncButtons() {
+    const refreshButton = document.getElementById('refreshVisualSync');
+    const runButton = document.getElementById('runVisualSync');
+    if (refreshButton) refreshButton.addEventListener('click', refreshVisualSyncStatus);
+    if (runButton) runButton.addEventListener('click', runVisualSyncBatch);
+  }
+
+  function refreshVisualSyncStatus() {
+    google.script.run
+      .withSuccessHandler(function(payload) {
+        state.visualSync = payload;
+        if (state.dashboard) renderWorkspace(state.dashboard);
+      })
+      .withFailureHandler(function(error) {
+        state.visualSyncResult = { error: error && error.message ? error.message : 'Could not load Visual Asset Library sync status.' };
+        if (state.dashboard) renderWorkspace(state.dashboard);
+      })
+      .getVisualAssetLibrarySyncPanel();
+  }
+
+  function runVisualSyncBatch() {
+    if (state.visualSyncBusy) return;
+    const sync = state.visualSync || {};
+    const label = sync.batch_start_row && sync.batch_end_row ? 'rows ' + sync.batch_start_row + '-' + sync.batch_end_row : 'the current batch';
+    if (!window.confirm('Validate and write ' + label + ' to the Visual Asset Library?')) return;
+    state.visualSyncBusy = true;
+    state.visualSyncResult = null;
+    if (state.dashboard) renderWorkspace(state.dashboard);
+    google.script.run
+      .withSuccessHandler(function(payload) {
+        state.visualSyncBusy = false;
+        state.visualSyncResult = payload;
+        state.visualSync = payload.status || state.visualSync;
+        if (state.dashboard) renderWorkspace(state.dashboard);
+      })
+      .withFailureHandler(function(error) {
+        state.visualSyncBusy = false;
+        state.visualSyncResult = { error: error && error.message ? error.message : 'Visual Asset Library sync failed.' };
+        refreshVisualSyncStatus();
+      })
+      .validateAndWriteVisualAssetLibraryBatch();
   }
 
   function renderDriveSource(payload) {
