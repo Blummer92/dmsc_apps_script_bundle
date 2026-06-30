@@ -24,6 +24,8 @@ const REQUIRED_FILES = [
 ];
 const TEST_FUNCTIONS = [
   'testVisualAssetLibraryProductionSyncTestSuite',
+  'findNotionPagesByFileId',
+  'upsertVisualAssetPage',
   'dryRunVisualAssetLibraryFieldValidationOnly',
   'advanceCursorAfterPassedDryRun',
   'getVisualAssetLibraryProductionManager',
