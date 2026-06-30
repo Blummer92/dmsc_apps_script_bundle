@@ -46,8 +46,10 @@ var VisualAssetLibraryPromptMetadataService = (function() {
       worksheet: 'worksheet image',
       worksheet_image: 'worksheet image',
       worksheet_graphic: 'worksheet image',
+      asset_sheet: 'worksheet image',
       slide: 'slide image',
       slide_image: 'slide image',
+      ui_screenshot: 'slide image',
       process: 'process visual',
       process_visual: 'process visual'
     },
@@ -93,36 +95,39 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     const fullPromptValue = buildFullPromptText_(prompt);
     const altTextValue = buildShortAltText_(record, assetLabel, assetCategory, unitVisualSystem, visualConsistencyNotes);
 
-    return {
-      prompt: prompt,
-      fields: {
-        'Alt text': { value: altTextValue, sourceColumn: prompt.sourceColumn, reason: altTextValue ? '' : prompt.reason },
-        'AI prompt': { value: fullPromptValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
-        'Prompt source text': { value: fullPromptValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
-        'Prompt source': { value: prompt.sourceLabel, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
-        'Keywords': {
-          value: parseKeywords_(fastSortTags),
-          sourceColumn: sourceColumnFor_('fast_sort_tags', parsed, prompt, sourceSuffix),
-          reason: fastSortTags ? '' : 'no keyword source value available'
-        },
-        'Asset type': normalizeControlledValue_('Asset type', assetCategory, sourceColumnFor_('asset_category', parsed, prompt, sourceSuffix)),
-        'Style family': {
-          value: capNotionRichText_(unitVisualSystem),
-          sourceColumn: sourceColumnFor_('unit_visual_system', parsed, prompt, sourceSuffix),
-          reason: unitVisualSystem ? '' : 'no style family source value available'
-        },
-        'Instructional purpose': {
-          value: capNotionRichText_(assetLabel),
-          sourceColumn: sourceColumnFor_('asset_label', parsed, prompt, sourceSuffix),
-          reason: assetLabel ? '' : 'no instructional purpose source value available'
-        },
-        'Accessibility notes': {
-          value: capNotionRichText_(visualConsistencyNotes),
-          sourceColumn: sourceColumnFor_('visual_consistency_notes', parsed, prompt, sourceSuffix),
-          reason: visualConsistencyNotes ? '' : 'no accessibility or visual consistency source value available'
-        }
+    const fields = {
+      'Alt text': { value: altTextValue, sourceColumn: prompt.sourceColumn, reason: altTextValue ? '' : prompt.reason },
+      'AI Prompt': { value: fullPromptValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
+      'Prompt Source': { value: prompt.sourceLabel, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
+      'Prompt Source Text': { value: fullPromptValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
+      'Keywords': {
+        value: parseKeywords_(fastSortTags),
+        sourceColumn: sourceColumnFor_('fast_sort_tags', parsed, prompt, sourceSuffix),
+        reason: fastSortTags ? '' : 'no keyword source value available'
+      },
+      'Asset type': normalizeControlledValue_('Asset type', assetCategory, sourceColumnFor_('asset_category', parsed, prompt, sourceSuffix)),
+      'Style family': {
+        value: capNotionRichText_(unitVisualSystem),
+        sourceColumn: sourceColumnFor_('unit_visual_system', parsed, prompt, sourceSuffix),
+        reason: unitVisualSystem ? '' : 'no style family source value available'
+      },
+      'Instructional purpose': {
+        value: capNotionRichText_(assetLabel),
+        sourceColumn: sourceColumnFor_('asset_label', parsed, prompt, sourceSuffix),
+        reason: assetLabel ? '' : 'no instructional purpose source value available'
+      },
+      'Accessibility notes': {
+        value: capNotionRichText_(visualConsistencyNotes),
+        sourceColumn: sourceColumnFor_('visual_consistency_notes', parsed, prompt, sourceSuffix),
+        reason: visualConsistencyNotes ? '' : 'no accessibility or visual consistency source value available'
       }
     };
+
+    fields['AI prompt'] = fields['AI Prompt'];
+    fields['Prompt source'] = fields['Prompt Source'];
+    fields['Prompt source text'] = fields['Prompt Source Text'];
+
+    return { prompt: prompt, fields: fields };
   }
 
   function pickPrompt_(record, allowGuessedPrompts) {
