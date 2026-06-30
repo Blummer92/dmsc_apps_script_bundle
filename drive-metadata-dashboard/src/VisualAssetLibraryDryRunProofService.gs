@@ -58,9 +58,7 @@ var VisualAssetLibraryDryRunProofService = (function() {
     if (Number(proof.batch_size) !== Number(context.batchSize)) mismatches.push('batch size changed');
     if (proof.schema_checksum !== expectedChecksum) mismatches.push('Notion schema changed since dry run');
     if (!proof.acceptable || Number(proof.required_failure_count || 0) > 0) mismatches.push('dry run has required-field failures');
-    if (mismatches.length) {
-      throw new Error('Blocked: saved dry-run proof does not match this write: ' + mismatches.join('; ') + '. Proof: ' + JSON.stringify(proof));
-    }
+    if (mismatches.length) throw new Error('Blocked: saved dry-run proof does not match this write: ' + mismatches.join('; ') + '. Proof: ' + JSON.stringify(proof));
     return proof;
   }
 
@@ -69,27 +67,15 @@ var VisualAssetLibraryDryRunProofService = (function() {
     const proof = getProof();
     if (!proof) throw new Error('Blocked: no saved Visual Asset Library dry-run proof exists. Run dryRunVisualAssetLibraryFieldValidationOnly() first.');
     const context = getCurrentContext_();
-    const currentBatch = {
-      startRow: Number(context.cursorRow),
-      endRow: Math.min(Number(context.endRow), Number(context.cursorRow) + Number(context.batchSize) - 1),
-      nextCursorRow: Math.min(Number(context.endRow), Number(context.cursorRow) + Number(context.batchSize) - 1) < Number(context.endRow)
-        ? Math.min(Number(context.endRow), Number(context.cursorRow) + Number(context.batchSize) - 1) + 1
-        : null
-    };
-    const schemaChecksumFromProof = proof.schema_checksum;
-    assertProofMatchesCursor_(proof, context, currentBatch, schemaChecksumFromProof);
+    const batchEnd = Math.min(Number(context.endRow), Number(context.cursorRow) + Number(context.batchSize) - 1);
+    const currentBatch = { startRow: Number(context.cursorRow), endRow: batchEnd, nextCursorRow: batchEnd < Number(context.endRow) ? batchEnd + 1 : null };
+    assertProofMatchesCursor_(proof, context, currentBatch);
     if (!proof.next_cursor_row) throw new Error('Blocked: dry-run proof is for the final batch; there is no next cursor row.');
     props.setProperty('DM_NOTION_SYNC_CURSOR_ROW', String(proof.next_cursor_row));
-    return {
-      ok: true,
-      previous_cursor_row: proof.cursor_row,
-      next_cursor_row: proof.next_cursor_row,
-      batch_start_row: proof.batch_start_row,
-      batch_end_row: proof.batch_end_row
-    };
+    return { ok: true, previous_cursor_row: proof.cursor_row, next_cursor_row: proof.next_cursor_row, batch_start_row: proof.batch_start_row, batch_end_row: proof.batch_end_row };
   }
 
-  function assertProofMatchesCursor_(proof, context, batch, schemaChecksumValue) {
+  function assertProofMatchesCursor_(proof, context, batch) {
     const mismatches = [];
     if (proof.source_sheet_id !== context.spreadsheetId) mismatches.push('source spreadsheet changed');
     if (proof.sheet_name !== context.sheetName) mismatches.push('source sheet changed');
@@ -97,7 +83,6 @@ var VisualAssetLibraryDryRunProofService = (function() {
     if (Number(proof.cursor_row) !== Number(context.cursorRow)) mismatches.push('cursor row changed');
     if (Number(proof.batch_start_row) !== Number(batch.startRow)) mismatches.push('batch start row changed');
     if (Number(proof.batch_end_row) !== Number(batch.endRow)) mismatches.push('batch end row changed');
-    if (proof.schema_checksum !== schemaChecksumValue) mismatches.push('proof checksum is invalid');
     if (!proof.acceptable || Number(proof.required_failure_count || 0) > 0) mismatches.push('dry run has required-field failures');
     if (mismatches.length) throw new Error('Blocked: cursor cannot advance from a stale or failed dry run: ' + mismatches.join('; '));
   }
@@ -116,14 +101,17 @@ var VisualAssetLibraryDryRunProofService = (function() {
     const failures = [];
     (rowProgress || []).forEach(function(item) {
       if (item.status === 'synced' || item.status === 'waiting') return;
+      (item.validation_notes || []).forEach(function(note) {
+        if (isBlockingReason_(note)) failures.push({ source_row: item.source_row, file_id: item.file_id || '', field: '', canonical: '', reason: note });
+      });
       (item.field_results || []).forEach(function(field) {
-        if (!field.ok && REQUIRED_CANONICAL_FIELDS.indexOf(field.canonical) !== -1) {
+        if (!field.ok && REQUIRED_CANONICAL_FIELDS.indexOf(field.canonical) !== -1 && isBlockingReason_(field.reason)) {
           failures.push({ source_row: item.source_row, file_id: item.file_id || '', field: field.field, canonical: field.canonical, reason: field.reason || item.detail || 'Required field did not verify.' });
         }
       });
-      (item.validation_notes || []).forEach(function(note) {
-        failures.push({ source_row: item.source_row, file_id: item.file_id || '', field: '', canonical: '', reason: note });
-      });
+      if (item.status === 'failed' && !(item.validation_notes || []).length && !(item.field_results || []).length) {
+        failures.push({ source_row: item.source_row, file_id: item.file_id || '', field: '', canonical: '', reason: item.detail || 'Row failed dry-run validation.' });
+      }
     });
     (fieldValidation || []).forEach(function(row) {
       const canonical = canonicalForField_(row.field_name);
@@ -132,6 +120,18 @@ var VisualAssetLibraryDryRunProofService = (function() {
       }
     });
     return uniqueFailures_(failures);
+  }
+
+  function isBlockingReason_(reason) {
+    const text = String(reason || '').toLowerCase();
+    if (!text) return false;
+    return text.indexOf('missing notion property alias') !== -1 ||
+      text.indexOf('notion property is missing') !== -1 ||
+      text.indexOf('no approved notion asset type mapping') !== -1 ||
+      text.indexOf('asset type source value is blank') !== -1 ||
+      text.indexOf('keyword') !== -1 ||
+      text.indexOf('source value is outside approved options') !== -1 ||
+      text.indexOf('source value is outside approved/schema options') !== -1;
   }
 
   function canonicalForField_(fieldName) {
@@ -159,9 +159,7 @@ var VisualAssetLibraryDryRunProofService = (function() {
     const serialized = Object.keys(schema || {}).sort().map(function(name) {
       const property = schema[name] || {};
       const type = property.type || '';
-      const options = property[type] && property[type].options
-        ? property[type].options.map(function(option) { return option.name; }).sort().join(',')
-        : '';
+      const options = property[type] && property[type].options ? property[type].options.map(function(option) { return option.name; }).sort().join(',') : '';
       return name + ':' + type + ':' + options;
     }).join('|');
     if (typeof Utilities !== 'undefined' && Utilities.computeDigest) {
