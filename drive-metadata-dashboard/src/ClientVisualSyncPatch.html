@@ -1,0 +1,22 @@
+<script>
+  (function() {
+    const originalRenderGenericWorkspace = renderGenericWorkspace;
+
+    renderGenericWorkspace = function(payload) {
+      originalRenderGenericWorkspace(payload);
+
+      if (!panels || !panels.validation || typeof renderVisualSyncPanel !== 'function') {
+        return;
+      }
+
+      panels.validation.innerHTML = [
+        panel('Visual Asset Library Sync', renderVisualSyncPanel()),
+        panel('Read-only Validation', '<p class="muted">This sheet is not mapped to a specialized console layout yet. The guarded Visual Asset Library sync is available above when configuration and approvals are present.</p>')
+      ].join('');
+
+      if (typeof bindVisualSyncButtons === 'function') {
+        bindVisualSyncButtons();
+      }
+    };
+  })();
+</script>
