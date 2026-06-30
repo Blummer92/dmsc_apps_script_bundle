@@ -73,14 +73,16 @@ var VisualAssetLibraryProductionManagerService = (function() {
     const columns = ensureColumns_(sheet);
     const now = new Date();
     progress.forEach(function(item) {
+      const duplicateUrls = (item.duplicate_page_urls || []).join(' | ');
+      const notes = (item.validation_notes || []).join(' | ') || item.detail || '';
       const values = {
         'Sync Status': item.label,
         'Sync %': item.complete_fields + '/' + item.total_fields + ' ' + item.sync_percent + '%',
         'Last Sync': action === 'SYNC' ? now : '',
         'Last Verified': now,
-        'Notion Page': item.notion_page_url || '',
+        'Notion Page': item.notion_page_url || duplicateUrls || '',
         'Missing Fields': (item.missing_fields || []).join(', '),
-        'Validation Notes': (item.validation_notes || []).join(' | ') || item.detail || ''
+        'Validation Notes': duplicateUrls ? notes + ' | Duplicate Notion page URLs: ' + duplicateUrls : notes
       };
       STATUS_COLUMNS.forEach(function(header) {
         if (values[header] !== '') sheet.getRange(item.source_row, columns[header]).setValue(values[header]);
