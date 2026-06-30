@@ -210,8 +210,14 @@ var VisualAssetLibrarySyncManagerService = (function() {
       rows[skip.source_row] = row;
     });
     (writeResult.skipped || []).forEach(function(item) {
-      rows[item.source_row] = baseProgress_(item.source_row, item.file_id, '', 'failed', item.reason || 'Row skipped before write.');
-      rows[item.source_row].stages = { image: 'failed', notion: 'waiting', validation: 'failed', write: 'blocked', verify: 'blocked' };
+      const row = baseProgress_(item.source_row, item.file_id, '', 'failed', item.reason || 'Row skipped before write.');
+      row.duplicate_page_urls = item.duplicate_page_urls || [];
+      row.validation_notes.push(item.reason || 'Row skipped before write.');
+      if (row.duplicate_page_urls.length) {
+        row.validation_notes.push('Duplicate Notion pages found for file_id: ' + row.duplicate_page_urls.join(', '));
+      }
+      row.stages = { image: 'failed', notion: 'waiting', validation: 'failed', write: 'blocked', verify: 'blocked' };
+      rows[item.source_row] = row;
     });
     return finalizeProgress_(rows);
   }
@@ -285,6 +291,7 @@ var VisualAssetLibrarySyncManagerService = (function() {
       source_row: Number(sourceRow),
       file_id: fileId || '',
       notion_page_url: notionPageUrl || '',
+      duplicate_page_urls: [],
       status: status,
       color: statusColorName_(status),
       label: STATUS_LABEL[status] || status,
@@ -327,7 +334,7 @@ var VisualAssetLibrarySyncManagerService = (function() {
         'Sync %': row.sync_percent + '%',
         'Last Sync': action === 'SYNC' ? now : '',
         'Last Verified': action === 'VERIFY' || action === 'DRY_RUN' ? now : '',
-        'Notion Page': row.notion_page_url || '',
+        'Notion Page': row.notion_page_url || (row.duplicate_page_urls || []).join('\n'),
         'Missing Fields': row.missing_fields.join(', '),
         'Validation Notes': row.validation_notes.join(' | ') || row.detail || row.next_action
       };
