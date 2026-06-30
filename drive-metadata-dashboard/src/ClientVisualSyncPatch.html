@@ -125,7 +125,7 @@
         '<button id="advanceVisualSync" class="secondary-button" type="button"' + (!sync.next_cursor_row || state.visualSyncBusy ? ' disabled' : '') + '>Next 25</button>',
         '<button id="resetVisualSync" class="secondary-button" type="button"' + (state.visualSyncBusy ? ' disabled' : '') + '>Reset to First Batch</button>',
         '</div>',
-        '<p class="muted">Dry Run validates the current 25-row batch and marks each image. Sync writes the current batch to Notion, verifies it, advances the cursor after success, and returns the script to dry-run mode.</p>',
+        '<p class="muted">Dry Run validates the current 25-row batch and marks each image. Sync writes the current batch to Notion and verifies it. Press Next 25 when you are ready to move the cursor forward.</p>',
         result,
         '</div>'
       ].join('');
@@ -135,6 +135,7 @@
       const result = state.visualSyncResult;
       if (!result) return '';
       if (result.error) return '<section class="sync-result error"><strong>Last run blocked</strong><p>' + escapeHtml(result.error) + '</p></section>';
+      if (result.message) return '<section class="sync-result"><strong>Batch cursor updated</strong><p>' + escapeHtml(result.message) + '</p></section>';
       const validation = result.validation_summary || {};
       const write = result.write_result || {};
       const summary = result.mode === 'DRY_RUN'
@@ -199,7 +200,7 @@
         .withSuccessHandler(function(payload) {
           state.visualSyncBusy = false;
           state.visualSync = payload;
-          state.visualSyncResult = payload.message ? { mode: 'DRY_RUN', row_progress: [], validation_summary: {}, message: payload.message } : state.visualSyncResult;
+          state.visualSyncResult = payload.message ? { message: payload.message } : state.visualSyncResult;
           if (state.dashboard) renderWorkspace(state.dashboard);
         })
         .withFailureHandler(function(error) {
@@ -217,7 +218,7 @@
         .withSuccessHandler(function(payload) {
           state.visualSyncBusy = false;
           state.visualSync = payload;
-          state.visualSyncResult = null;
+          state.visualSyncResult = payload.message ? { message: payload.message } : null;
           if (state.dashboard) renderWorkspace(state.dashboard);
         })
         .withFailureHandler(function(error) {
