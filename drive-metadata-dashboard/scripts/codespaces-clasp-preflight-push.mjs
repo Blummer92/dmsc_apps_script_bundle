@@ -12,6 +12,7 @@ const REQUIRED_FILES = [
   'src/PropertyAliasService.gs',
   'src/AssetTypeMappingService.gs',
   'src/KeywordStrategyService.gs',
+  'src/VisualAssetLibraryDryRunProofService.gs',
   'src/VisualAssetLibraryProductionSyncService.gs',
   'src/VisualAssetLibraryProductionManagerService.gs',
   'src/VisualAssetLibrarySyncHistoryService.gs',
@@ -23,6 +24,8 @@ const REQUIRED_FILES = [
 ];
 const TEST_FUNCTIONS = [
   'testVisualAssetLibraryProductionSyncTestSuite',
+  'dryRunVisualAssetLibraryFieldValidationOnly',
+  'advanceCursorAfterPassedDryRun',
   'getVisualAssetLibraryProductionManager',
   'runVisualAssetLibraryProductionManager',
   'getVisualAssetLibrarySyncPanel',
