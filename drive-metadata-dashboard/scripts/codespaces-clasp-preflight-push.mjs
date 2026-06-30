@@ -9,11 +9,16 @@ const REQUIRED_FILES = [
   'src/NotionDryRun.gs',
   'src/SheetReadService.gs',
   'src/NotionSyncService.gs',
+  'src/NotionSyncService.gs',
+  'src/VisualAssetLibrarySyncControl.gs',
+  'src/ClientVisualSyncPatch.html',
   'appsscript.json'
 ];
 const TEST_FUNCTIONS = [
-  'dryRunNotionRows2To11',
-  'syncNotionRows2To11ToStaging'
+  'getVisualAssetLibrarySyncPanel',
+  'runVisualAssetLibrarySyncBatch',
+  'advanceVisualAssetLibrarySyncBatch',
+  'resetVisualAssetLibrarySyncCursor'
 ];
 
 const summary = {
@@ -128,7 +133,8 @@ function listSrcFiles() {
 }
 
 function checkRequiredFiles() {
-  const missing = REQUIRED_FILES.filter((file) => !existsSync(resolve(process.cwd(), file)));
+  const uniqueRequiredFiles = Array.from(new Set(REQUIRED_FILES));
+  const missing = uniqueRequiredFiles.filter((file) => !existsSync(resolve(process.cwd(), file)));
   summary.requiredFilesPresent = missing.length === 0;
   if (missing.length) {
     failures.push('Missing required files: ' + missing.join(', ') + '. Fix: cd ' + EXPECTED_PROJECT_ROOT + ' && git pull');
@@ -159,7 +165,8 @@ function runClasp(command) {
 }
 
 function checkTrackedFiles(statusOutput) {
-  const missingTracked = REQUIRED_FILES.filter((file) => !statusOutput.includes(file));
+  const uniqueRequiredFiles = Array.from(new Set(REQUIRED_FILES));
+  const missingTracked = uniqueRequiredFiles.filter((file) => !statusOutput.includes(file));
   summary.requiredFilesTracked = missingTracked.length === 0;
   if (!summary.requiredFilesTracked) {
     failures.push('Required files are not shown as tracked by clasp: ' + missingTracked.join(', ') + '. Fix: verify .claspignore includes appsscript.json and src/**, then run cd ' + EXPECTED_PROJECT_ROOT + ' && npx --yes @google/clasp@latest status.');
