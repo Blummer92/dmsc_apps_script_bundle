@@ -7,7 +7,10 @@ var KeywordStrategyService = (function() {
 
   function getMode() {
     const value = String(PropertiesService.getScriptProperties().getProperty('DM_VISUAL_KEYWORD_MODE') || MODES.REPORT_UNMAPPED).toUpperCase().trim();
-    return MODES[value] || value === 'CREATE' ? MODES.CREATE_MISSING : value === 'MAP' ? MODES.MAP_EXISTING : value === 'REPORT' ? MODES.REPORT_UNMAPPED : MODES.REPORT_UNMAPPED;
+    if (value === MODES.CREATE_MISSING || value === 'CREATE') return MODES.CREATE_MISSING;
+    if (value === MODES.MAP_EXISTING || value === 'MAP') return MODES.MAP_EXISTING;
+    if (value === MODES.REPORT_UNMAPPED || value === 'REPORT') return MODES.REPORT_UNMAPPED;
+    return MODES.REPORT_UNMAPPED;
   }
 
   function resolve(rawKeywords, propertySchema) {
