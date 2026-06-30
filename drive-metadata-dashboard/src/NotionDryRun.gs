@@ -99,6 +99,7 @@ function validateAndWriteVisualAssetLibraryBatch() {
     if (writeResult.next_cursor_row) {
       props.setProperty('DM_NOTION_SYNC_CURSOR_ROW', String(writeResult.next_cursor_row));
     }
+    props.setProperty('DM_NOTION_SYNC_MODE', 'DRY_RUN');
 
     return {
       ok: true,
