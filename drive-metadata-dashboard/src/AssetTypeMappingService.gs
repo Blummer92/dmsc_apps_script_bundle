@@ -3,6 +3,7 @@ var AssetTypeMappingService = (function() {
     prop: ['poster visual', 'process visual', 'slide image'],
     ui_screenshot: ['slide image', 'process visual', 'poster visual'],
     worksheet_graphic: ['worksheet image', 'diagram', 'poster visual'],
+    asset_sheet: ['worksheet image', 'diagram', 'poster visual'],
     graphic: ['poster visual', 'diagram', 'slide image'],
     illustration: ['poster visual', 'slide image', 'worksheet image'],
     poster: ['poster visual'],
