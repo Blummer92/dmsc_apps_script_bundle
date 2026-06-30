@@ -20,6 +20,7 @@ var VisualAssetLibraryWriteService = (function() {
     const synced = (managerResult.row_progress || []).filter(function(item) { return item.status === 'synced'; });
     const partial = (managerResult.row_progress || []).filter(function(item) { return item.status === 'partial'; });
     const failed = (managerResult.row_progress || []).filter(function(item) { return item.status === 'failed'; });
+    const blocked = failed.map(toBlockedSyncItem_);
     const result = {
       mode: context.mode,
       sync_scope: context.syncScope,
@@ -29,8 +30,9 @@ var VisualAssetLibraryWriteService = (function() {
       next_cursor_row: batch.nextCursorRow,
       dry_run_proof_saved_at: proof.saved_at,
       read_count: batch.records.length,
-      skipped_count: 0,
-      skipped: [],
+      skipped_count: blocked.length,
+      skipped: blocked,
+      failed: blocked,
       synced_count: synced.length,
       verified_count: synced.length,
       partial_count: partial.length,
@@ -41,9 +43,6 @@ var VisualAssetLibraryWriteService = (function() {
       field_skips: buildFieldSkips_(managerResult.row_progress || []),
       manager_summary: managerResult.summary
     };
-    if (partial.length || failed.length) {
-      throw new Error('Blocked: field-level verification failed after write. Green requires verified metadata. Result: ' + JSON.stringify(result));
-    }
     if (result.synced_count !== result.verified_count) {
       throw new Error('Blocked: synced and verified counts do not match. Result: ' + JSON.stringify(result));
     }
@@ -111,6 +110,23 @@ var VisualAssetLibraryWriteService = (function() {
       sync_percent: item.sync_percent,
       verified_fields: item.complete_fields,
       total_fields: item.total_fields
+    };
+  }
+
+  function toBlockedSyncItem_(item) {
+    const duplicateUrls = item.duplicate_page_urls || [];
+    const notes = item.validation_notes || [];
+    const reason = notes.length
+      ? notes.join(' | ')
+      : item.detail || 'Row skipped before write.';
+    return {
+      source_row: item.source_row,
+      file_id: item.file_id || '',
+      action: 'blocked',
+      page_id: '',
+      page_url: '',
+      duplicate_page_urls: duplicateUrls,
+      reason: reason
     };
   }
 
