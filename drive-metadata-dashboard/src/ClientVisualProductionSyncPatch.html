@@ -1,0 +1,73 @@
+<script>
+  (function() {
+    refreshVisualSyncStatus = function() {
+      google.script.run
+        .withSuccessHandler(function(payload) {
+          state.visualSyncManager = payload;
+          state.visualSync = payload.status || state.visualSync;
+          if (state.dashboard) renderWorkspace(state.dashboard);
+        })
+        .withFailureHandler(function(error) {
+          state.visualSyncResult = { error: error && error.message ? error.message : 'Could not load verified Visual Asset Library sync manager.' };
+          if (state.dashboard) renderWorkspace(state.dashboard);
+        })
+        .getVisualAssetLibraryProductionManager();
+    };
+
+    bindVisualSyncButtons = function() {
+      const scope = document.getElementById('visualSyncScope');
+      if (scope) scope.addEventListener('change', function(event) { state.visualSyncScope = event.target.value; });
+      bindProductionAction_('dryRunVisualSync', 'DRY_RUN', function() { return state.visualSyncScope; });
+      bindProductionAction_('syncVisualSync', 'SYNC', function() { return state.visualSyncScope; }, true);
+      bindProductionAction_('verifyVisualSync', 'VERIFY', function() { return state.visualSyncScope; });
+      bindProductionAction_('nextVisualSync', 'NEXT', function() { return 'current_batch'; });
+      bindProductionAction_('previousVisualSync', 'PREVIOUS', function() { return 'current_batch'; });
+      bindProductionAction_('resyncSelectedVisualSync', 'SYNC', function() { return 'selected_rows'; }, true);
+      bindProductionAction_('syncFailedVisualSync', 'SYNC', function() { return 'failed'; }, true);
+      bindProductionAction_('syncPartialVisualSync', 'SYNC', function() { return 'partial'; }, true);
+      bindProductionAction_('syncMissingVisualSync', 'SYNC', function() { return 'missing'; }, true);
+      bindProductionAction_('pauseVisualSync', 'PAUSE', function() { return 'current_batch'; });
+      bindProductionAction_('resumeVisualSync', 'RESUME', function() { return 'current_batch'; });
+      document.querySelectorAll('[data-sync-row]').forEach(function(row) {
+        row.addEventListener('click', function() { selectProductionSpreadsheetRow_(row.dataset.syncRow); });
+      });
+    };
+
+    function bindProductionAction_(id, action, scopeFn, confirmWrite) {
+      const button = document.getElementById(id);
+      if (!button) return;
+      button.addEventListener('click', function() {
+        const scope = scopeFn();
+        if (confirmWrite && !window.confirm(action + ' scope: ' + scope + '?')) return;
+        runProductionManagerAction_(action, scope);
+      });
+    }
+
+    function runProductionManagerAction_(action, scope) {
+      if (state.visualSyncBusy) return;
+      state.visualSyncBusy = true;
+      state.visualSyncResult = null;
+      if (state.dashboard) renderWorkspace(state.dashboard);
+      google.script.run
+        .withSuccessHandler(function(payload) {
+          state.visualSyncBusy = false;
+          state.visualSyncResult = payload;
+          state.visualSyncManager = payload.manager || state.visualSyncManager;
+          state.visualSync = state.visualSyncManager ? state.visualSyncManager.status : state.visualSync;
+          if (state.dashboard) renderWorkspace(state.dashboard);
+        })
+        .withFailureHandler(function(error) {
+          state.visualSyncBusy = false;
+          state.visualSyncResult = { error: error && error.message ? error.message : 'Verified sync manager action failed.' };
+          refreshVisualSyncStatus();
+        })
+        .runVisualAssetLibraryProductionManager(action, scope);
+    }
+
+    function selectProductionSpreadsheetRow_(rowNumber) {
+      google.script.run.withFailureHandler(function() {}).selectVisualAssetLibrarySourceRow(Number(rowNumber));
+    }
+
+    refreshVisualSyncStatus();
+  })();
+</script>
