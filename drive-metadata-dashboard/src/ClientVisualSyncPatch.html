@@ -1,175 +1,357 @@
 <style>
-  .sync-mode-toggle {
+  .sync-manager {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
+    gap: 12px;
   }
 
-  .sync-mode-toggle button {
-    min-height: 34px;
+  .sync-progress-bar {
+    overflow: hidden;
+    height: 16px;
     border: 1px solid var(--line);
-    border-radius: 6px;
-    color: var(--text);
-    background: #ffffff;
-    font: inherit;
-    font-weight: 800;
-    cursor: pointer;
+    border-radius: 999px;
+    background: #eef1f4;
   }
 
-  .sync-mode-toggle button.is-active {
-    color: #ffffff;
-    border-color: var(--accent);
+  .sync-progress-fill {
+    height: 100%;
     background: var(--accent);
   }
 
-  .sync-progress-list {
+  .sync-count-row,
+  .sync-button-grid,
+  .sync-scope-row {
     display: grid;
-    gap: 7px;
+    gap: 6px;
+  }
+
+  .sync-count-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .sync-button-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .sync-scope-row select {
+    min-height: 34px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font: inherit;
+  }
+
+  .sync-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 5px;
+    border-radius: 999px;
+    vertical-align: middle;
+  }
+
+  .sync-dot.green { background: #0f8a57; }
+  .sync-dot.purple { background: #7c3aed; }
+  .sync-dot.yellow { background: #c88a00; }
+  .sync-dot.red { background: #b33a32; }
+  .sync-dot.gray { background: #8a97a6; }
+  .sync-dot.blue { background: #2563eb; }
+
+  .sync-matrix {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .sync-matrix th,
+  .sync-matrix td {
+    border-bottom: 1px solid var(--line);
+    padding: 6px 4px;
+    text-align: left;
+  }
+
+  .sync-matrix tr {
+    cursor: pointer;
+  }
+
+  .sync-matrix tr:hover {
+    background: var(--soft);
+  }
+
+  .sync-card-list {
+    display: grid;
+    gap: 8px;
+  }
+
+  .sync-card {
+    border: 1px solid var(--line);
+    border-left-width: 7px;
+    border-radius: 6px;
+    padding: 9px;
+    background: #ffffff;
+  }
+
+  .sync-card.green { border-left-color: #0f8a57; }
+  .sync-card.purple { border-left-color: #7c3aed; }
+  .sync-card.yellow { border-left-color: #c88a00; }
+  .sync-card.red { border-left-color: #b33a32; }
+  .sync-card.gray { border-left-color: #8a97a6; }
+  .sync-card.blue { border-left-color: #2563eb; }
+
+  .sync-card h3 {
+    margin: 0 0 6px;
+    font-size: 13px;
+  }
+
+  .sync-field-grid {
+    display: grid;
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .sync-field-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 6px;
+    background: var(--soft);
+  }
+
+  .sync-field-row.bad {
+    border-color: rgba(179, 58, 50, 0.35);
+    background: #fff7f5;
+  }
+
+  .sync-health-list {
+    display: grid;
+    gap: 6px;
     margin: 0;
     padding: 0;
     list-style: none;
   }
 
-  .sync-progress-item {
+  .sync-health-list li {
     border: 1px solid var(--line);
-    border-left-width: 7px;
     border-radius: 6px;
-    padding: 8px;
+    padding: 7px;
     background: var(--soft);
-  }
-
-  .sync-progress-item.green {
-    border-left-color: #0f8a57;
-    background: #f1fbf6;
-  }
-
-  .sync-progress-item.red {
-    border-left-color: #b33a32;
-    background: #fff7f5;
-  }
-
-  .sync-progress-item.purple {
-    border-left-color: #7c3aed;
-    background: #f8f5ff;
-  }
-
-  .sync-progress-item strong {
-    display: block;
-    margin-bottom: 3px;
-  }
-
-  .sync-progress-item span {
-    color: var(--muted);
   }
 </style>
 
 <script>
   (function() {
     const originalRenderGenericWorkspace = renderGenericWorkspace;
-    state.visualSyncMode = state.visualSyncMode || 'DRY_RUN';
+    state.visualSyncScope = state.visualSyncScope || 'current_batch';
+    state.visualSyncManager = state.visualSyncManager || null;
 
     renderGenericWorkspace = function(payload) {
       originalRenderGenericWorkspace(payload);
-
-      if (!panels || !panels.validation || typeof renderVisualSyncPanel !== 'function') {
-        return;
-      }
-
+      if (!panels || !panels.validation) return;
       panels.validation.innerHTML = [
-        panel('Visual Asset Library Sync', renderVisualSyncPanel()),
-        panel('Read-only Validation', '<p class="muted">This sheet is not mapped to a specialized console layout yet. The guarded Visual Asset Library sync is available above when configuration and approvals are present.</p>')
+        panel('Visual Asset Library Sync Manager', renderVisualSyncPanel()),
+        panel('Health Dashboard', renderSyncHealthDashboard())
       ].join('');
-
-      if (typeof bindVisualSyncButtons === 'function') {
-        bindVisualSyncButtons();
-      }
+      bindVisualSyncButtons();
     };
 
     renderVisualSyncPanel = function() {
-      const sync = state.visualSync;
-      if (!sync) return '<p class="muted">Loading Visual Asset Library sync status...</p>';
-      const readyClass = sync.ready ? 'good' : 'block';
-      const batchLabel = sync.batch_start_row && sync.batch_end_row ? 'Rows ' + sync.batch_start_row + '-' + sync.batch_end_row : 'Batch not configured';
-      const mode = state.visualSyncMode || 'DRY_RUN';
-      const result = renderVisualSyncResult();
-      const blockers = [
-        sync.target === 'Visual Asset Library' ? '' : 'Target is not Visual Asset Library',
-        sync.sync_scope === 'ELIGIBLE_STAGING_BATCH' ? '' : 'Scope is not ELIGIBLE_STAGING_BATCH',
-        sync.has_required_config ? '' : 'Missing source sheet, Notion target, or token configuration',
-        sync.has_expanded_write_approval ? '' : 'Missing expanded write approval',
-        sync.has_visual_asset_library_write_approval ? '' : 'Missing Visual Asset Library write approval'
-      ].filter(Boolean);
-
+      const manager = state.visualSyncManager;
+      if (!manager) return '<p class="muted">Loading sync manager...</p>';
+      const status = manager.status || {};
+      const dashboard = manager.dashboard || { counts: {} };
+      const result = state.visualSyncResult;
       return [
-        '<div class="sync-status">',
-        '<div class="badge-row">',
-        badge(sync.ready ? 'Ready' : 'Blocked', readyClass),
-        badge(sync.target, sync.target === 'Visual Asset Library' ? 'good' : 'block'),
-        badge('Script mode: ' + sync.mode, sync.mode === 'DRY_RUN' ? 'good' : 'warn'),
-        badge(sync.guessed_prompts_enabled ? 'Guessed prompts enabled' : 'Guessed prompts off', sync.guessed_prompts_enabled ? 'warn' : 'good'),
-        '</div>',
-        '<section class="metric-grid sync-metrics">',
-        metric('Current batch', batchLabel),
-        metric('Cursor row', sync.cursor_row),
-        metric('Batch size', sync.batch_size),
-        metric('Next cursor', sync.next_cursor_row || 'Done'),
-        '</section>',
-        blockers.length ? '<ul class="warning-list">' + blockers.map(function(item) { return '<li class="blocker">' + escapeHtml(item) + '</li>'; }).join('') + '</ul>' : '',
-        '<div class="sync-mode-toggle" role="group" aria-label="Visual Asset Library sync mode">',
-        '<button id="visualSyncDryMode" class="' + (mode === 'DRY_RUN' ? 'is-active' : '') + '" type="button"' + (state.visualSyncBusy ? ' disabled' : '') + '>Dry Run</button>',
-        '<button id="visualSyncWriteMode" class="' + (mode === 'STAGING_WRITE' ? 'is-active' : '') + '" type="button"' + (state.visualSyncBusy ? ' disabled' : '') + '>Sync</button>',
-        '</div>',
-        '<div class="sync-actions">',
-        '<button id="refreshVisualSync" class="secondary-button" type="button"' + (state.visualSyncBusy ? ' disabled' : '') + '>Refresh</button>',
-        '<button id="runVisualSync" class="primary-button" type="button"' + (!sync.ready || state.visualSyncBusy ? ' disabled' : '') + '>' + renderRunButtonLabel(mode) + '</button>',
-        '<button id="advanceVisualSync" class="secondary-button" type="button"' + (!sync.next_cursor_row || state.visualSyncBusy ? ' disabled' : '') + '>Next 25</button>',
-        '<button id="resetVisualSync" class="secondary-button" type="button"' + (state.visualSyncBusy ? ' disabled' : '') + '>Reset to First Batch</button>',
-        '</div>',
-        '<p class="muted">Dry Run validates the current 25-row batch and marks each image. Sync writes the current batch to Notion and verifies it. Press Next 25 when you are ready to move the cursor forward.</p>',
-        result,
+        '<div class="sync-manager">',
+        renderSyncDashboard(dashboard, manager.next_action),
+        renderCurrentBatch(status),
+        renderSyncControls(manager),
+        result ? renderSyncResult(result) : '<p class="muted">Run Dry Run to classify this batch before syncing.</p>',
         '</div>'
       ].join('');
     };
 
-    renderVisualSyncResult = function() {
-      const result = state.visualSyncResult;
-      if (!result) return '';
-      if (result.error) return '<section class="sync-result error"><strong>Last run blocked</strong><p>' + escapeHtml(result.error) + '</p></section>';
-      if (result.message) return '<section class="sync-result"><strong>Batch cursor updated</strong><p>' + escapeHtml(result.message) + '</p></section>';
-      const validation = result.validation_summary || {};
-      const write = result.write_result || {};
-      const summary = result.mode === 'DRY_RUN'
-        ? field('Validated rows', (validation.batch_start_row || '') + '-' + (validation.batch_end_row || '')) + field('Writable fields', validation.writable_field_count) + field('Skipped rows', validation.skipped_row_count) + field('Next cursor', validation.next_cursor_row || 'Done')
-        : field('Synced', write.synced_count) + field('Verified', write.verified_count) + field('Skipped rows', write.skipped_count) + field('Next cursor', write.next_cursor_row || 'Done');
-      return '<section class="sync-result"><strong>' + escapeHtml(result.mode === 'DRY_RUN' ? 'Dry run complete' : 'Sync complete') + '</strong>' +
-        '<div class="field-list">' + summary + '</div>' +
-        renderVisualProgressRows(result.row_progress || []) +
+    function renderSyncDashboard(dashboard, nextAction) {
+      const percent = Number(dashboard.sync_percent || 0);
+      const counts = dashboard.counts || {};
+      return [
+        '<section>',
+        '<h3>Sync Dashboard</h3>',
+        '<div class="sync-progress-bar"><div class="sync-progress-fill" style="width:' + Math.max(0, Math.min(100, percent)) + '%"></div></div>',
+        '<p><strong>' + escapeHtml(dashboard.synced_images || 0) + ' / ' + escapeHtml(dashboard.total_images || 0) + ' images synced</strong> | ' + escapeHtml(percent) + '%</p>',
+        '<div class="sync-count-row">',
+        syncCount('green', counts.green || 0, 'Green'),
+        syncCount('purple', counts.purple || 0, 'Purple'),
+        syncCount('red', counts.red || 0, 'Red'),
+        syncCount('yellow', counts.yellow || 0, 'Yellow'),
+        syncCount('gray', counts.gray || 0, 'Gray'),
+        syncCount('blue', counts.blue || 0, 'Blue'),
+        '</div>',
+        '<p class="muted"><strong>Next:</strong> ' + escapeHtml(nextAction || 'Run Dry Run.') + '</p>',
+        '</section>'
+      ].join('');
+    }
+
+    function renderCurrentBatch(status) {
+      return '<section class="metric-grid sync-metrics">' +
+        metric('Rows', (status.batch_start_row || '') + '-' + (status.batch_end_row || '')) +
+        metric('Batch Size', status.batch_size || 25) +
+        metric('Next', status.next_cursor_row || 'Done') +
+        metric('Target', status.target || 'Unknown') +
+        metric('Mode', status.mode || 'DRY_RUN') +
+        metric('Cursor', status.cursor_row || '') +
         '</section>';
-    };
+    }
+
+    function renderSyncControls(manager) {
+      const disabled = state.visualSyncBusy ? ' disabled' : '';
+      const scopes = manager.scope_options || [];
+      return [
+        '<section class="sync-scope-row">',
+        '<label for="visualSyncScope"><strong>Selection</strong></label>',
+        '<select id="visualSyncScope"' + disabled + '>',
+        scopes.map(function(scope) {
+          return '<option value="' + escapeHtml(scope.value) + '"' + (scope.value === state.visualSyncScope ? ' selected' : '') + '>' + escapeHtml(scope.label) + '</option>';
+        }).join(''),
+        '</select>',
+        '</section>',
+        '<section class="sync-button-grid">',
+        actionButton('dryRunVisualSync', 'Dry Run', !manager.status.ready),
+        actionButton('syncVisualSync', 'Sync', !manager.status.ready),
+        actionButton('verifyVisualSync', 'Verify', !manager.status.ready),
+        actionButton('nextVisualSync', 'Next 25', !manager.status.next_cursor_row),
+        actionButton('previousVisualSync', 'Previous 25', false),
+        actionButton('resyncSelectedVisualSync', 'Resync Selected', !manager.status.ready),
+        actionButton('syncFailedVisualSync', 'Sync Failed', !manager.status.ready),
+        actionButton('syncPartialVisualSync', 'Sync Partial', !manager.status.ready),
+        actionButton('syncMissingVisualSync', 'Sync Missing', !manager.status.ready),
+        actionButton(manager.paused ? 'resumeVisualSync' : 'pauseVisualSync', manager.paused ? 'Resume' : 'Pause', false),
+        '</section>'
+      ].join('');
+    }
+
+    function renderSyncResult(result) {
+      if (result.error) return '<section class="sync-result error"><strong>Last run blocked</strong><p>' + escapeHtml(result.error) + '</p></section>';
+      const summary = result.summary || {};
+      const rows = result.row_progress || [];
+      return [
+        '<section class="sync-result">',
+        '<strong>' + escapeHtml(result.action || 'Sync manager') + ' complete</strong>',
+        '<div class="field-list">',
+        field('Rows processed', summary.total || rows.length || 0),
+        field('Green', ((summary.counts || {}).synced || 0)),
+        field('Purple', ((summary.counts || {}).partial || 0)),
+        field('Yellow', ((summary.counts || {}).waiting || 0)),
+        field('Red', ((summary.counts || {}).failed || 0)),
+        field('Next action', summary.next_action || ''),
+        '</div>',
+        renderSyncMatrix(rows),
+        renderImageCards(rows),
+        '</section>'
+      ].join('');
+    }
+
+    function renderSyncMatrix(rows) {
+      if (!rows.length) return '<p class="muted">No image rows returned.</p>';
+      return '<table class="sync-matrix"><thead><tr><th>Row</th><th>Image</th><th>Notion</th><th>Validation</th><th>Write</th><th>Verify</th><th>%</th></tr></thead><tbody>' +
+        rows.map(function(row) {
+          const stages = row.stages || {};
+          return '<tr data-sync-row="' + escapeHtml(row.source_row) + '">' +
+            '<td>' + escapeHtml(row.source_row) + '</td>' +
+            '<td>' + statusDot(row.color) + '</td>' +
+            '<td>' + statusDot(stageColor(stages.notion)) + '</td>' +
+            '<td>' + statusDot(stageColor(stages.validation)) + '</td>' +
+            '<td>' + statusDot(stageColor(stages.write)) + '</td>' +
+            '<td>' + statusDot(stageColor(stages.verify)) + '</td>' +
+            '<td>' + escapeHtml(row.sync_percent || 0) + '%</td>' +
+            '</tr>';
+        }).join('') + '</tbody></table>';
+    }
+
+    function renderImageCards(rows) {
+      if (!rows.length) return '';
+      return '<div class="sync-card-list">' + rows.slice(0, 25).map(function(row) {
+        const fields = row.field_results && row.field_results.length ? row.field_results : [];
+        return '<article class="sync-card ' + escapeHtml(row.color || 'gray') + '">' +
+          '<h3>Row ' + escapeHtml(row.source_row) + ' | ' + escapeHtml(row.label || row.status) + ' | ' + escapeHtml(row.sync_percent || 0) + '%</h3>' +
+          '<p class="muted">' + escapeHtml(row.detail || row.next_action || '') + '</p>' +
+          '<div class="badge-row">' +
+          badge('Missing: ' + ((row.missing_fields || []).length), (row.missing_fields || []).length ? 'warn' : 'good') +
+          badge('Changed: ' + ((row.changed_fields || []).length), (row.changed_fields || []).length ? 'warn' : 'good') +
+          (row.notion_page_url ? '<a href="' + escapeHtml(row.notion_page_url) + '" target="_blank" rel="noopener">Open Notion</a>' : '') +
+          '</div>' +
+          renderFieldRows(fields) +
+          '</article>';
+      }).join('') + '</div>';
+    }
+
+    function renderFieldRows(fields) {
+      if (!fields.length) return '';
+      return '<div class="sync-field-grid">' + fields.slice(0, 18).map(function(item) {
+        return '<div class="sync-field-row ' + (item.ok ? '' : 'bad') + '"><span>' + escapeHtml(item.field) + '</span><strong>' + escapeHtml(item.ok ? (item.changed ? 'Changed' : 'OK') : 'Skipped') + '</strong></div>';
+      }).join('') + '</div>';
+    }
+
+    function renderSyncHealthDashboard() {
+      const manager = state.visualSyncManager;
+      if (!manager) return '<p class="muted">Loading health checks...</p>';
+      const health = manager.health || {};
+      return '<ul class="sync-health-list">' +
+        '<li>Total sheet images: <strong>' + escapeHtml(health.total_sheet_images || 0) + '</strong></li>' +
+        '<li>Duplicate file IDs: <strong>' + escapeHtml(health.duplicate_file_id_count || 0) + '</strong></li>' +
+        '<li>Missing Notion pages: <strong>' + escapeHtml(health.missing_notion_page_count || 0) + '</strong></li>' +
+        '<li>Partial rows: <strong>' + escapeHtml(health.partial_count || 0) + '</strong></li>' +
+        '<li>Failed rows: <strong>' + escapeHtml(health.failed_count || 0) + '</strong></li>' +
+        '<li>Schema mismatches: <strong>' + escapeHtml(health.schema_mismatch_count || 0) + '</strong></li>' +
+        '<li>Safe next fix: ' + escapeHtml(health.next_safe_fix || '') + '</li>' +
+        '</ul>';
+    }
 
     bindVisualSyncButtons = function() {
-      const refreshButton = document.getElementById('refreshVisualSync');
-      const runButton = document.getElementById('runVisualSync');
-      const advanceButton = document.getElementById('advanceVisualSync');
-      const resetButton = document.getElementById('resetVisualSync');
-      const dryButton = document.getElementById('visualSyncDryMode');
-      const writeButton = document.getElementById('visualSyncWriteMode');
-
-      if (refreshButton) refreshButton.addEventListener('click', refreshVisualSyncStatus);
-      if (runButton) runButton.addEventListener('click', runVisualSyncBatch);
-      if (advanceButton) advanceButton.addEventListener('click', advanceVisualSyncBatch);
-      if (resetButton) resetButton.addEventListener('click', resetVisualSyncCursor);
-      if (dryButton) dryButton.addEventListener('click', function() { setVisualSyncMode('DRY_RUN'); });
-      if (writeButton) writeButton.addEventListener('click', function() { setVisualSyncMode('STAGING_WRITE'); });
+      const scope = document.getElementById('visualSyncScope');
+      if (scope) scope.addEventListener('change', function(event) { state.visualSyncScope = event.target.value; });
+      bindAction('dryRunVisualSync', 'DRY_RUN', function() { return state.visualSyncScope; });
+      bindAction('syncVisualSync', 'SYNC', function() { return state.visualSyncScope; }, true);
+      bindAction('verifyVisualSync', 'VERIFY', function() { return state.visualSyncScope; });
+      bindAction('nextVisualSync', 'NEXT', function() { return 'current_batch'; });
+      bindAction('previousVisualSync', 'PREVIOUS', function() { return 'current_batch'; });
+      bindAction('resyncSelectedVisualSync', 'SYNC', function() { return 'selected_rows'; }, true);
+      bindAction('syncFailedVisualSync', 'SYNC', function() { return 'failed'; }, true);
+      bindAction('syncPartialVisualSync', 'SYNC', function() { return 'partial'; }, true);
+      bindAction('syncMissingVisualSync', 'SYNC', function() { return 'missing'; }, true);
+      bindAction('pauseVisualSync', 'PAUSE', function() { return 'current_batch'; });
+      bindAction('resumeVisualSync', 'RESUME', function() { return 'current_batch'; });
+      document.querySelectorAll('[data-sync-row]').forEach(function(row) {
+        row.addEventListener('click', function() { selectSpreadsheetRow(row.dataset.syncRow); });
+      });
     };
 
-    runVisualSyncBatch = function() {
-      if (state.visualSyncBusy) return;
-      const sync = state.visualSync || {};
-      const mode = state.visualSyncMode || 'DRY_RUN';
-      const label = sync.batch_start_row && sync.batch_end_row ? 'rows ' + sync.batch_start_row + '-' + sync.batch_end_row : 'the current batch';
-      if (mode === 'STAGING_WRITE' && !window.confirm('Sync ' + label + ' to the Visual Asset Library in Notion?')) return;
+    refreshVisualSyncStatus = function() {
+      google.script.run
+        .withSuccessHandler(function(payload) {
+          state.visualSyncManager = payload;
+          state.visualSync = payload.status || state.visualSync;
+          if (state.dashboard) renderWorkspace(state.dashboard);
+        })
+        .withFailureHandler(function(error) {
+          state.visualSyncResult = { error: error && error.message ? error.message : 'Could not load Visual Asset Library sync manager.' };
+          if (state.dashboard) renderWorkspace(state.dashboard);
+        })
+        .getVisualAssetLibrarySyncManager();
+    };
 
+    function bindAction(id, action, scopeFn, confirmWrite) {
+      const button = document.getElementById(id);
+      if (!button) return;
+      button.addEventListener('click', function() {
+        const scope = scopeFn();
+        if (confirmWrite && !window.confirm(action + ' scope: ' + scope + '?')) return;
+        runManagerAction(action, scope);
+      });
+    }
+
+    function runManagerAction(action, scope) {
+      if (state.visualSyncBusy) return;
       state.visualSyncBusy = true;
       state.visualSyncResult = null;
       if (state.dashboard) renderWorkspace(state.dashboard);
@@ -177,72 +359,43 @@
         .withSuccessHandler(function(payload) {
           state.visualSyncBusy = false;
           state.visualSyncResult = payload;
-          state.visualSync = payload.status || state.visualSync;
+          state.visualSyncManager = payload.manager || state.visualSyncManager;
+          state.visualSync = state.visualSyncManager ? state.visualSyncManager.status : state.visualSync;
           if (state.dashboard) renderWorkspace(state.dashboard);
         })
         .withFailureHandler(function(error) {
           state.visualSyncBusy = false;
-          state.visualSyncResult = { error: error && error.message ? error.message : 'Visual Asset Library sync failed.' };
+          state.visualSyncResult = { error: error && error.message ? error.message : 'Sync manager action failed.' };
           refreshVisualSyncStatus();
         })
-        .runVisualAssetLibrarySyncBatch(mode);
-    };
-
-    function setVisualSyncMode(mode) {
-      state.visualSyncMode = mode;
-      if (state.dashboard) renderWorkspace(state.dashboard);
+        .runVisualAssetLibrarySyncManager(action, scope);
     }
 
-    function advanceVisualSyncBatch() {
-      if (state.visualSyncBusy) return;
-      state.visualSyncBusy = true;
-      google.script.run
-        .withSuccessHandler(function(payload) {
-          state.visualSyncBusy = false;
-          state.visualSync = payload;
-          state.visualSyncResult = payload.message ? { message: payload.message } : state.visualSyncResult;
-          if (state.dashboard) renderWorkspace(state.dashboard);
-        })
-        .withFailureHandler(function(error) {
-          state.visualSyncBusy = false;
-          state.visualSyncResult = { error: error && error.message ? error.message : 'Could not advance to the next batch.' };
-          if (state.dashboard) renderWorkspace(state.dashboard);
-        })
-        .advanceVisualAssetLibrarySyncBatch();
+    function selectSpreadsheetRow(rowNumber) {
+      google.script.run.withFailureHandler(function() {}).selectVisualAssetLibrarySourceRow(Number(rowNumber));
     }
 
-    function resetVisualSyncCursor() {
-      if (state.visualSyncBusy) return;
-      state.visualSyncBusy = true;
-      google.script.run
-        .withSuccessHandler(function(payload) {
-          state.visualSyncBusy = false;
-          state.visualSync = payload;
-          state.visualSyncResult = payload.message ? { message: payload.message } : null;
-          if (state.dashboard) renderWorkspace(state.dashboard);
-        })
-        .withFailureHandler(function(error) {
-          state.visualSyncBusy = false;
-          state.visualSyncResult = { error: error && error.message ? error.message : 'Could not reset the batch cursor.' };
-          if (state.dashboard) renderWorkspace(state.dashboard);
-        })
-        .resetVisualAssetLibrarySyncCursor();
+    function syncCount(color, count, label) {
+      return '<div class="metric"><strong>' + statusDot(color) + escapeHtml(count) + '</strong><span>' + escapeHtml(label) + '</span></div>';
     }
 
-    function renderRunButtonLabel(mode) {
-      if (state.visualSyncBusy) return 'Running...';
-      return mode === 'STAGING_WRITE' ? 'Sync Current 25' : 'Dry Run Current 25';
+    function actionButton(id, label, disabled) {
+      return '<button id="' + escapeHtml(id) + '" class="secondary-button" type="button"' + (disabled || state.visualSyncBusy ? ' disabled' : '') + '>' + escapeHtml(state.visualSyncBusy ? 'Working...' : label) + '</button>';
     }
 
-    function renderVisualProgressRows(rows) {
-      if (!rows.length) return '<p class="muted">No image progress rows returned yet.</p>';
-      return '<ul class="sync-progress-list">' + rows.map(function(row) {
-        const link = row.notion_page_url ? ' <a href="' + escapeHtml(row.notion_page_url) + '" target="_blank" rel="noopener">Open Notion</a>' : '';
-        return '<li class="sync-progress-item ' + escapeHtml(row.color || '') + '">' +
-          '<strong>Row ' + escapeHtml(row.source_row) + ' | ' + escapeHtml(row.label || row.status) + '</strong>' +
-          '<span>' + escapeHtml(row.detail || '') + link + '</span>' +
-          '</li>';
-      }).join('') + '</ul>';
+    function statusDot(color) {
+      return '<span class="sync-dot ' + escapeHtml(color || 'gray') + '"></span>';
     }
+
+    function stageColor(value) {
+      if (value === 'synced') return 'green';
+      if (value === 'partial') return 'purple';
+      if (value === 'failed' || value === 'blocked') return 'red';
+      if (value === 'waiting' || value === 'missing') return 'yellow';
+      if (value === 'syncing') return 'blue';
+      return 'gray';
+    }
+
+    refreshVisualSyncStatus();
   })();
 </script>
