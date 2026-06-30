@@ -30,15 +30,26 @@ var VisualAssetLibraryPromptMetadataService = (function() {
       icons: 'icon',
       icon_set: 'icon',
       iconset: 'icon',
+      single_icon: 'icon',
+      ui_icon: 'icon',
+      prop: 'poster visual',
+      prop_asset: 'poster visual',
+      graphic: 'poster visual',
+      illustration: 'poster visual',
+      product_asset: 'poster visual',
+      product: 'poster visual',
+      visual_asset: 'poster visual',
+      background: 'poster visual',
+      poster: 'poster visual',
+      poster_visual: 'poster visual',
       diagram: 'diagram',
       worksheet: 'worksheet image',
       worksheet_image: 'worksheet image',
+      worksheet_graphic: 'worksheet image',
       slide: 'slide image',
       slide_image: 'slide image',
       process: 'process visual',
-      process_visual: 'process visual',
-      poster: 'poster visual',
-      poster_visual: 'poster visual'
+      process_visual: 'process visual'
     },
     'Approved use': {
       worksheet: 'worksheet',
@@ -166,7 +177,7 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     if (direct.indexOf(value) !== -1) return { value: value, sourceColumn: sourceColumn || '', reason: '' };
     const alias = (CONTROLLED_ALIASES[fieldName] || {})[normalize_(value)];
     if (alias) return { value: alias, sourceColumn: sourceColumn || '', reason: '' };
-    return { value: '', sourceColumn: sourceColumn || '', reason: 'source value is outside approved options: ' + value };
+    return { value: '', sourceColumn: sourceColumn || '', reason: 'source value is outside approved options and needs mapping: ' + value };
   }
 
   function parseKeywords_(rawValue) {
