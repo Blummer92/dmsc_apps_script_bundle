@@ -98,6 +98,13 @@ function testVisualAssetLibraryDryRunProofAcceptsExactBatch() {
   }
 }
 
+function testVisualAssetLibrarySafeUpsertHelpersExist() {
+  assertEqual_('function', typeof findNotionPagesByFileId, 'Global findNotionPagesByFileId helper should be deployed.');
+  assertEqual_('function', typeof upsertVisualAssetPage, 'Global upsertVisualAssetPage helper should be deployed.');
+  assertEqual_('function', typeof VisualAssetLibraryProductionSyncService.findNotionPagesByFileId, 'Service lookup helper should be exported.');
+  assertEqual_('function', typeof VisualAssetLibraryProductionSyncService.upsertVisualAssetPage, 'Service upsert helper should be exported.');
+}
+
 function testVisualAssetLibraryProductionSyncTestSuite() {
   testPropertyAliasServiceResolvesPromptAliases();
   testPropertyAliasServiceDoesNotRequirePromptSourceText();
@@ -106,7 +113,8 @@ function testVisualAssetLibraryProductionSyncTestSuite() {
   testKeywordStrategyCreateModeAllowsMissing();
   testVisualAssetLibraryDryRunProofBlocksStaleCursor();
   testVisualAssetLibraryDryRunProofAcceptsExactBatch();
-  return { ok: true, tests: 7 };
+  testVisualAssetLibrarySafeUpsertHelpersExist();
+  return { ok: true, tests: 8 };
 }
 
 function assertEqual_(expected, actual, message) {
