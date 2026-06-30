@@ -28,10 +28,6 @@ function runVisualAssetLibrarySyncBatch(mode) {
     if (writeResult.synced_count !== writeResult.verified_count) {
       throw new Error('Blocked: synced_count and verified_count do not match.');
     }
-
-    if (writeResult.next_cursor_row) {
-      props.setProperty('DM_NOTION_SYNC_CURSOR_ROW', String(writeResult.next_cursor_row));
-    }
     props.setProperty('DM_NOTION_SYNC_MODE', 'DRY_RUN');
 
     return {
