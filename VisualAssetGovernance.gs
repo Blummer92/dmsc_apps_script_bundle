@@ -75,11 +75,6 @@ const VAM_GOV_CONFIG = Object.freeze({
 function runVisualAssetValidationDashboard() {
   const report = buildVisualAssetValidationReport();
   vamWriteValidationDashboard_(report);
-  SpreadsheetApp.openById(VAM_GOV_CONFIG.spreadsheetId).toast(
-    'Visual Asset validation complete: ' + report.summary.warnings + ' warnings, ' + report.summary.suggestions + ' suggestions.',
-    'Visual Asset Governance',
-    8
-  );
   return report.summary;
 }
 
