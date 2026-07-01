@@ -5,7 +5,9 @@ This documents the warning-only governance validator added for the `Visual Asset
 ## What It Adds
 
 - `VisualAssetGovernance.gs`
+- `VisualAssetGovernanceMenu.gs`
 - Public runner: `runVisualAssetValidationDashboard()`
+- Menu installer: `installVisualAssetGovernanceMenuTrigger()`
 - Read-only report builder: `buildVisualAssetValidationReport()`
 - Helper report functions:
   - `getVisualAssetMissingRequiredFields()`
@@ -34,7 +36,7 @@ The validator currently targets:
 - Asset tab: `Visual Asset Metadata`
 - Generated dashboard tab: `Validation Dashboard`
 
-## How To Run
+## How To Run Manually
 
 1. Push this bundle to the existing Apps Script project.
 2. Open the Apps Script editor.
@@ -42,13 +44,19 @@ The validator currently targets:
 4. Authorize the script if prompted.
 5. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
 
-## Optional Menu Wiring
+## Menu Setup
 
-The existing project already owns `onOpen()` in `Code.gs`. To add a menu item after this module is installed, add these lines to the existing `DMSC Dashboard` menu chain:
+The existing project already owns `onOpen()` in `Code.gs`, so this bundle avoids adding a second `onOpen()` function. To add a separate spreadsheet menu safely:
 
-```javascript
-.addSeparator()
-.addItem('Refresh Visual Asset Validation', 'runVisualAssetValidationDashboard')
-```
+1. Push `VisualAssetGovernance.gs` and `VisualAssetGovernanceMenu.gs` to Apps Script.
+2. In the Apps Script editor, run `installVisualAssetGovernanceMenuTrigger()` once.
+3. Reload the Visual Asset Metadata spreadsheet.
+4. Use the new `Visual Asset Governance` menu.
 
-Keep only one `onOpen()` function in the Apps Script project.
+Menu items:
+
+- `Refresh Validation Dashboard` runs `runVisualAssetValidationDashboardFromMenu()`.
+- `Show Missing Required Count` runs `showVisualAssetMissingRequiredCount()`.
+- `Remove Visual Asset Menu Trigger` removes the installable open trigger.
+
+Keep only one simple `onOpen()` function in the Apps Script project. The existing `Code.gs` `onOpen()` remains the owner of the `DMSC Dashboard` menu.
