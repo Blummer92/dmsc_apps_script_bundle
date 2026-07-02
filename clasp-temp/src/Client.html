@@ -1,0 +1,403 @@
+<script>
+  const state = { dashboard: null, selectedIndex: 0 };
+  const panels = {
+    scan: document.getElementById('scan'),
+    review: document.getElementById('review'),
+    validation: document.getElementById('validation'),
+    source: document.getElementById('source'),
+    handoff: document.getElementById('handoff')
+  };
+  const messagePanel = document.getElementById('messagePanel');
+  const configStatus = document.getElementById('configStatus');
+  const workspaceName = document.getElementById('workspaceName');
+  const workspaceMode = document.getElementById('workspaceMode');
+
+  document.querySelectorAll('.tab-button').forEach(function(button) {
+    button.addEventListener('click', function() { activateTab(button.dataset.tab); });
+  });
+
+  google.script.run.withSuccessHandler(renderBootstrap).withFailureHandler(renderFailure).getDashboardBootstrap();
+  google.script.run.withSuccessHandler(renderDashboard).withFailureHandler(renderFailure).getDriveMetadataDashboard();
+
+  function renderBootstrap(payload) {
+    const status = payload.configStatus || {};
+    configStatus.textContent = [
+      status.hasDashboardSpreadsheet ? 'Dashboard configured' : 'Using bound dashboard',
+      'Default sheet: ' + (status.metadataSheetName || 'Drive Images'),
+      status.hasSourceLibrarySpreadsheet ? 'Source Library configured' : 'Source Library summary only',
+      'Limit ' + status.resultLimit
+    ].join(' | ');
+  }
+
+  function renderDashboard(payload) {
+    state.dashboard = payload;
+    const workspace = payload.workspace || {};
+    workspaceName.textContent = workspace.activeSheetName || workspace.name || 'Unknown Workspace';
+    workspaceMode.textContent = 'Workspace mode: ' + (workspace.modeLabel || 'Preview');
+    applyWorkspaceTabLabels(workspace.tabLabels || {});
+    renderMessages(payload.summary.warnings || []);
+    renderWorkspace(payload);
+  }
+
+  function applyWorkspaceTabLabels(labels) {
+    document.querySelectorAll('.tab-button').forEach(function(button) {
+      const label = labels[button.dataset.tab];
+      if (label) {
+        button.textContent = label;
+      }
+    });
+  }
+
+  function renderWorkspace(payload) {
+    if ((payload.workspace || {}).supported === false) return renderGenericWorkspace(payload);
+    const name = normalizeName((payload.workspace || {}).name);
+    if (name === 'handoff_records') return renderHandoffWorkspace(payload);
+    if (name === 'project_logs') return renderProjectLogsWorkspace(payload);
+    if (name === 'agent_data_contracts') return renderAgentContractsWorkspace(payload);
+    if (name === 'change_log') return renderChangeLogWorkspace(payload);
+    return renderDriveImagesWorkspace(payload);
+  }
+
+  function renderGenericWorkspace(payload) {
+    const records = payload.records || [];
+    panels.scan.innerHTML = [
+      renderWorkspaceHeader(payload, [metric('Rows', records.length), metric('Supported workspaces', ((payload.workspace || {}).supportedWorkspaces || []).length)]),
+      panel('Workspace Preview', renderGenericQueue(records.slice(0, 12), 'records'))
+    ].join('');
+    panels.review.innerHTML = panel('Selected Record', renderSelectedGeneric(records));
+    panels.validation.innerHTML = panel('Read-only Validation', '<p class="muted">This sheet is not mapped to a specialized console layout yet. No write actions are available.</p>');
+    panels.source.innerHTML = panel('Source Summary', '<p class="muted">No source summary layout is configured for this workspace.</p>');
+    panels.handoff.innerHTML = panel('Handoff Preview', '<p class="muted">No handoff preview layout is configured for this workspace.</p>');
+  }
+
+  function renderDriveImagesWorkspace(payload) {
+    const summary = payload.summary || {};
+    const counts = summary.workflowCounts || {};
+    const records = payload.records || [];
+    panels.scan.innerHTML = [
+      renderWorkspaceHeader(payload, [
+        metric('Total records', summary.totalRecords),
+        metric('Reviewable records', counts.reviewableRecords),
+        metric('Needs metadata cleanup', counts.needsMetadataCleanup),
+        metric('Reference candidates', counts.referenceCandidates),
+        metric('Needs source approval', counts.needsSourceApproval),
+        metric('Production blocked', counts.productionBlocked),
+        metric('Hard blocked', counts.hardBlocked),
+        metric('Duplicate candidates', summary.duplicateCandidateCount)
+      ]),
+      panel("Today's Work", renderQueue(records, function(r) { return r.workflowStatus === 'Reviewable records'; }, 'reviewable records')),
+      panel('Metadata Cleanup', renderQueue(records, function(r) { return r.workflowStatus === 'Needs metadata cleanup'; }, 'metadata cleanup records')),
+      panel('Reference Candidates', renderQueue(records, function(r) { return r.workflowStatus === 'Reference candidates'; }, 'reference candidates')),
+      panel('Source Approval Prep', renderQueue(records, function(r) { return r.workflowStatus === 'Needs source approval'; }, 'source approval prep records')),
+      panel('Production Blockers', renderQueue(records, function(r) { return r.productionStatus === 'Production blocked' || r.productionStatus === 'Hard blocked'; }, 'production blocked records'))
+    ].join('');
+
+    renderDriveReview(payload);
+    renderDriveValidation(payload);
+    renderDriveSource(payload);
+    panels.handoff.innerHTML = panel('Handoff Preview',
+      '<p class="muted">Manual review text only. No export or update action is available.</p>' +
+      '<section class="handoff-box">' + escapeHtml(payload.handoffText || '') + '</section>');
+  }
+
+  function renderDriveReview(payload) {
+    const records = payload.records || [];
+    if (!records.length) { panels.review.innerHTML = emptyPanel('No records available for review.'); return; }
+    const record = records[state.selectedIndex] || records[0];
+    panels.review.innerHTML = [
+      panel('Selected Record', renderRecordPicker(records) + renderDriveRecord(record)),
+      panel('Permission Grid', renderPermissionGrid(record)),
+      panel('Why Blocked', renderWhyBlocked(record)),
+      panel('Prompt Comparison', renderPrompts(record))
+    ].join('');
+    document.getElementById('recordPicker').addEventListener('change', function(event) {
+      state.selectedIndex = Number(event.target.value);
+      renderDriveReview(state.dashboard);
+    });
+  }
+
+  function renderDriveValidation(payload) {
+    const records = payload.records || [];
+    const warnings = records.filter(function(r) { return r.validationWarnings.length || r.unresolvedDuplicate; });
+    panels.validation.innerHTML = [
+      panel('Metadata Cleanup', renderWarningList(warnings)),
+      panel('Duplicate Review', renderDuplicateGroups(payload.duplicateCandidateGroups || [])),
+      panel('Production Blockers', renderQueue(records, function(r) { return r.blocked || r.unresolvedDuplicate; }, 'production blockers'))
+    ].join('');
+  }
+
+  function renderDriveSource(payload) {
+    const records = payload.records || [];
+    panels.source.innerHTML = panel('Source Approval Prep', records.slice(0, 50).map(function(r) {
+      const s = r.sourceApproval || {};
+      return '<article class="record-card"><h2>Row ' + escapeHtml(r.rowNumber) + ' | ' + escapeHtml(recordTitle(r)) + '</h2>' +
+        '<div class="badge-row">' +
+        badge('Status: ' + (s.approvalStatus || 'Unknown'), normalizeName(s.approvalStatus) === 'approved' ? 'good' : 'warn') +
+        badge(s.approvalEvidenceUrl ? 'Evidence present' : 'Evidence missing', s.approvalEvidenceUrl ? 'good' : 'block') +
+        '</div>' +
+        field('Evidence', linkOrText(s.approvalEvidenceUrl)) +
+        field('Approved By', s.approvedBy) +
+        field('Restrictions', s.restrictions) +
+        '</article>';
+    }).join('') || '<p class="muted">No source approval summaries available.</p>');
+  }
+
+  function renderHandoffWorkspace(payload) {
+    const records = payload.records || [];
+    panels.scan.innerHTML = [
+      renderWorkspaceHeader(payload, [
+        metric('Pending handoffs', filterByAny(records, ['pending', 'open', 'ready']).length),
+        metric('Waiting for review', filterByAny(records, ['waiting', 'review']).length),
+        metric('Completed handoffs', filterByAny(records, ['complete', 'completed', 'done']).length),
+        metric('Failed handoffs', filterByAny(records, ['failed', 'error', 'blocked']).length)
+      ]),
+      reviewOnlyNote('Handoff Preview Records'),
+      panel('Pending Handoffs', renderGenericQueue(filterByAny(records, ['pending', 'open', 'ready']), 'pending handoffs')),
+      panel('Waiting for Review', renderGenericQueue(filterByAny(records, ['waiting', 'review']), 'handoffs waiting for review'))
+    ].join('');
+    panels.review.innerHTML = [
+      panel('Handoff Preview Details', renderSelectedGeneric(records)),
+      panel('Next Owner', renderFieldQueue(records, ['next_owner', 'owner', 'assigned_to'], 'No owner fields detected.')),
+      panel('Workflow Status', renderFieldQueue(records, ['workflow_status', 'handoff_status', 'status', 'review_status'], 'No workflow status fields detected.'))
+    ].join('');
+    panels.validation.innerHTML = panel('Failed Handoffs', renderGenericQueue(filterByAny(records, ['failed', 'error', 'blocked']), 'failed handoffs'));
+    panels.source.innerHTML = panel('Waiting for Review', renderGenericQueue(filterByAny(records, ['waiting', 'review']), 'handoffs waiting for review'));
+    panels.handoff.innerHTML = [
+      panel('Completed Handoffs', renderGenericQueue(filterByAny(records, ['complete', 'completed', 'done']), 'completed handoffs')),
+      panel('Handoff Preview Details', renderSelectedGeneric(records))
+    ].join('');
+  }
+
+  function renderProjectLogsWorkspace(payload) {
+    const records = payload.records || [];
+    panels.scan.innerHTML = [
+      renderWorkspaceHeader(payload, [metric('Log rows', records.length), metric('Errors', filterByAny(records, ['error', 'failed']).length)]),
+      reviewOnlyNote('Project Logs'),
+      panel('Recent Activity', renderGenericQueue(records.slice(0, 12), 'recent activity')),
+      panel('Performance', renderFieldQueue(records, ['duration', 'runtime', 'latency', 'performance'], 'No performance fields detected.'))
+    ].join('');
+    panels.review.innerHTML = panel('Agent Activity Timeline', renderFieldQueue(records, ['agent', 'agent_name', 'activity', 'event', 'timestamp'], 'No agent timeline fields detected.'));
+    panels.validation.innerHTML = panel('Errors', renderGenericQueue(filterByAny(records, ['error', 'failed', 'exception']), 'error records'));
+    panels.source.innerHTML = panel('Version History', renderFieldQueue(records, ['version', 'commit', 'sha', 'release'], 'No version fields detected.'));
+    panels.handoff.innerHTML = panel('Recent Activity', renderGenericQueue(records.slice(0, 20), 'recent activity'));
+  }
+
+  function renderAgentContractsWorkspace(payload) {
+    const records = payload.records || [];
+    panels.scan.innerHTML = [
+      renderWorkspaceHeader(payload, [metric('Connected agents', records.length), metric('Missing contracts', filterByAny(records, ['missing', 'not configured']).length)]),
+      reviewOnlyNote('Agent Data Contracts'),
+      panel('Connected Agents', renderFieldQueue(records, ['agent', 'agent_name', 'connected_agent', 'owner_agent'], 'No connected agent fields detected.')),
+      panel('Contract Status', renderFieldQueue(records, ['contract_status', 'status', 'review_status'], 'No contract status fields detected.'))
+    ].join('');
+    panels.review.innerHTML = [
+      panel('Version Compatibility', renderFieldQueue(records, ['version', 'compatible_version', 'compatibility', 'schema_revision'], 'No version compatibility fields detected.')),
+      panel('Permission Matrix', renderFieldQueue(records, ['permissions', 'permission_matrix', 'scope', 'allowed_actions'], 'No permission matrix fields detected.'))
+    ].join('');
+    panels.validation.innerHTML = panel('Missing Contracts', renderGenericQueue(filterByAny(records, ['missing', 'not configured', 'blocked']), 'missing contracts'));
+    panels.source.innerHTML = panel('Permission Matrix', renderFieldQueue(records, ['permissions', 'permission_matrix', 'scope', 'allowed_actions'], 'No permission matrix fields detected.'));
+    panels.handoff.innerHTML = panel('Contract Status', renderFieldQueue(records, ['contract_status', 'status', 'review_status'], 'No contract status fields detected.'));
+  }
+
+  function renderChangeLogWorkspace(payload) {
+    const records = payload.records || [];
+    panels.scan.innerHTML = [
+      renderWorkspaceHeader(payload, [metric('Changes', records.length), metric('Pending changes', filterByAny(records, ['pending', 'open']).length)]),
+      reviewOnlyNote('Change Log'),
+      panel('Recent Changes', renderGenericQueue(records.slice(0, 12), 'recent changes')),
+      panel('Version Timeline', renderFieldQueue(records, ['version', 'date', 'changed_at', 'commit', 'sha'], 'No version timeline fields detected.'))
+    ].join('');
+    panels.review.innerHTML = panel('Pending Changes', renderGenericQueue(filterByAny(records, ['pending', 'open', 'proposed']), 'pending changes'));
+    panels.validation.innerHTML = panel('Rollback Candidates', renderGenericQueue(filterByAny(records, ['rollback', 'revert', 'candidate']), 'rollback candidates'));
+    panels.source.innerHTML = panel('Version Timeline', renderFieldQueue(records, ['version', 'date', 'changed_at', 'commit', 'sha'], 'No version timeline fields detected.'));
+    panels.handoff.innerHTML = panel('Pending Changes', renderGenericQueue(filterByAny(records, ['pending', 'open', 'proposed']), 'pending changes'));
+  }
+
+  function renderWorkspaceHeader(payload, metrics) {
+    const workspace = payload.workspace || {};
+    return panel('Status Header',
+      '<p class="muted">' + escapeHtml(workspace.statusLabel || 'Read-only workspace') + '</p>' +
+      '<div class="badge-row">' +
+      badge('Current workspace: ' + (workspace.activeSheetName || workspace.name || 'Unknown'), workspace.supported === false ? 'warn' : 'good') +
+      badge('Workspace mode: ' + (workspace.modeLabel || 'Preview'), 'good') +
+      badge('Read-only', 'good') +
+      '</div>' +
+      '<section class="metric-grid">' + metrics.join('') + '</section>');
+  }
+
+  function reviewOnlyNote(workspaceLabel) {
+    return panel(workspaceLabel + ' Preview/Review Workspace',
+      '<p class="muted">Display-only surface. Owner writes, approvals, exports, generation, merges, prompt overwrites, and readiness updates remain outside this console.</p>');
+  }
+
+  function renderRecordPicker(records) {
+    return '<select id="recordPicker" class="record-picker">' + records.map(function(r, i) {
+      return '<option value="' + i + '"' + (i === state.selectedIndex ? ' selected' : '') + '>Row ' +
+        escapeHtml(r.rowNumber) + ' | ' + escapeHtml(recordTitle(r)) + '</option>';
+    }).join('') + '</select>';
+  }
+
+  function renderDriveRecord(r) {
+    return '<article class="record-card"><h2>' + escapeHtml(recordTitle(r)) + '</h2>' +
+      '<div class="badge-row">' +
+      badge(r.reviewTier, tierClass(r.reviewTier)) +
+      badge(r.workflowStatus, statusClass(r.workflowStatus)) +
+      badge(r.productionStatus, r.productionStatus === 'Hard blocked' ? 'block' : 'warn') +
+      '</div>' +
+      field('Drive URL', linkOrText(r.driveUrl)) +
+      field('File ID', r.fileId) +
+      field('Full Path', r.fullPath) +
+      field('Next Action', r.nextAction) +
+      '</article>';
+  }
+
+  function renderSelectedGeneric(records) {
+    if (!records.length) return '<p class="muted">No records in this workspace.</p>';
+    const record = records[state.selectedIndex] || records[0];
+    const raw = rawData(record);
+    const fields = Object.keys(raw).filter(function(key) { return key !== 'rowNumber'; }).slice(0, 8);
+    const picker = '<select id="genericRecordPicker" class="record-picker">' + records.map(function(r, i) {
+      return '<option value="' + i + '"' + (i === state.selectedIndex ? ' selected' : '') + '>Row ' + escapeHtml(r.rowNumber) + ' | ' + escapeHtml(recordTitle(r)) + '</option>';
+    }).join('') + '</select>';
+    setTimeout(function() {
+      const pickerEl = document.getElementById('genericRecordPicker');
+      if (pickerEl) {
+        pickerEl.addEventListener('change', function(event) {
+          state.selectedIndex = Number(event.target.value);
+          renderWorkspace(state.dashboard);
+        });
+      }
+    }, 0);
+    return picker + '<article class="record-card"><h2>' + escapeHtml(recordTitle(record)) + '</h2>' +
+      fields.map(function(key) { return field(labelize(key), linkOrText(raw[key])); }).join('') + '</article>';
+  }
+
+  function renderPermissionGrid(r) {
+    const grid = r.permissionGrid || {};
+    return '<section class="metric-grid">' +
+      permissionMetric('Search / Preview', grid.searchPreview) +
+      permissionMetric('Metadata Cleanup', grid.metadataCleanup) +
+      permissionMetric('Internal Reference', grid.internalReference) +
+      permissionMetric('Export', grid.export) +
+      permissionMetric('Generation', grid.generation) +
+      permissionMetric('Source Approval', grid.sourceApproval) +
+      '</section>';
+  }
+
+  function renderWhyBlocked(r) {
+    return '<div class="badge-row">' +
+      badge(r.hardBlocker ? 'Hard blocker' : 'No hard blocker', r.hardBlocker ? 'block' : 'good') +
+      badge(r.productionStatus || 'Production status pending', r.productionStatus === 'Hard blocked' ? 'block' : 'warn') +
+      '</div><p>' + escapeHtml(r.whyProductionBlocked || 'Not blocked for the current computed workflow.') + '</p>';
+  }
+
+  function renderPrompts(r) {
+    return promptBox('Gemini', r.prompts.gemini) +
+      promptBox('OpenAI', r.prompts.openai) +
+      promptBox('Copilot', r.prompts.copilot) +
+      promptBox('Original', r.prompts.original) +
+      promptBox('Approved Prompt', r.prompts.approved);
+  }
+
+  function renderQueue(records, predicate, emptyLabel) {
+    const items = records.filter(predicate).slice(0, 8);
+    if (!items.length) return '<p class="muted">No ' + escapeHtml(emptyLabel) + ' in current view.</p>';
+    return '<ul class="queue-list">' + items.map(function(r) {
+      return '<li><strong>Row ' + escapeHtml(r.rowNumber) + '</strong> | ' + escapeHtml(recordTitle(r)) +
+        '<br><span>' + escapeHtml(r.nextAction || '') + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderGenericQueue(records, emptyLabel) {
+    const items = records.slice(0, 12);
+    if (!items.length) return '<p class="muted">No ' + escapeHtml(emptyLabel) + ' in current workspace.</p>';
+    return '<ul class="queue-list">' + items.map(function(r) {
+      const raw = rawData(r);
+      return '<li><strong>Row ' + escapeHtml(r.rowNumber) + '</strong> | ' + escapeHtml(recordTitle(r)) +
+        '<br><span>' + escapeHtml(firstValue(raw, ['status', 'workflow_status', 'review_status', 'handoff_status', 'agent', 'version']) || 'Read-only preview') + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderFieldQueue(records, fields, emptyMessage) {
+    const rows = records.filter(function(record) {
+      const raw = rawData(record);
+      return fields.some(function(fieldName) { return raw[fieldName]; });
+    }).slice(0, 12);
+    if (!rows.length) return '<p class="muted">' + escapeHtml(emptyMessage) + '</p>';
+    return '<ul class="queue-list">' + rows.map(function(record) {
+      const raw = rawData(record);
+      const values = fields.map(function(fieldName) {
+        return raw[fieldName] ? labelize(fieldName) + ': ' + raw[fieldName] : '';
+      }).filter(Boolean).join(' | ');
+      return '<li><strong>Row ' + escapeHtml(record.rowNumber) + '</strong><br><span>' + escapeHtml(values) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderWarningList(records) {
+    if (!records.length) return '<p class="muted">No validation warnings in current view.</p>';
+    return '<ul class="queue-list">' + records.slice(0, 50).map(function(r) {
+      const messages = r.validationWarnings.map(function(w) { return w.message; });
+      if (r.unresolvedDuplicate) messages.push('Unresolved duplicate candidate.');
+      return '<li><strong>Row ' + escapeHtml(r.rowNumber) + '</strong> | ' + escapeHtml(messages.join(' ')) + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderDuplicateGroups(groups) {
+    if (!groups.length) return '<p class="muted">No duplicate candidate groups detected.</p>';
+    return groups.slice(0, 20).map(function(group) {
+      return '<article class="record-card"><h2>' + escapeHtml(group.duplicateKey) + '</h2><p class="muted">' +
+        group.count + ' records | grouped for review only | merge not performed</p></article>';
+    }).join('');
+  }
+
+  function filterByAny(records, terms) {
+    return records.filter(function(record) {
+      const haystack = JSON.stringify(rawData(record)).toLowerCase();
+      return terms.some(function(term) { return haystack.indexOf(term.toLowerCase()) !== -1; });
+    });
+  }
+
+  function activateTab(name) {
+    document.querySelectorAll('.tab-button').forEach(function(b) { b.classList.toggle('is-active', b.dataset.tab === name); });
+    Object.keys(panels).forEach(function(k) { panels[k].classList.toggle('is-active', k === name); });
+  }
+
+  function renderMessages(warnings) {
+    if (!warnings.length) { messagePanel.hidden = true; return; }
+    messagePanel.hidden = false;
+    messagePanel.className = 'message-panel warning';
+    messagePanel.textContent = warnings.join(' ');
+  }
+
+  function renderFailure(error) {
+    messagePanel.hidden = false;
+    messagePanel.className = 'message-panel error';
+    messagePanel.textContent = error && error.message ? error.message : 'Dashboard failed to load.';
+  }
+
+  function rawData(record) { return record.rawData || {}; }
+  function recordTitle(record) {
+    const raw = rawData(record);
+    return record.fileName || firstValue(raw, ['title', 'name', 'file_name', 'handoff_id', 'project', 'agent', 'version', 'change_summary']) || 'Untitled';
+  }
+  function firstValue(record, keys) {
+    for (let i = 0; i < keys.length; i += 1) {
+      if (record[keys[i]]) return record[keys[i]];
+    }
+    return '';
+  }
+  function panel(title, body) { return '<section class="panel"><h2>' + escapeHtml(title) + '</h2>' + body + '</section>'; }
+  function metric(label, value) { return '<div class="metric"><strong>' + escapeHtml(value || 0) + '</strong><span>' + escapeHtml(label) + '</span></div>'; }
+  function permissionMetric(label, value) { return '<div class="metric permission ' + permissionClass(value) + '"><strong>' + escapeHtml(value || 'Blocked') + '</strong><span>' + escapeHtml(label) + '</span></div>'; }
+  function badge(text, kind) { return text ? '<span class="badge ' + escapeHtml(kind || '') + '">' + escapeHtml(text) + '</span>' : ''; }
+  function field(label, value) { return '<div class="field"><span>' + escapeHtml(label) + '</span><span>' + (String(value || '').indexOf('<a ') === 0 ? value : escapeHtml(value || '')) + '</span></div>'; }
+  function promptBox(label, value) { return '<div class="prompt-box"><strong>' + escapeHtml(label) + '</strong>\n' + escapeHtml(value || 'No value') + '</div>'; }
+  function linkOrText(value) { if (!value) return ''; if (/^https?:\/\//.test(value)) return '<a href="' + escapeHtml(value) + '" target="_blank" rel="noopener">Open link</a>'; return escapeHtml(value); }
+  function emptyPanel(message) { return panel('Empty', '<p>' + escapeHtml(message) + '</p>'); }
+  function tierClass(tier) { if (tier === 'Tier 3') return 'good'; if (tier === 'Tier 4' || tier === 'Invalid Tier') return 'block'; return 'warn'; }
+  function statusClass(status) { if (status === 'Reviewable records') return 'good'; if (status === 'Hard blocked') return 'block'; return 'warn'; }
+  function permissionClass(value) { if (value === 'Allowed') return 'good'; if (value === 'Owner Required' || value === 'Blocked') return 'block'; return 'warn'; }
+  function normalizeName(value) { return String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, ''); }
+  function labelize(value) { return String(value || '').replace(/_/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); }); }
+  function escapeHtml(value) { return String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;'); }
+</script>

@@ -1,0 +1,183 @@
+/**
+ * Guarded Notion staging sync for DM Source Library Pilot rows 2-11 only.
+ * This is staging-only and metadata-only.
+ */
+
+function syncNotionRows2To11ToStaging() {
+  const props = PropertiesService.getScriptProperties();
+
+  const mode = props.getProperty('DM_NOTION_SYNC_MODE');
+  const approved = props.getProperty('DM_NOTION_STAGING_WRITE_APPROVED');
+  const token = props.getProperty('DM_NOTION_API_TOKEN');
+  const dataSourceId = props.getProperty('DM_NOTION_STAGING_DATA_SOURCE_ID');
+
+  if (mode !== 'STAGING_WRITE') {
+    throw new Error('Blocked: DM_NOTION_SYNC_MODE must be STAGING_WRITE.');
+  }
+
+  if (approved !== 'YES_10_ROWS_ONLY') {
+    throw new Error('Blocked: DM_NOTION_STAGING_WRITE_APPROVED must be YES_10_ROWS_ONLY.');
+  }
+
+  if (!token) {
+    throw new Error('Blocked: DM_NOTION_API_TOKEN is missing.');
+  }
+
+  if (dataSourceId !== 'collection://bf703afb-7526-4b55-aefa-1c4976032509') {
+    throw new Error('Blocked: wrong Notion staging data source.');
+  }
+
+  const payloads = dryRunNotionRows2To11();
+
+  if (!payloads || payloads.length !== 10) {
+    throw new Error('Blocked: expected exactly 10 payloads from dry run.');
+  }
+
+  const results = payloads.map(function(payload) {
+    return createNotionStagingPage_(payload, token, dataSourceId);
+  });
+
+  Logger.log('STAGING WRITE ONLY - No production sync executed.');
+  Logger.log('Rows synced: ' + results.length);
+  Logger.log('Target data source: ' + dataSourceId);
+  Logger.log(JSON.stringify(results, null, 2));
+
+  return results;
+}
+
+function createNotionStagingPage_(payload, token, dataSourceId) {
+  const url = 'https://api.notion.com/v1/pages';
+
+  const p = payload.properties;
+
+  const body = {
+    parent: {
+      data_source_id: dataSourceId.replace('collection://', '')
+    },
+    properties: {
+      file_name: {
+        title: [
+          {
+            text: {
+              content: String(p.file_name || '')
+            }
+          }
+        ]
+      },
+      file_id: {
+        rich_text: [
+          {
+            text: {
+              content: String(p.file_id || '')
+            }
+          }
+        ]
+      },
+      drive_url: {
+        url: String(p.drive_url || '')
+      },
+      prompt_status: {
+        select: {
+          name: String(p.prompt_status || 'Present')
+        }
+      },
+      pilot_review_status: {
+        select: {
+          name: String(p.pilot_review_status || 'Approved for read-only Notion review')
+        }
+      },
+      pilot_review_scope: {
+        rich_text: [
+          {
+            text: {
+              content: String(p.pilot_review_scope || '10-row limited Notion payload validation only')
+            }
+          }
+        ]
+      },
+      pilot_review_approved_by: {
+        rich_text: [
+          {
+            text: {
+              content: String(p.pilot_review_approved_by || 'zachaey blumsrien')
+            }
+          }
+        ]
+      },
+      pilot_review_approval_date: {
+        date: {
+          start: String(p.pilot_review_approval_date || '2026-06-28')
+        }
+      },
+      pilot_review_notes: {
+        rich_text: [
+          {
+            text: {
+              content: String(p.pilot_review_notes || 'Limited staging/test metadata mapping only. Not production-ready.')
+            }
+          }
+        ]
+      },
+      notion_payload_validation_status: {
+        select: {
+          name: 'Validated'
+        }
+      },
+      source_library_linkage_status: {
+        select: {
+          name: 'Exact File ID'
+        }
+      },
+      production_source_approval_status: {
+        select: {
+          name: 'Not approved'
+        }
+      },
+      generation_clearance: {
+        select: {
+          name: 'Not approved'
+        }
+      },
+      test_scope: {
+        rich_text: [
+          {
+            text: {
+              content: 'DM Source Library Pilot rows 2-11'
+            }
+          }
+        ]
+      },
+      source_row: {
+        number: Number(p.source_row)
+      }
+    }
+  };
+
+  const response = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {
+      Authorization: 'Bearer ' + token,
+      'Notion-Version': '2022-06-28'
+    },
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true
+  });
+
+  const status = response.getResponseCode();
+  const text = response.getContentText();
+
+  if (status < 200 || status >= 300) {
+    throw new Error('Notion create failed for source row ' + payload.source_row + ': ' + status + ' ' + text);
+  }
+
+  const parsed = JSON.parse(text);
+
+  return {
+    source_row: payload.source_row,
+    file_id: p.file_id,
+    file_name: p.file_name,
+    notion_page_id: parsed.id,
+    notion_url: parsed.url
+  };
+}

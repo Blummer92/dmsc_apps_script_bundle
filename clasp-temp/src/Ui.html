@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <?!= include('src/Styles'); ?>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <h1>Digital Media Operations Console</h1>
+          <p class="workspace-kicker">Current Workspace:</p>
+          <h2 id="workspaceName">Detecting workspace...</h2>
+          <p id="workspaceMode" class="workspace-mode">Workspace mode: Detecting...</p>
+          <p id="configStatus">Loading configuration...</p>
+        </div>
+      </header>
+
+      <section class="readonly-banner">
+        Read-only review console. This workspace does not approve, export, generate, merge, overwrite prompts, or update readiness.
+      </section>
+
+      <section class="workspace-view-tabs" aria-labelledby="workspaceViewsLabel">
+        <p id="workspaceViewsLabel" class="workspace-kicker">Workspace Views</p>
+        <nav class="tabs" aria-label="Workspace views">
+          <button class="tab-button is-active" data-tab="scan" type="button">Scan</button>
+          <button class="tab-button" data-tab="review" type="button">Review</button>
+          <button class="tab-button" data-tab="validation" type="button">Validation</button>
+          <button class="tab-button" data-tab="source" type="button">Source Summary</button>
+          <button class="tab-button" data-tab="handoff" type="button">Handoff Preview</button>
+        </nav>
+      </section>
+
+      <section id="messagePanel" class="message-panel" hidden></section>
+
+      <section id="scan" class="tab-panel is-active"></section>
+      <section id="review" class="tab-panel"></section>
+      <section id="validation" class="tab-panel"></section>
+      <section id="source" class="tab-panel"></section>
+      <section id="handoff" class="tab-panel"></section>
+    </main>
+
+    <?!= include('src/Client'); ?>
+  </body>
+</html>
