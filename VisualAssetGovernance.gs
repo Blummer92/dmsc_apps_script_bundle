@@ -131,9 +131,6 @@ function testVisualAssetExecutionLog() {
   const message = '[VAM_GOV_TEST] Execution log test ran at ' +
     Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyy-MM-dd HH:mm:ss z');
   Logger.log(message);
-  console.log(message);
-  console.info(message);
-  console.warn(message);
   return message;
 }
 
@@ -596,21 +593,15 @@ function vamLog_(eventName, details) {
   };
   const message = '[VAM_GOV] ' + JSON.stringify(payload);
   Logger.log(message);
-  console.log(message);
-  console.warn(message);
 }
 
 function vamSheetLog_(message) {
   const prefixedMessage = '[VAM_GOV_SHEET] ' + message;
   Logger.log(prefixedMessage);
-  console.log(prefixedMessage);
-  console.warn(prefixedMessage);
 }
 
 function vamVisibleLog_(message) {
   const prefixedMessage = '[VAM_GOV_VISIBLE] ' + message + ' at ' +
     Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyy-MM-dd HH:mm:ss z');
   Logger.log(prefixedMessage);
-  console.log(prefixedMessage);
-  console.warn(prefixedMessage);
 }
