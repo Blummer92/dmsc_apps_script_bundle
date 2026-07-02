@@ -8,16 +8,13 @@
  * - Does not overwrite asset rows.
  * - Does not approve assets.
  * - Does not migrate historical data.
- * - Writes only to generated reporting tabs.
+ * - Writes only to the generated "Validation Dashboard" tab.
  */
-
-var VAM_GOV_RUN_LOG = [];
 
 const VAM_GOV_CONFIG = Object.freeze({
   spreadsheetId: '19rnFcTTs2zdaOs3wyZ_0NebjzczTPY9EqaLsybEU6bw',
   assetSheetName: 'Visual Asset Metadata',
   dashboardSheetName: 'Validation Dashboard',
-  runLogSheetName: 'Validation Run Log',
   headerRow: 1,
   firstDataRow: 2,
   timezone: 'America/Detroit',
@@ -108,13 +105,11 @@ const VAM_GOV_CONFIG = Object.freeze({
 });
 
 function runVisualAssetValidationDashboard() {
-  VAM_GOV_RUN_LOG = [];
   const startedAt = new Date();
   vamLog_('RUN_START', {
     spreadsheetId: VAM_GOV_CONFIG.spreadsheetId,
     assetSheetName: VAM_GOV_CONFIG.assetSheetName,
-    dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName,
-    runLogSheetName: VAM_GOV_CONFIG.runLogSheetName
+    dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName
   });
   const report = buildVisualAssetValidationReport();
   vamLog_('REPORT_READY', report.summary);
@@ -122,12 +117,11 @@ function runVisualAssetValidationDashboard() {
   vamLog_('RUN_COMPLETE', {
     durationMs: new Date().getTime() - startedAt.getTime(),
     dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName,
-    runLogSheetName: VAM_GOV_CONFIG.runLogSheetName,
     totalIssues: report.summary.totalIssues,
     warnings: report.summary.warnings,
-    suggestions: report.summary.suggestions
+    suggestions: report.summary.suggestions,
+    assetRowsChanged: 0
   });
-  vamWriteValidationRunLog_(report);
   return report.summary;
 }
 
@@ -465,58 +459,6 @@ function vamWriteValidationDashboard_(report) {
   });
 }
 
-function vamWriteValidationRunLog_(report) {
-  const ss = SpreadsheetApp.openById(VAM_GOV_CONFIG.spreadsheetId);
-  let sheet = ss.getSheetByName(VAM_GOV_CONFIG.runLogSheetName);
-  let createdSheet = false;
-  if (!sheet) {
-    sheet = ss.insertSheet(VAM_GOV_CONFIG.runLogSheetName);
-    createdSheet = true;
-  }
-
-  const headers = ['Run ID', 'Timestamp', 'Event', 'Details'];
-  if (sheet.getLastRow() === 0) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-    sheet.setFrozenRows(1);
-  } else {
-    const existingHeaders = sheet.getRange(1, 1, 1, headers.length).getDisplayValues()[0].join('|');
-    if (existingHeaders !== headers.join('|')) {
-      sheet.insertRowBefore(1);
-      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-      sheet.setFrozenRows(1);
-    }
-  }
-
-  const runId = Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyyMMdd-HHmmss') + '-' + Math.floor(Math.random() * 10000);
-  const rows = VAM_GOV_RUN_LOG.map(function(entry) {
-    return [
-      runId,
-      entry.timestamp,
-      entry.event,
-      JSON.stringify(entry.details || {})
-    ];
-  });
-  rows.push([
-    runId,
-    Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyy-MM-dd HH:mm:ss z'),
-    'RUN_LOG_WRITE_COMPLETE',
-    JSON.stringify({
-      logRowsWritten: rows.length + 1,
-      createdSheet: createdSheet,
-      assetRowsChanged: 0,
-      dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName,
-      totalIssues: report.summary.totalIssues
-    })
-  ]);
-
-  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, headers.length).setValues(rows);
-  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold').setBackground('#fce5cd');
-  sheet.autoResizeColumns(1, headers.length);
-  sheet.setColumnWidth(4, 720);
-  SpreadsheetApp.flush();
-  Logger.log('[VAM_GOV_SHEET] Wrote validation run log tab: ' + VAM_GOV_CONFIG.runLogSheetName + '. Log rows written: ' + rows.length + '. Asset rows changed: 0.');
-}
-
 function vamSummarizeIssues_(issues) {
   const summary = {
     missingRequiredFields: 0,
@@ -608,8 +550,7 @@ function vamLog_(eventName, details) {
     timestamp: Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyy-MM-dd HH:mm:ss z'),
     details: details || {}
   };
-  VAM_GOV_RUN_LOG.push(payload);
   const message = '[VAM_GOV] ' + JSON.stringify(payload);
-  console.log(message);
   Logger.log(message);
+  console.log(message);
 }
