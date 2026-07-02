@@ -19,9 +19,9 @@ function getVisualAssetConfigSnapshot() {
 }
 
 function getVisualAssetHeaderHealth() {
-  const context = vamReadAssetRows_();
+  const context = vamQuickReadRawHeaderContext_();
   const configuredHeaders = vamQuickConfiguredHeaders_();
-  const duplicateHeaders = getVisualAssetDuplicateHeaders();
+  const duplicateHeaders = vamQuickFindDuplicateHeaders_(context.headers);
   const missingHeaders = configuredHeaders.filter(function(header) {
     return !vamHasHeader_(context.headerMap, header);
   });
@@ -47,6 +47,35 @@ function getVisualAssetMissingConfiguredHeaders() {
 }
 
 function getVisualAssetDuplicateHeaders() {
+  return vamQuickFindDuplicateHeaders_(vamQuickReadRawHeaderContext_().headers);
+}
+
+function getVisualAssetRowCountSummary() {
+  const context = vamQuickReadRawHeaderContext_();
+  const ss = SpreadsheetApp.openById(VAM_GOV_CONFIG.spreadsheetId);
+  const sheet = ss.getSheetByName(VAM_GOV_CONFIG.assetSheetName);
+  if (!sheet) throw new Error('Missing asset sheet: ' + VAM_GOV_CONFIG.assetSheetName);
+  const lastRow = sheet.getLastRow();
+  const lastColumn = sheet.getLastColumn();
+  let nonEmptyRecords = 0;
+  if (lastRow >= VAM_GOV_CONFIG.firstDataRow && lastColumn > 0) {
+    sheet
+      .getRange(VAM_GOV_CONFIG.firstDataRow, 1, lastRow - VAM_GOV_CONFIG.firstDataRow + 1, lastColumn)
+      .getValues()
+      .forEach(function(row) {
+        if (row.some(function(value) { return vamClean_(value) !== ''; })) nonEmptyRecords++;
+      });
+  }
+  return {
+    firstDataRow: VAM_GOV_CONFIG.firstDataRow,
+    nonEmptyRecords: nonEmptyRecords,
+    headerCount: context.headers.filter(Boolean).length,
+    lastScannedRow: lastRow,
+    assetRowsChanged: 0
+  };
+}
+
+function vamQuickReadRawHeaderContext_() {
   const ss = SpreadsheetApp.openById(VAM_GOV_CONFIG.spreadsheetId);
   const sheet = ss.getSheetByName(VAM_GOV_CONFIG.assetSheetName);
   if (!sheet) throw new Error('Missing asset sheet: ' + VAM_GOV_CONFIG.assetSheetName);
@@ -54,6 +83,16 @@ function getVisualAssetDuplicateHeaders() {
   const headers = lastColumn
     ? sheet.getRange(VAM_GOV_CONFIG.headerRow, 1, 1, lastColumn).getDisplayValues()[0].map(vamClean_)
     : [];
+  return {
+    headers: headers,
+    headerMap: headers.reduce(function(map, header, index) {
+      if (header && !Object.prototype.hasOwnProperty.call(map, header)) map[header] = index;
+      return map;
+    }, {})
+  };
+}
+
+function vamQuickFindDuplicateHeaders_(headers) {
   const seen = {};
   const duplicates = {};
   headers.forEach(function(header, index) {
@@ -73,17 +112,6 @@ function getVisualAssetDuplicateHeaders() {
       count: duplicates[key].length
     };
   });
-}
-
-function getVisualAssetRowCountSummary() {
-  const context = vamReadAssetRows_();
-  return {
-    firstDataRow: VAM_GOV_CONFIG.firstDataRow,
-    nonEmptyRecords: context.records.length,
-    headerCount: context.headers.filter(Boolean).length,
-    lastScannedRow: context.records.length ? context.records[context.records.length - 1].rowNumber : '',
-    assetRowsChanged: 0
-  };
 }
 
 function getVisualAssetEmptyRowSample() {
