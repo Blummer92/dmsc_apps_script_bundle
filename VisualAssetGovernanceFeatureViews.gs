@@ -49,22 +49,6 @@ function testVisualAssetFeatureDashboardLoggingOnly() {
   return 'Feature dashboard logging-only test completed. No spreadsheet data was changed.';
 }
 
-function getVisualAssetStatusReviewSummary() {
-  return vamFeatureBuildReport_(buildVisualAssetValidationReport(), vamReadAssetRows_()).statusSummary;
-}
-
-function getVisualAssetDriveFileIdReviewQueue() {
-  return vamFeatureBuildReport_(buildVisualAssetValidationReport(), vamReadAssetRows_()).driveFileReviewQueue;
-}
-
-function getVisualAssetDuplicateAssetIdGroups() {
-  return vamFeatureBuildReport_(buildVisualAssetValidationReport(), vamReadAssetRows_()).duplicateAssetIdGroups;
-}
-
-function getVisualAssetWorkflowBlockers() {
-  return vamFeatureBuildReport_(buildVisualAssetValidationReport(), vamReadAssetRows_()).workflowBlockerSummary;
-}
-
 function vamFeatureBuildReport_(report, context) {
   const featureReport = {
     generatedAt: report.generatedAt,
