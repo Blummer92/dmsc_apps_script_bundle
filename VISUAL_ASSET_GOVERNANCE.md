@@ -47,6 +47,23 @@ The validator currently targets:
 4. Authorize the script if prompted.
 5. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
 
+## Execution Logs
+
+Every run writes structured log lines that start with `[VAM_GOV]`.
+
+Useful events to copy when asking for help:
+
+- `RUN_START` confirms the target spreadsheet and sheet names.
+- `READ_HEADERS` confirms row count, column count, and the first headers found.
+- `READ_COMPLETE` confirms how many non-empty asset records were scanned.
+- `VALIDATION_STEP` shows issue counts for each validation pass.
+- `REPORT_BUILD_COMPLETE` summarizes total issues, warnings, and suggestions.
+- `ISSUE_SAMPLE_1` through `ISSUE_SAMPLE_10` show example findings.
+- `DASHBOARD_WRITE_COMPLETE` confirms the dashboard write finished.
+- `RUN_COMPLETE` confirms the whole run finished and how long it took.
+
+When sharing logs, copy all `[VAM_GOV]` lines from the failed or latest execution.
+
 ## Optional Daily Trigger
 
 This project is currently deployed as a standalone Apps Script project. Because of that, `SpreadsheetApp.getUi()` and spreadsheet custom menus are not available from this project context.
