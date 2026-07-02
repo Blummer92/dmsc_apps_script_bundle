@@ -8,7 +8,6 @@ This file documents the warning-only governance validator added for the `Visual 
 - Public runner: `runVisualAssetValidationDashboard()`
 - Read-only report builder: `buildVisualAssetValidationReport()`
 - Generated dashboard tab: `Validation Dashboard`
-- Generated run-log tab: `Validation Run Log`
 - Helper report functions:
   - `getVisualAssetMissingRequiredFields()`
   - `getVisualAssetDriveFileIdSuggestions()`
@@ -16,10 +15,7 @@ This file documents the warning-only governance validator added for the `Visual 
 
 ## Safety Boundary
 
-The validator does not change asset rows. It writes only to generated reporting tabs in the Visual Asset Metadata workbook:
-
-- `Validation Dashboard`
-- `Validation Run Log`
+The validator does not change asset rows. It writes only to the generated `Validation Dashboard` tab in the Visual Asset Metadata workbook.
 
 It does not:
 
@@ -38,7 +34,6 @@ The validator currently targets:
 - Spreadsheet ID: `19rnFcTTs2zdaOs3wyZ_0NebjzczTPY9EqaLsybEU6bw`
 - Asset tab: `Visual Asset Metadata`
 - Generated dashboard tab: `Validation Dashboard`
-- Generated run-log tab: `Validation Run Log`
 
 ## How To Run
 
@@ -46,13 +41,11 @@ The validator currently targets:
 2. Open the Apps Script editor.
 3. Run `runVisualAssetValidationDashboard()`.
 4. Authorize the script if prompted.
-5. Open the Visual Asset Metadata workbook and review:
-   - `Validation Dashboard`
-   - `Validation Run Log`
+5. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
 
-## What To Check In The Run Log
+## What To Check In The Apps Script Execution Log
 
-If the Apps Script execution log is empty, use the generated `Validation Run Log` tab instead. Each run writes a timestamped `Run ID`, event name, and details so you can copy the latest rows back into a troubleshooting thread.
+The script logs with the `[VAM_GOV]` and `[VAM_GOV_SHEET]` prefixes. These messages stay in the Apps Script execution log and are not written to an extra spreadsheet tab.
 
 Look for these events in the latest run:
 
@@ -62,7 +55,6 @@ Look for these events in the latest run:
 - `VALIDATION_STEP`
 - `DASHBOARD_WRITE_COMPLETE`
 - `RUN_COMPLETE`
-- `RUN_LOG_WRITE_COMPLETE`
 
 ## Optional Menu Wiring
 
