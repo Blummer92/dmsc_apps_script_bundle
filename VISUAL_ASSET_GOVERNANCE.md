@@ -49,7 +49,7 @@ The validator currently targets:
 
 ## What To Check In The Apps Script Execution Log
 
-The script logs with the `[VAM_GOV_TEST]`, `[VAM_GOV_VISIBLE]`, `[VAM_GOV]`, and `[VAM_GOV_SHEET]` prefixes. These messages stay in the Apps Script execution log and are not written to an extra spreadsheet tab.
+The script logs one line per event with the `[VAM_GOV_TEST]`, `[VAM_GOV_VISIBLE]`, `[VAM_GOV]`, and `[VAM_GOV_SHEET]` prefixes. These messages stay in the Apps Script execution log and are not written to an extra spreadsheet tab.
 
 Look for these events in the latest run:
 
