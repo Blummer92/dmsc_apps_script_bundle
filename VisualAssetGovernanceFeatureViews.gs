@@ -154,7 +154,7 @@ function vamFeatureWriteDashboard_(report) {
   sheet.getRange(75, 1, 1, issueHeaders.length).setValues([issueHeaders]);
   sheet.getRange(76, 1, issueRows.length, issueHeaders.length).setValues(issueRows);
 
-  sheet.setFrozenRows(75);
+  sheet.setFrozenRows(7);
   sheet.getRange('A1:B1').merge().setFontWeight('bold').setFontSize(14);
   sheet.getRange('A2:A5').setFontWeight('bold');
   sheet.getRange('A7:B7').setFontWeight('bold').setBackground('#d9ead3');
