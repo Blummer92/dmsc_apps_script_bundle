@@ -1,0 +1,40 @@
+# Keep clasp pushes scoped to this flat Apps Script bundle.
+# Ignore repo docs, nested apps, backups, tests, and generated artifacts.
+
+# Git and local tooling
+.git/**
+.github/**
+node_modules/**
+_local-backups/**
+clasp-temp/**
+output/**
+user_files/**
+agent_files/**
+
+# Nested Apps Script projects in this repository
+apps-script-builder-dashboard/**
+drive-metadata-dashboard/**
+search-feature-app/**
+visual-asset-metadata-governance/**
+_script_bundle/**
+
+# Documentation and test artifacts
+*.md
+metadata/**
+test/**
+package.json
+package-lock.json
+*.zip
+*.png
+*.swp
+
+# Keep root Apps Script source files and manifest.
+!appsscript.json
+!Code.gs
+!Dashboard.html
+!Styles.html
+!Client.html
+!DashboardJavaScript.html
+!VAM_*.gs
+!VisualAssetGovernance.gs
+!VisualAssetGovernanceFeatureViews.gs
