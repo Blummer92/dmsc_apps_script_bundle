@@ -1,12 +1,14 @@
 /**
  * Visual Asset Metadata Governance Validator
- * Warning-only module for the existing DMSC Apps Script dashboard bundle.
+ *
+ * Warning-only validator for the Visual Asset Metadata workbook.
+ * This module is designed to live beside the existing DMSC Dashboard code.
  *
  * Safety boundary:
  * - Does not overwrite asset rows.
  * - Does not approve assets.
  * - Does not migrate historical data.
- * - Writes only to the generated Validation Dashboard tab.
+ * - Writes only to the generated "Validation Dashboard" tab.
  */
 
 const VAM_GOV_CONFIG = Object.freeze({
@@ -40,6 +42,11 @@ const VAM_GOV_CONFIG = Object.freeze({
     'Student-Facing?': ['Yes', 'No', 'Unclear'],
     'Teacher-Facing?': ['Yes', 'No', 'Unclear'],
     'Duplicate Status': ['Primary', 'Duplicate', 'Near Duplicate', 'Possible Duplicate', 'Unique', 'Unclear'],
+    'Exact File ID Verified?': ['Verified', 'Unverified', 'Blocked', 'Not Applicable'],
+    'Approved Folder Placement Verified?': ['Verified', 'Unverified', 'Blocked', 'Not Applicable'],
+    'Source / Safe-Use Verified?': ['Verified', 'Unverified', 'Blocked', 'Not Applicable'],
+    'Visual QA / Readability Verified?': ['Verified', 'Unverified', 'Blocked', 'Not Applicable'],
+    'Internal Classroom Use Boundary': ['Pending', 'Internal classroom only', 'Teacher/reference only', 'Not student-facing', 'Unknown', 'Do not use'],
     'Course': ['Digital Media', 'Other / Unclear'],
     'Prompt Version': ['v1', 'v2', 'v3', 'Current', 'Archived'],
     'Style Category': ['Icon', 'Flat illustration', 'Classroom visual', 'Diagram', 'Photo-realistic', 'Reference', 'Other'],
@@ -55,45 +62,129 @@ const VAM_GOV_CONFIG = Object.freeze({
     'Drive Upload Status': ['Pending', 'Not generated', 'Not uploaded', 'Uploaded', 'Linked', 'Missing file', 'Not Applicable'],
     'Source Authority Review': ['Pending', 'Not started', 'Needs review', 'Reviewed', 'Approved', 'Blocked', 'Not Applicable'],
     'Metadata Status': ['Draft', 'Metadata Ready', 'Needs Metadata', 'Needs Human Review', 'Complete', 'Blocked', 'Superseded'],
-    'Next Workflow Step': ['Pending', 'Generate image', 'Upload to Drive', 'Source review', 'Human review', 'Visual QA', 'Approve use', 'Archive', 'Blocked', 'Complete'],
-    'Exact File ID Verified?': ['Verified', 'Unverified', 'Blocked', 'Not Applicable'],
-    'Approved Folder Placement Verified?': ['Verified', 'Unverified', 'Blocked', 'Not Applicable'],
-    'Source / Safe-Use Verified?': ['Verified', 'Unverified', 'Blocked', 'Not Applicable'],
-    'Visual QA / Readability Verified?': ['Verified', 'Unverified', 'Blocked', 'Not Applicable'],
-    'Internal Classroom Use Boundary': ['Pending', 'Internal classroom only', 'Teacher/reference only', 'Not student-facing', 'Unknown', 'Do not use']
+    'Next Workflow Step': ['Pending', 'Generate image', 'Upload to Drive', 'Source review', 'Human review', 'Visual QA', 'Approve use', 'Archive', 'Blocked', 'Complete']
   }),
-  stageGates: Object.freeze([
-    Object.freeze({ name: 'Metadata', nextSteps: ['Pending', 'Generate image'], requiredFields: ['Asset ID', 'Asset Name', 'Asset Type', 'Course', 'Unit', 'Lesson', 'Intended Instructional Use', 'Description', 'Metadata Status'] }),
-    Object.freeze({ name: 'Prompt Package', nextSteps: ['Upload to Drive'], requiredFields: ['Prompt Version', 'Full Production Prompt', 'Style Category', 'Prompt Source', 'Reference Image Used', 'External Source Used', 'Created By', 'Date Created'] }),
-    Object.freeze({ name: 'Drive Upload', nextSteps: ['Visual QA', 'Source review'], requiredFields: ['Drive Link', 'Drive File ID', 'Drive Upload Status', 'Folder', 'Folder ID', 'Exact File ID Verified?', 'Last Verified Date'] }),
-    Object.freeze({ name: 'QA', nextSteps: ['Approve use', 'Human review'], requiredFields: ['Visual QA Status', 'Visual QA / Readability Verified?', 'Alt Text', 'Review Owner', 'Review Date'] }),
-    Object.freeze({ name: 'Governance', nextSteps: ['Approve use', 'Human review'], requiredFields: ['Source Authority Review', 'Source Approval Status', 'Safe Use Status', 'Source Visibility', 'Citation Evidence', 'Provenance Status', 'External Source Used', 'Copyright or Trademark Risk Assessment', 'Internal Classroom Use Boundary', 'Human Review Required'] }),
-    Object.freeze({ name: 'Approval', nextSteps: ['Archive', 'Complete'], requiredFields: ['Approved Use', 'Approved Folder Placement Verified?', 'Approval Evidence Link', 'Last Verified Date'] })
+  workflowStages: Object.freeze([
+    Object.freeze({
+      name: 'Metadata',
+      nextSteps: ['Pending', 'Generate image'],
+      requiredFields: ['Asset ID', 'Asset Name', 'Asset Type', 'Course', 'Unit', 'Lesson', 'Intended Instructional Use', 'Description', 'Metadata Status'],
+      blocker: 'Asset identity is missing, duplicated, or mixed with unrelated assets.'
+    }),
+    Object.freeze({
+      name: 'Prompt Package',
+      nextSteps: ['Upload to Drive'],
+      requiredFields: ['Prompt Version', 'Full Production Prompt', 'Style Category', 'Prompt Source', 'Reference Image Used', 'External Source Used', 'Created By', 'Date Created'],
+      blocker: 'Prompt text, intended use, tool, source, or reference status is unknown.'
+    }),
+    Object.freeze({
+      name: 'Drive Upload',
+      nextSteps: ['Visual QA', 'Source review'],
+      requiredFields: ['Drive Link', 'Drive File ID', 'Drive Upload Status', 'Folder', 'Folder ID', 'Exact File ID Verified?', 'Last Verified Date'],
+      blocker: 'File ID, link, folder, or mapping is ambiguous or missing.'
+    }),
+    Object.freeze({
+      name: 'QA',
+      nextSteps: ['Approve use', 'Human review'],
+      requiredFields: ['Visual QA Status', 'Visual QA / Readability Verified?', 'Alt Text', 'Review Owner', 'Review Date'],
+      blocker: 'Image is unreadable, cropped, unclear, or missing accessibility review.'
+    }),
+    Object.freeze({
+      name: 'Governance',
+      nextSteps: ['Approve use', 'Human review'],
+      requiredFields: ['Source Authority Review', 'Source Approval Status', 'Safe Use Status', 'Source Visibility', 'Citation Evidence', 'Provenance Status', 'External Source Used', 'Copyright or Trademark Risk Assessment', 'Internal Classroom Use Boundary', 'Human Review Required'],
+      blocker: 'Evidence is missing, source is unclear, or risk is unresolved.'
+    }),
+    Object.freeze({
+      name: 'Approval',
+      nextSteps: ['Archive', 'Complete'],
+      requiredFields: ['Approved Use', 'Approved Folder Placement Verified?', 'Approval Evidence Link', 'Last Verified Date'],
+      blocker: 'Approval evidence, safe-use clearance, QA, or placement evidence is incomplete.'
+    })
   ])
 });
 
 function runVisualAssetValidationDashboard() {
+  const startedAt = new Date();
+  vamLog_('RUN_START', {
+    spreadsheetId: VAM_GOV_CONFIG.spreadsheetId,
+    assetSheetName: VAM_GOV_CONFIG.assetSheetName,
+    dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName
+  });
   const report = buildVisualAssetValidationReport();
+  vamLog_('REPORT_READY', report.summary);
   vamWriteValidationDashboard_(report);
+  vamLog_('RUN_COMPLETE', {
+    durationMs: new Date().getTime() - startedAt.getTime(),
+    dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName,
+    totalIssues: report.summary.totalIssues,
+    warnings: report.summary.warnings,
+    suggestions: report.summary.suggestions
+  });
   return report.summary;
 }
 
 function buildVisualAssetValidationReport() {
+  vamLog_('REPORT_BUILD_START', {
+    requiredFieldCount: VAM_GOV_CONFIG.requiredFields.length,
+    controlledFieldCount: Object.keys(VAM_GOV_CONFIG.controlledValues).length,
+    workflowStageCount: VAM_GOV_CONFIG.workflowStages.length
+  });
   const context = vamReadAssetRows_();
   const issues = [];
-  issues.push.apply(issues, vamValidateRequiredFields_(context));
-  issues.push.apply(issues, vamValidateControlledValues_(context));
-  issues.push.apply(issues, vamValidateDriveFileIds_(context));
-  issues.push.apply(issues, vamValidateCanonicalFilenames_(context));
-  issues.push.apply(issues, vamValidateDuplicateAssetIds_(context));
-  issues.push.apply(issues, vamValidateWorkflowStages_(context));
+  vamPushIssuesWithLog_(issues, 'required fields', vamValidateMissingRequiredFields_(context));
+  vamPushIssuesWithLog_(issues, 'controlled values', vamValidateControlledValues_(context));
+  vamPushIssuesWithLog_(issues, 'Drive File ID extraction', vamValidateDriveFileIds_(context));
+  vamPushIssuesWithLog_(issues, 'Canonical Filename suggestions', vamValidateCanonicalFilenames_(context));
+  vamPushIssuesWithLog_(issues, 'duplicate Asset IDs', vamValidateDuplicateAssetIds_(context));
+  vamPushIssuesWithLog_(issues, 'workflow stage gates', vamValidateWorkflowStages_(context));
+
+  const summary = vamSummarizeIssues_(issues);
+  vamLog_('REPORT_BUILD_COMPLETE', {
+    rowCount: context.records.length,
+    totalIssues: summary.totalIssues,
+    warnings: summary.warnings,
+    suggestions: summary.suggestions
+  });
+  vamLogSampleIssues_(issues);
+
   return {
     generatedAt: Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyy-MM-dd HH:mm:ss z'),
     rowCount: context.records.length,
     warningOnly: true,
     issues: issues,
-    summary: vamSummarizeIssues_(issues)
+    summary: summary
   };
+}
+
+function vamPushIssuesWithLog_(targetIssues, validationName, newIssues) {
+  Array.prototype.push.apply(targetIssues, newIssues);
+  vamLog_('VALIDATION_STEP', {
+    validation: validationName,
+    newIssueCount: newIssues.length,
+    runningIssueCount: targetIssues.length
+  });
+}
+
+function vamLogSampleIssues_(issues) {
+  issues.slice(0, 10).forEach(function(issue, index) {
+    vamLog_('ISSUE_SAMPLE_' + (index + 1), {
+      rowNumber: issue.rowNumber,
+      assetId: issue.assetId,
+      severity: issue.severity,
+      category: issue.category,
+      fieldName: issue.fieldName,
+      stage: issue.stage,
+      message: issue.message,
+      suggestion: issue.suggestion
+    });
+  });
+  if (issues.length > 10) {
+    vamLog_('ISSUE_SAMPLE_TRUNCATED', {
+      shown: 10,
+      remaining: issues.length - 10
+    });
+  }
 }
 
 function getVisualAssetMissingRequiredFields() {
@@ -115,24 +206,59 @@ function getVisualAssetCanonicalFilenameSuggestions() {
 }
 
 function vamReadAssetRows_() {
+  vamLog_('READ_START', {
+    spreadsheetId: VAM_GOV_CONFIG.spreadsheetId,
+    assetSheetName: VAM_GOV_CONFIG.assetSheetName
+  });
   const ss = SpreadsheetApp.openById(VAM_GOV_CONFIG.spreadsheetId);
   const sheet = ss.getSheetByName(VAM_GOV_CONFIG.assetSheetName);
   if (!sheet) throw new Error('Missing asset sheet: ' + VAM_GOV_CONFIG.assetSheetName);
+
   const lastColumn = sheet.getLastColumn();
   const lastRow = sheet.getLastRow();
-  const headers = lastColumn ? sheet.getRange(VAM_GOV_CONFIG.headerRow, 1, 1, lastColumn).getDisplayValues()[0].map(vamClean_) : [];
-  const headerMap = vamHeaderMap_(headers);
-  if (lastRow < VAM_GOV_CONFIG.firstDataRow || lastColumn < 1) return { headers: headers, headerMap: headerMap, records: [] };
-  const rows = sheet.getRange(VAM_GOV_CONFIG.firstDataRow, 1, lastRow - VAM_GOV_CONFIG.firstDataRow + 1, lastColumn).getValues();
-  const records = rows.map(function(row, index) {
-    return { rowNumber: VAM_GOV_CONFIG.firstDataRow + index, row: row, values: vamRowObject_(headers, row) };
-  }).filter(function(record) {
-    return record.row.some(function(value) { return vamClean_(value) !== ''; });
+  const headers = lastColumn
+    ? sheet.getRange(VAM_GOV_CONFIG.headerRow, 1, 1, lastColumn).getDisplayValues()[0].map(vamClean_)
+    : [];
+  const headerMap = vamBuildHeaderMap_(headers);
+  vamLog_('READ_HEADERS', {
+    lastRow: lastRow,
+    lastColumn: lastColumn,
+    headerCount: headers.filter(Boolean).length,
+    firstTenHeaders: headers.slice(0, 10).join(' | ')
   });
-  return { headers: headers, headerMap: headerMap, records: records };
+
+  if (lastRow < VAM_GOV_CONFIG.firstDataRow || lastColumn < 1) {
+    vamLog_('READ_COMPLETE_EMPTY', {
+      records: 0
+    });
+    return { sheet: sheet, headers: headers, headerMap: headerMap, records: [] };
+  }
+
+  const rows = sheet
+    .getRange(VAM_GOV_CONFIG.firstDataRow, 1, lastRow - VAM_GOV_CONFIG.firstDataRow + 1, lastColumn)
+    .getValues();
+  const records = rows
+    .map(function(row, index) {
+      return {
+        rowNumber: VAM_GOV_CONFIG.firstDataRow + index,
+        row: row,
+        values: vamRowToObject_(headers, row)
+      };
+    })
+    .filter(function(record) {
+      return record.row.some(function(value) { return vamClean_(value) !== ''; });
+    });
+
+  vamLog_('READ_COMPLETE', {
+    rawDataRows: rows.length,
+    nonEmptyRecords: records.length,
+    firstDataRow: VAM_GOV_CONFIG.firstDataRow,
+    lastDataRow: lastRow
+  });
+  return { sheet: sheet, headers: headers, headerMap: headerMap, records: records };
 }
 
-function vamValidateRequiredFields_(context) {
+function vamValidateMissingRequiredFields_(context) {
   const issues = [];
   context.records.forEach(function(record) {
     VAM_GOV_CONFIG.requiredFields.forEach(function(fieldName) {
@@ -149,7 +275,10 @@ function vamValidateControlledValues_(context) {
   Object.keys(VAM_GOV_CONFIG.controlledValues).forEach(function(fieldName) {
     if (!vamHasHeader_(context.headerMap, fieldName)) return;
     const allowed = VAM_GOV_CONFIG.controlledValues[fieldName];
-    const allowedLookup = allowed.reduce(function(map, value) { map[vamCompare_(value)] = true; return map; }, {});
+    const allowedLookup = allowed.reduce(function(map, value) {
+      map[vamCompare_(value)] = true;
+      return map;
+    }, {});
     context.records.forEach(function(record) {
       const value = vamClean_(record.values[fieldName]);
       if (value && !allowedLookup[vamCompare_(value)]) {
@@ -165,13 +294,17 @@ function vamValidateDriveFileIds_(context) {
   const linkField = VAM_GOV_CONFIG.fields.driveLink;
   const idField = VAM_GOV_CONFIG.fields.driveFileId;
   if (!vamHasHeader_(context.headerMap, linkField) || !vamHasHeader_(context.headerMap, idField)) return issues;
+
   context.records.forEach(function(record) {
     const driveLink = vamClean_(record.values[linkField]);
     const currentId = vamClean_(record.values[idField]);
     const parsedId = vamExtractDriveFileId_(driveLink);
     if (!driveLink || !parsedId) return;
-    if (!currentId) issues.push(vamIssue_(record, 'Info', 'Drive File ID Suggestion', idField, 'Drive Link contains a parseable file ID, but Drive File ID is blank.', parsedId, 'Drive Upload'));
-    if (currentId && currentId !== parsedId) issues.push(vamIssue_(record, 'Warning', 'Drive File ID Mismatch', idField, 'Drive File ID does not match the ID parsed from Drive Link.', 'Review exact file mapping. Parsed ID: ' + parsedId, 'Drive Upload'));
+    if (!currentId) {
+      issues.push(vamIssue_(record, 'Info', 'Drive File ID Suggestion', idField, 'Drive Link contains a parseable file ID, but Drive File ID is blank.', parsedId, 'Drive Upload'));
+    } else if (currentId !== parsedId) {
+      issues.push(vamIssue_(record, 'Warning', 'Drive File ID Mismatch', idField, 'Drive File ID does not match the ID parsed from Drive Link.', 'Review exact file mapping. Parsed ID: ' + parsedId, 'Drive Upload'));
+    }
   });
   return issues;
 }
@@ -181,11 +314,14 @@ function vamValidateCanonicalFilenames_(context) {
   const originalField = VAM_GOV_CONFIG.fields.originalFilename;
   const canonicalField = VAM_GOV_CONFIG.fields.canonicalFilename;
   if (!vamHasHeader_(context.headerMap, originalField) || !vamHasHeader_(context.headerMap, canonicalField)) return issues;
+
   context.records.forEach(function(record) {
     const original = vamClean_(record.values[originalField]);
     const canonical = vamClean_(record.values[canonicalField]);
     const suggestion = vamSuggestCanonicalFilename_(original);
-    if (original && !canonical && suggestion) issues.push(vamIssue_(record, 'Info', 'Canonical Filename Suggestion', canonicalField, 'Canonical Filename is blank and can be derived from Original Filename.', suggestion, 'Metadata'));
+    if (original && !canonical && suggestion) {
+      issues.push(vamIssue_(record, 'Info', 'Canonical Filename Suggestion', canonicalField, 'Canonical Filename is blank and can be derived from Original Filename.', suggestion, 'Metadata'));
+    }
   });
   return issues;
 }
@@ -193,19 +329,22 @@ function vamValidateCanonicalFilenames_(context) {
 function vamValidateDuplicateAssetIds_(context) {
   const issues = [];
   const fieldName = VAM_GOV_CONFIG.fields.assetId;
-  const groups = {};
   if (!vamHasHeader_(context.headerMap, fieldName)) return issues;
+
+  const groups = {};
   context.records.forEach(function(record) {
     const assetId = vamClean_(record.values[fieldName]);
     if (!assetId) return;
     const key = vamCompare_(assetId);
-    groups[key] = groups[key] || [];
-    groups[key].push(record);
+    groups[key] = groups[key] || { assetId: assetId, records: [] };
+    groups[key].records.push(record);
   });
+
   Object.keys(groups).forEach(function(key) {
-    if (groups[key].length < 2) return;
-    const rows = groups[key].map(function(record) { return record.rowNumber; }).join(', ');
-    groups[key].forEach(function(record) {
+    const group = groups[key];
+    if (group.records.length < 2) return;
+    const rows = group.records.map(function(record) { return record.rowNumber; }).join(', ');
+    group.records.forEach(function(record) {
       issues.push(vamIssue_(record, 'Warning', 'Duplicate Asset ID', fieldName, 'Asset ID appears on multiple rows: ' + rows + '.', 'Resolve duplicate identity or document duplicate relationship before advancing.', 'Metadata'));
     });
   });
@@ -216,29 +355,48 @@ function vamValidateWorkflowStages_(context) {
   const issues = [];
   const nextStepField = VAM_GOV_CONFIG.fields.nextWorkflowStep;
   if (!vamHasHeader_(context.headerMap, nextStepField)) return issues;
+
   context.records.forEach(function(record) {
     const nextStep = vamClean_(record.values[nextStepField]);
     if (!nextStep) return;
-    VAM_GOV_CONFIG.stageGates.forEach(function(stage) {
+    VAM_GOV_CONFIG.workflowStages.forEach(function(stage) {
       const applies = stage.nextSteps.some(function(step) { return vamCompare_(step) === vamCompare_(nextStep); });
       if (!applies) return;
       const missing = stage.requiredFields.filter(function(fieldName) {
         return vamHasHeader_(context.headerMap, fieldName) && !vamClean_(record.values[fieldName]);
       });
-      if (missing.length) issues.push(vamIssue_(record, 'Warning', 'Blocked From Advancing', nextStepField, 'Row is marked for "' + nextStep + '" but is missing stage fields: ' + missing.join(', ') + '.', 'Review lifecycle gate before advancing.', stage.name));
+      if (missing.length) {
+        issues.push(vamIssue_(record, 'Warning', 'Blocked From Advancing', nextStepField, 'Row is marked for "' + nextStep + '" but is missing stage fields: ' + missing.join(', ') + '.', stage.blocker, stage.name));
+      }
     });
   });
   return issues;
 }
 
 function vamWriteValidationDashboard_(report) {
+  vamLog_('DASHBOARD_WRITE_START', {
+    spreadsheetId: VAM_GOV_CONFIG.spreadsheetId,
+    dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName,
+    totalIssues: report.summary.totalIssues
+  });
   const ss = SpreadsheetApp.openById(VAM_GOV_CONFIG.spreadsheetId);
   let sheet = ss.getSheetByName(VAM_GOV_CONFIG.dashboardSheetName);
-  if (!sheet) sheet = ss.insertSheet(VAM_GOV_CONFIG.dashboardSheetName);
+  let createdSheet = false;
+  if (!sheet) {
+    sheet = ss.insertSheet(VAM_GOV_CONFIG.dashboardSheetName);
+    createdSheet = true;
+  }
+
   const existingFilter = sheet.getFilter();
-  if (existingFilter) existingFilter.remove();
+  if (existingFilter) {
+    existingFilter.remove();
+    vamLog_('DASHBOARD_EXISTING_FILTER_REMOVED', {});
+  }
   sheet.getDataRange().breakApart();
   sheet.clear();
+  vamLog_('DASHBOARD_SHEET_PREPARED', {
+    createdSheet: createdSheet
+  });
 
   sheet.getRange(1, 1, 5, 2).setValues([
     ['Visual Asset Metadata Validation Dashboard', ''],
@@ -247,6 +405,7 @@ function vamWriteValidationDashboard_(report) {
     ['Asset Sheet', VAM_GOV_CONFIG.assetSheetName],
     ['Rows Scanned', report.rowCount]
   ]);
+
   sheet.getRange(7, 1, 8, 2).setValues([
     ['Metric', 'Count'],
     ['Missing required fields', report.summary.missingRequiredFields],
@@ -259,11 +418,14 @@ function vamWriteValidationDashboard_(report) {
   ]);
 
   const headers = ['Row', 'Asset ID', 'Severity', 'Category', 'Field', 'Workflow Stage', 'Message', 'Suggestion'];
-  const rows = report.issues.length ? report.issues.map(function(issue) {
-    return [issue.rowNumber, issue.assetId, issue.severity, issue.category, issue.fieldName, issue.stage, issue.message, issue.suggestion];
-  }) : [['', '', 'Info', 'No Issues Found', '', '', 'No warning-only validation issues were found during this run.', '']];
   sheet.getRange(17, 1, 1, headers.length).setValues([headers]);
+  const rows = report.issues.length
+    ? report.issues.map(function(issue) {
+      return [issue.rowNumber, issue.assetId, issue.severity, issue.category, issue.fieldName, issue.stage, issue.message, issue.suggestion];
+    })
+    : [['', '', 'Info', 'No Issues Found', '', '', 'No warning-only validation issues were found during this run.', '']];
   sheet.getRange(18, 1, rows.length, headers.length).setValues(rows);
+
   sheet.setFrozenRows(17);
   sheet.getRange('A1:B1').merge().setFontWeight('bold').setFontSize(14);
   sheet.getRange('A2:A5').setFontWeight('bold');
@@ -273,10 +435,23 @@ function vamWriteValidationDashboard_(report) {
   sheet.autoResizeColumns(1, headers.length);
   sheet.setColumnWidth(7, 420);
   sheet.setColumnWidth(8, 360);
+  vamLog_('DASHBOARD_WRITE_COMPLETE', {
+    issueRowsWritten: rows.length,
+    dashboardSheetId: sheet.getSheetId(),
+    createdSheet: createdSheet
+  });
 }
 
 function vamSummarizeIssues_(issues) {
-  const summary = { missingRequiredFields: 0, invalidStatusValues: 0, duplicateAssetIds: 0, rowsBlockedFromAdvancing: 0, warnings: 0, suggestions: 0, totalIssues: issues.length };
+  const summary = {
+    missingRequiredFields: 0,
+    invalidStatusValues: 0,
+    duplicateAssetIds: 0,
+    rowsBlockedFromAdvancing: 0,
+    warnings: 0,
+    suggestions: 0,
+    totalIssues: issues.length
+  };
   issues.forEach(function(issue) {
     if (issue.category === 'Missing Required Field') summary.missingRequiredFields++;
     if (issue.category === 'Invalid Controlled Value') summary.invalidStatusValues++;
@@ -290,7 +465,15 @@ function vamSummarizeIssues_(issues) {
 
 function vamExtractDriveFileId_(value) {
   const text = vamClean_(value);
-  const patterns = [/\/file\/d\/([a-zA-Z0-9_-]+)/, /\/document\/d\/([a-zA-Z0-9_-]+)/, /\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/, /\/presentation\/d\/([a-zA-Z0-9_-]+)/, /[?&]id=([a-zA-Z0-9_-]+)/, /^([a-zA-Z0-9_-]{20,})$/];
+  if (!text || text === 'Pending' || text === 'Not Applicable') return '';
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]+)/,
+    /\/document\/d\/([a-zA-Z0-9_-]+)/,
+    /\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/,
+    /\/presentation\/d\/([a-zA-Z0-9_-]+)/,
+    /[?&]id=([a-zA-Z0-9_-]+)/,
+    /^([a-zA-Z0-9_-]{20,})$/
+  ];
   for (let i = 0; i < patterns.length; i++) {
     const match = text.match(patterns[i]);
     if (match && match[1]) return match[1];
@@ -299,15 +482,24 @@ function vamExtractDriveFileId_(value) {
 }
 
 function vamSuggestCanonicalFilename_(value) {
-  return vamClean_(value).replace(/\s+/g, '_').replace(/[^\w.\-()]+/g, '').replace(/_+/g, '_');
+  return vamClean_(value)
+    .replace(/\s+/g, '_')
+    .replace(/[^\w.\-()]+/g, '')
+    .replace(/_+/g, '_');
 }
 
-function vamHeaderMap_(headers) {
-  return headers.reduce(function(map, header, index) { if (header) map[header] = index; return map; }, {});
+function vamBuildHeaderMap_(headers) {
+  return headers.reduce(function(map, header, index) {
+    if (header) map[header] = index;
+    return map;
+  }, {});
 }
 
-function vamRowObject_(headers, row) {
-  return headers.reduce(function(values, header, index) { if (header) values[header] = row[index]; return values; }, {});
+function vamRowToObject_(headers, row) {
+  return headers.reduce(function(values, header, index) {
+    if (header) values[header] = row[index];
+    return values;
+  }, {});
 }
 
 function vamHasHeader_(headerMap, fieldName) {
@@ -333,4 +525,15 @@ function vamClean_(value) {
 
 function vamCompare_(value) {
   return vamClean_(value).toLowerCase();
+}
+
+function vamLog_(eventName, details) {
+  const payload = {
+    event: eventName,
+    timestamp: Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyy-MM-dd HH:mm:ss z'),
+    details: details || {}
+  };
+  const message = '[VAM_GOV] ' + JSON.stringify(payload);
+  console.log(message);
+  Logger.log(message);
 }
