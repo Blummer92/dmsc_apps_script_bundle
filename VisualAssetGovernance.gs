@@ -106,6 +106,7 @@ const VAM_GOV_CONFIG = Object.freeze({
 
 function runVisualAssetValidationDashboard() {
   const startedAt = new Date();
+  vamVisibleLog_('START runVisualAssetValidationDashboard');
   vamLog_('RUN_START', {
     spreadsheetId: VAM_GOV_CONFIG.spreadsheetId,
     assetSheetName: VAM_GOV_CONFIG.assetSheetName,
@@ -122,7 +123,18 @@ function runVisualAssetValidationDashboard() {
     suggestions: report.summary.suggestions,
     assetRowsChanged: 0
   });
+  vamVisibleLog_('END runVisualAssetValidationDashboard');
   return report.summary;
+}
+
+function testVisualAssetExecutionLog() {
+  const message = '[VAM_GOV_TEST] Execution log test ran at ' +
+    Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyy-MM-dd HH:mm:ss z');
+  Logger.log(message);
+  console.log(message);
+  console.info(message);
+  console.warn(message);
+  return message;
 }
 
 function buildVisualAssetValidationReport() {
@@ -375,9 +387,9 @@ function vamValidateWorkflowStages_(context) {
 }
 
 function vamWriteValidationDashboard_(report) {
-  Logger.log('[VAM_GOV_SHEET] Opening spreadsheet: ' + VAM_GOV_CONFIG.spreadsheetId);
-  Logger.log('[VAM_GOV_SHEET] Asset sheet is read-only in this run: ' + VAM_GOV_CONFIG.assetSheetName);
-  Logger.log('[VAM_GOV_SHEET] Dashboard target tab: ' + VAM_GOV_CONFIG.dashboardSheetName);
+  vamSheetLog_('Opening spreadsheet: ' + VAM_GOV_CONFIG.spreadsheetId);
+  vamSheetLog_('Asset sheet is read-only in this run: ' + VAM_GOV_CONFIG.assetSheetName);
+  vamSheetLog_('Dashboard target tab: ' + VAM_GOV_CONFIG.dashboardSheetName);
   vamLog_('DASHBOARD_WRITE_START', {
     spreadsheetId: VAM_GOV_CONFIG.spreadsheetId,
     dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName,
@@ -389,21 +401,21 @@ function vamWriteValidationDashboard_(report) {
   if (!sheet) {
     sheet = ss.insertSheet(VAM_GOV_CONFIG.dashboardSheetName);
     createdSheet = true;
-    Logger.log('[VAM_GOV_SHEET] Created dashboard tab: ' + VAM_GOV_CONFIG.dashboardSheetName);
+    vamSheetLog_('Created dashboard tab: ' + VAM_GOV_CONFIG.dashboardSheetName);
   } else {
-    Logger.log('[VAM_GOV_SHEET] Found existing dashboard tab: ' + VAM_GOV_CONFIG.dashboardSheetName);
+    vamSheetLog_('Found existing dashboard tab: ' + VAM_GOV_CONFIG.dashboardSheetName);
   }
 
   const existingFilter = sheet.getFilter();
   if (existingFilter) {
     existingFilter.remove();
-    Logger.log('[VAM_GOV_SHEET] Removed existing dashboard filter.');
+    vamSheetLog_('Removed existing dashboard filter.');
     vamLog_('DASHBOARD_EXISTING_FILTER_REMOVED', {});
   }
   sheet.getDataRange().breakApart();
-  Logger.log('[VAM_GOV_SHEET] Broke apart merged ranges on dashboard tab.');
+  vamSheetLog_('Broke apart merged ranges on dashboard tab.');
   sheet.clear();
-  Logger.log('[VAM_GOV_SHEET] Cleared dashboard tab only. Asset data was not cleared.');
+  vamSheetLog_('Cleared dashboard tab only. Asset data was not cleared.');
   vamLog_('DASHBOARD_SHEET_PREPARED', {
     createdSheet: createdSheet
   });
@@ -415,7 +427,7 @@ function vamWriteValidationDashboard_(report) {
     ['Asset Sheet', VAM_GOV_CONFIG.assetSheetName],
     ['Rows Scanned', report.rowCount]
   ]);
-  Logger.log('[VAM_GOV_SHEET] Wrote dashboard header range A1:B5.');
+  vamSheetLog_('Wrote dashboard header range A1:B5.');
 
   sheet.getRange(7, 1, 8, 2).setValues([
     ['Metric', 'Count'],
@@ -427,18 +439,18 @@ function vamWriteValidationDashboard_(report) {
     ['Suggestions', report.summary.suggestions],
     ['Total issues', report.summary.totalIssues]
   ]);
-  Logger.log('[VAM_GOV_SHEET] Wrote summary metrics range A7:B14.');
+  vamSheetLog_('Wrote summary metrics range A7:B14.');
 
   const headers = ['Row', 'Asset ID', 'Severity', 'Category', 'Field', 'Workflow Stage', 'Message', 'Suggestion'];
   sheet.getRange(17, 1, 1, headers.length).setValues([headers]);
-  Logger.log('[VAM_GOV_SHEET] Wrote issue table headers range A17:H17.');
+  vamSheetLog_('Wrote issue table headers range A17:H17.');
   const rows = report.issues.length
     ? report.issues.map(function(issue) {
       return [issue.rowNumber, issue.assetId, issue.severity, issue.category, issue.fieldName, issue.stage, issue.message, issue.suggestion];
     })
     : [['', '', 'Info', 'No Issues Found', '', '', 'No warning-only validation issues were found during this run.', '']];
   sheet.getRange(18, 1, rows.length, headers.length).setValues(rows);
-  Logger.log('[VAM_GOV_SHEET] Wrote issue rows range A18:H' + (17 + rows.length) + '. Row count: ' + rows.length);
+  vamSheetLog_('Wrote issue rows range A18:H' + (17 + rows.length) + '. Row count: ' + rows.length);
 
   sheet.setFrozenRows(17);
   sheet.getRange('A1:B1').merge().setFontWeight('bold').setFontSize(14);
@@ -450,8 +462,8 @@ function vamWriteValidationDashboard_(report) {
   sheet.setColumnWidth(7, 420);
   sheet.setColumnWidth(8, 360);
   SpreadsheetApp.flush();
-  Logger.log('[VAM_GOV_SHEET] Applied dashboard formatting and filter.');
-  Logger.log('[VAM_GOV_SHEET] Finished. Created sheet: ' + createdSheet + '. Asset rows changed: 0. Dashboard rows written: ' + rows.length);
+  vamSheetLog_('Applied dashboard formatting and filter.');
+  vamSheetLog_('Finished. Created sheet: ' + createdSheet + '. Asset rows changed: 0. Dashboard rows written: ' + rows.length);
   vamLog_('DASHBOARD_WRITE_COMPLETE', {
     issueRowsWritten: rows.length,
     dashboardSheetId: sheet.getSheetId(),
@@ -553,4 +565,20 @@ function vamLog_(eventName, details) {
   const message = '[VAM_GOV] ' + JSON.stringify(payload);
   Logger.log(message);
   console.log(message);
+  console.warn(message);
+}
+
+function vamSheetLog_(message) {
+  const prefixedMessage = '[VAM_GOV_SHEET] ' + message;
+  Logger.log(prefixedMessage);
+  console.log(prefixedMessage);
+  console.warn(prefixedMessage);
+}
+
+function vamVisibleLog_(message) {
+  const prefixedMessage = '[VAM_GOV_VISIBLE] ' + message + ' at ' +
+    Utilities.formatDate(new Date(), VAM_GOV_CONFIG.timezone, 'yyyy-MM-dd HH:mm:ss z');
+  Logger.log(prefixedMessage);
+  console.log(prefixedMessage);
+  console.warn(prefixedMessage);
 }
