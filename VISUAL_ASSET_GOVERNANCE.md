@@ -7,6 +7,7 @@ This file documents the warning-only governance validator added for the `Visual 
 - `VisualAssetGovernance.gs`
 - Public runner: `runVisualAssetValidationDashboard()`
 - Log-only test runner: `testVisualAssetExecutionLog()`
+- Dashboard log-flow test runner: `testVisualAssetDashboardLoggingOnly()`
 - Read-only report builder: `buildVisualAssetValidationReport()`
 - Generated dashboard tab: `Validation Dashboard`
 - Helper report functions:
@@ -41,9 +42,10 @@ The validator currently targets:
 1. Push this bundle to the existing Apps Script project.
 2. Open the Apps Script editor.
 3. Run `testVisualAssetExecutionLog()` first to confirm execution-log visibility.
-4. Run `runVisualAssetValidationDashboard()`.
-5. Authorize the script if prompted.
-6. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
+4. Run `testVisualAssetDashboardLoggingOnly()` to confirm the dashboard log flow without writing to Sheets.
+5. Run `runVisualAssetValidationDashboard()`.
+6. Authorize the script if prompted.
+7. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
 
 ## What To Check In The Apps Script Execution Log
 
@@ -52,6 +54,9 @@ The script logs with the `[VAM_GOV_TEST]`, `[VAM_GOV_VISIBLE]`, `[VAM_GOV]`, and
 Look for these events in the latest run:
 
 - `VAM_GOV_TEST` from `testVisualAssetExecutionLog()`
+- `START testVisualAssetDashboardLoggingOnly`
+- `TEST ONLY: would write dashboard header range A1:B5.`
+- `END testVisualAssetDashboardLoggingOnly`
 - `START runVisualAssetValidationDashboard`
 - `RUN_START`
 - `READ_HEADERS`
