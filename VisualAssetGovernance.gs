@@ -137,6 +137,38 @@ function testVisualAssetExecutionLog() {
   return message;
 }
 
+function testVisualAssetDashboardLoggingOnly() {
+  vamVisibleLog_('START testVisualAssetDashboardLoggingOnly');
+  vamLog_('RUN_START', {
+    testMode: true,
+    spreadsheetWrites: false,
+    dashboardSheetName: VAM_GOV_CONFIG.dashboardSheetName
+  });
+  vamLog_('READ_HEADERS', {
+    testMode: true,
+    lastRow: 3,
+    lastColumn: 5,
+    headerCount: 5,
+    firstTenHeaders: 'Asset ID | Asset Name | Metadata Status | Next Workflow Step | Human Review Required'
+  });
+  vamLog_('VALIDATION_STEP', {
+    testMode: true,
+    validation: 'execution log visibility',
+    newIssueCount: 0,
+    runningIssueCount: 0
+  });
+  vamSheetLog_('TEST ONLY: would write dashboard header range A1:B5.');
+  vamSheetLog_('TEST ONLY: would write summary metrics range A7:B14.');
+  vamLog_('RUN_COMPLETE', {
+    testMode: true,
+    spreadsheetWrites: false,
+    assetRowsChanged: 0,
+    dashboardRowsWritten: 0
+  });
+  vamVisibleLog_('END testVisualAssetDashboardLoggingOnly');
+  return 'Visual Asset dashboard logging-only test completed. No spreadsheet data was changed.';
+}
+
 function buildVisualAssetValidationReport() {
   vamLog_('REPORT_BUILD_START', {
     requiredFieldCount: VAM_GOV_CONFIG.requiredFields.length,
