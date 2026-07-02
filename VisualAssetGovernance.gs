@@ -8,7 +8,7 @@
  * - Does not overwrite asset rows.
  * - Does not approve assets.
  * - Does not migrate historical data.
- * - Writes only to the generated "Validation Dashboard" tab.
+ * - Writes only to generated reporting tabs.
  */
 
 var VAM_GOV_RUN_LOG = [];
