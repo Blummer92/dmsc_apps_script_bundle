@@ -1,17 +1,14 @@
 # Visual Asset Metadata Governance Validator
 
-This documents the warning-only governance validator added for the `Visual Asset Metadata` workbook.
+This file documents the warning-only governance validator added for the `Visual Asset Metadata` workbook.
 
 ## What It Adds
 
 - `VisualAssetGovernance.gs`
-- `VisualAssetGovernanceMenu.gs` with standalone-safe trigger/control helpers
 - Public runner: `runVisualAssetValidationDashboard()`
-- Manual runner alias: `runVisualAssetValidationDashboardNow()`
-- Daily trigger installer: `installDailyVisualAssetValidationTrigger()`
-- Trigger cleanup: `removeVisualAssetValidationTriggers()`
-- Read-only summary: `getVisualAssetValidationSummary()`
 - Read-only report builder: `buildVisualAssetValidationReport()`
+- Generated dashboard tab: `Validation Dashboard`
+- Generated run-log tab: `Validation Run Log`
 - Helper report functions:
   - `getVisualAssetMissingRequiredFields()`
   - `getVisualAssetDriveFileIdSuggestions()`
@@ -19,7 +16,10 @@ This documents the warning-only governance validator added for the `Visual Asset
 
 ## Safety Boundary
 
-The validator does not change asset rows. It writes only to the generated `Validation Dashboard` tab in the Visual Asset Metadata workbook.
+The validator does not change asset rows. It writes only to generated reporting tabs in the Visual Asset Metadata workbook:
+
+- `Validation Dashboard`
+- `Validation Run Log`
 
 It does not:
 
@@ -38,48 +38,39 @@ The validator currently targets:
 - Spreadsheet ID: `19rnFcTTs2zdaOs3wyZ_0NebjzczTPY9EqaLsybEU6bw`
 - Asset tab: `Visual Asset Metadata`
 - Generated dashboard tab: `Validation Dashboard`
+- Generated run-log tab: `Validation Run Log`
 
-## How To Run Manually
+## How To Run
 
 1. Push this bundle to the existing Apps Script project.
 2. Open the Apps Script editor.
-3. Run `runVisualAssetValidationDashboard()` or `runVisualAssetValidationDashboardNow()`.
+3. Run `runVisualAssetValidationDashboard()`.
 4. Authorize the script if prompted.
-5. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
+5. Open the Visual Asset Metadata workbook and review:
+   - `Validation Dashboard`
+   - `Validation Run Log`
 
-## Execution Logs
+## What To Check In The Run Log
 
-Every run writes structured log lines that start with `[VAM_GOV]`.
+If the Apps Script execution log is empty, use the generated `Validation Run Log` tab instead. Each run writes a timestamped `Run ID`, event name, and details so you can copy the latest rows back into a troubleshooting thread.
 
-Useful events to copy when asking for help:
+Look for these events in the latest run:
 
-- `RUN_START` confirms the target spreadsheet and sheet names.
-- `READ_HEADERS` confirms row count, column count, and the first headers found.
-- `READ_COMPLETE` confirms how many non-empty asset records were scanned.
-- `VALIDATION_STEP` shows issue counts for each validation pass.
-- `REPORT_BUILD_COMPLETE` summarizes total issues, warnings, and suggestions.
-- `ISSUE_SAMPLE_1` through `ISSUE_SAMPLE_10` show example findings.
-- `DASHBOARD_WRITE_COMPLETE` confirms the dashboard write finished.
-- `RUN_COMPLETE` confirms the whole run finished and how long it took.
+- `RUN_START`
+- `READ_HEADERS`
+- `READ_COMPLETE`
+- `VALIDATION_STEP`
+- `DASHBOARD_WRITE_COMPLETE`
+- `RUN_COMPLETE`
+- `RUN_LOG_WRITE_COMPLETE`
 
-When sharing logs, copy all `[VAM_GOV]` lines from the failed or latest execution.
+## Optional Menu Wiring
 
-## Optional Daily Trigger
-
-This project is currently deployed as a standalone Apps Script project. Because of that, `SpreadsheetApp.getUi()` and spreadsheet custom menus are not available from this project context.
-
-To refresh the dashboard automatically each day:
-
-1. In the Apps Script editor, run `installDailyVisualAssetValidationTrigger()` once.
-2. Confirm authorization if prompted.
-3. The script will run `runVisualAssetValidationDashboard()` daily at approximately 7 AM in the script timezone.
-
-To remove old failed menu triggers or the daily validation trigger, run:
+The existing project already owns `onOpen()` in `Code.gs`. To add a menu item after this module is installed, add these lines to the existing `DMSC Dashboard` menu chain:
 
 ```javascript
-removeVisualAssetValidationTriggers()
+.addSeparator()
+.addItem('Refresh Visual Asset Validation', 'runVisualAssetValidationDashboard')
 ```
 
-## Why There Is No Spreadsheet Menu Here
-
-Custom spreadsheet menus require a container-bound Apps Script project. This project is standalone, so the supported controls are manual editor runs and installable time-based triggers.
+Keep only one `onOpen()` function in the Apps Script project.
