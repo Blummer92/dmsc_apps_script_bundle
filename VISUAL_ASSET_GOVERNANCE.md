@@ -6,6 +6,7 @@ This file documents the warning-only governance validator added for the `Visual 
 
 - `VisualAssetGovernance.gs`
 - Public runner: `runVisualAssetValidationDashboard()`
+- Log-only test runner: `testVisualAssetExecutionLog()`
 - Read-only report builder: `buildVisualAssetValidationReport()`
 - Generated dashboard tab: `Validation Dashboard`
 - Helper report functions:
@@ -39,22 +40,26 @@ The validator currently targets:
 
 1. Push this bundle to the existing Apps Script project.
 2. Open the Apps Script editor.
-3. Run `runVisualAssetValidationDashboard()`.
-4. Authorize the script if prompted.
-5. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
+3. Run `testVisualAssetExecutionLog()` first to confirm execution-log visibility.
+4. Run `runVisualAssetValidationDashboard()`.
+5. Authorize the script if prompted.
+6. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
 
 ## What To Check In The Apps Script Execution Log
 
-The script logs with the `[VAM_GOV]` and `[VAM_GOV_SHEET]` prefixes. These messages stay in the Apps Script execution log and are not written to an extra spreadsheet tab.
+The script logs with the `[VAM_GOV_TEST]`, `[VAM_GOV_VISIBLE]`, `[VAM_GOV]`, and `[VAM_GOV_SHEET]` prefixes. These messages stay in the Apps Script execution log and are not written to an extra spreadsheet tab.
 
 Look for these events in the latest run:
 
+- `VAM_GOV_TEST` from `testVisualAssetExecutionLog()`
+- `START runVisualAssetValidationDashboard`
 - `RUN_START`
 - `READ_HEADERS`
 - `READ_COMPLETE`
 - `VALIDATION_STEP`
 - `DASHBOARD_WRITE_COMPLETE`
 - `RUN_COMPLETE`
+- `END runVisualAssetValidationDashboard`
 
 ## Optional Menu Wiring
 
