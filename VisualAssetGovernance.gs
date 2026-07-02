@@ -156,6 +156,7 @@ function testVisualAssetDashboardLoggingOnly() {
   });
   vamSheetLog_('TEST ONLY: would write dashboard header range A1:B5.');
   vamSheetLog_('TEST ONLY: would write summary metrics range A7:B14.');
+  vamSheetLog_('TEST ONLY: would write top fixes range A16:G22.');
   vamLog_('RUN_COMPLETE', {
     testMode: true,
     spreadsheetWrites: false,
@@ -182,12 +183,15 @@ function buildVisualAssetValidationReport() {
   vamPushIssuesWithLog_(issues, 'workflow stage gates', vamValidateWorkflowStages_(context));
 
   const summary = vamSummarizeIssues_(issues);
+  const topFixes = vamBuildTopFixes_(issues, 5);
   vamLog_('REPORT_BUILD_COMPLETE', {
     rowCount: context.records.length,
     totalIssues: summary.totalIssues,
     warnings: summary.warnings,
-    suggestions: summary.suggestions
+    suggestions: summary.suggestions,
+    topFixCount: topFixes.length
   });
+  vamLogTopFixes_(topFixes);
   vamLogSampleIssues_(issues);
 
   return {
@@ -195,7 +199,8 @@ function buildVisualAssetValidationReport() {
     rowCount: context.records.length,
     warningOnly: true,
     issues: issues,
-    summary: summary
+    summary: summary,
+    topFixes: topFixes
   };
 }
 
@@ -225,6 +230,25 @@ function vamLogSampleIssues_(issues) {
     vamLog_('ISSUE_SAMPLE_TRUNCATED', {
       shown: 10,
       remaining: issues.length - 10
+    });
+  }
+}
+
+function vamLogTopFixes_(topFixes) {
+  topFixes.forEach(function(fix) {
+    vamLog_('TOP_FIX', {
+      rank: fix.rank,
+      count: fix.count,
+      category: fix.category,
+      fieldName: fix.fieldName,
+      stage: fix.stage,
+      sampleRows: fix.sampleRows,
+      recommendation: fix.recommendation
+    });
+  });
+  if (!topFixes.length) {
+    vamLog_('TOP_FIXES_EMPTY', {
+      message: 'No top fixes generated because no issues were found.'
     });
   }
 }
@@ -470,24 +494,40 @@ function vamWriteValidationDashboard_(report) {
   ]);
   vamSheetLog_('Wrote summary metrics range A7:B14.');
 
+  const topFixHeaders = ['Rank', 'Issue Count', 'Category', 'Field', 'Workflow Stage', 'Recommended Next Step', 'Sample Rows'];
+  const topFixRows = report.topFixes.length
+    ? report.topFixes.map(function(fix) {
+      return [fix.rank, fix.count, fix.category, fix.fieldName, fix.stage, fix.recommendation, fix.sampleRows];
+    })
+    : [['', 0, 'No Issues Found', '', '', 'No warning-only validation issues were found during this run.', '']];
+  sheet.getRange(16, 1, 1, topFixHeaders.length).setValues([['Top Fixes', '', '', '', '', '', '']]);
+  sheet.getRange(17, 1, 1, topFixHeaders.length).setValues([topFixHeaders]);
+  sheet.getRange(18, 1, topFixRows.length, topFixHeaders.length).setValues(topFixRows);
+  vamSheetLog_('Wrote top fixes range A16:G' + (17 + topFixRows.length) + '. Top fix count: ' + report.topFixes.length);
+
   const headers = ['Row', 'Asset ID', 'Severity', 'Category', 'Field', 'Workflow Stage', 'Message', 'Suggestion'];
-  sheet.getRange(17, 1, 1, headers.length).setValues([headers]);
-  vamSheetLog_('Wrote issue table headers range A17:H17.');
+  const issueHeaderRow = 25;
+  const issueFirstDataRow = issueHeaderRow + 1;
+  sheet.getRange(issueHeaderRow, 1, 1, headers.length).setValues([headers]);
+  vamSheetLog_('Wrote issue table headers range A' + issueHeaderRow + ':H' + issueHeaderRow + '.');
   const rows = report.issues.length
     ? report.issues.map(function(issue) {
       return [issue.rowNumber, issue.assetId, issue.severity, issue.category, issue.fieldName, issue.stage, issue.message, issue.suggestion];
     })
     : [['', '', 'Info', 'No Issues Found', '', '', 'No warning-only validation issues were found during this run.', '']];
-  sheet.getRange(18, 1, rows.length, headers.length).setValues(rows);
-  vamSheetLog_('Wrote issue rows range A18:H' + (17 + rows.length) + '. Row count: ' + rows.length);
+  sheet.getRange(issueFirstDataRow, 1, rows.length, headers.length).setValues(rows);
+  vamSheetLog_('Wrote issue rows range A' + issueFirstDataRow + ':H' + (issueHeaderRow + rows.length) + '. Row count: ' + rows.length);
 
-  sheet.setFrozenRows(17);
+  sheet.setFrozenRows(issueHeaderRow);
   sheet.getRange('A1:B1').merge().setFontWeight('bold').setFontSize(14);
   sheet.getRange('A2:A5').setFontWeight('bold');
   sheet.getRange('A7:B7').setFontWeight('bold').setBackground('#d9ead3');
-  sheet.getRange('A17:H17').setFontWeight('bold').setBackground('#cfe2f3');
-  sheet.getRange(17, 1, rows.length + 1, headers.length).createFilter();
+  sheet.getRange('A16:G16').merge().setFontWeight('bold').setBackground('#fff2cc');
+  sheet.getRange('A17:G17').setFontWeight('bold').setBackground('#fff2cc');
+  sheet.getRange(issueHeaderRow, 1, 1, headers.length).setFontWeight('bold').setBackground('#cfe2f3');
+  sheet.getRange(issueHeaderRow, 1, rows.length + 1, headers.length).createFilter();
   sheet.autoResizeColumns(1, headers.length);
+  sheet.setColumnWidth(6, 360);
   sheet.setColumnWidth(7, 420);
   sheet.setColumnWidth(8, 360);
   SpreadsheetApp.flush();
@@ -495,6 +535,7 @@ function vamWriteValidationDashboard_(report) {
   vamSheetLog_('Finished. Created sheet: ' + createdSheet + '. Asset rows changed: 0. Dashboard rows written: ' + rows.length);
   vamLog_('DASHBOARD_WRITE_COMPLETE', {
     issueRowsWritten: rows.length,
+    topFixesWritten: report.topFixes.length,
     dashboardSheetId: sheet.getSheetId(),
     createdSheet: createdSheet
   });
@@ -519,6 +560,80 @@ function vamSummarizeIssues_(issues) {
     if (issue.severity === 'Info') summary.suggestions++;
   });
   return summary;
+}
+
+function vamBuildTopFixes_(issues, limit) {
+  const groups = {};
+  issues.forEach(function(issue) {
+    const fieldName = issue.fieldName || 'General';
+    const category = issue.category || 'General';
+    const stage = issue.stage || '';
+    const key = [category, fieldName, stage].join('||');
+    if (!groups[key]) {
+      groups[key] = {
+        category: category,
+        fieldName: fieldName,
+        stage: stage,
+        count: 0,
+        sampleRows: [],
+        recommendation: vamRecommendTopFix_(issue)
+      };
+    }
+    groups[key].count++;
+    if (issue.rowNumber && groups[key].sampleRows.length < 8) {
+      groups[key].sampleRows.push(issue.rowNumber);
+    }
+    if (!groups[key].recommendation && issue.suggestion) {
+      groups[key].recommendation = issue.suggestion;
+    }
+  });
+
+  return Object.keys(groups)
+    .map(function(key) {
+      return groups[key];
+    })
+    .sort(function(a, b) {
+      if (b.count !== a.count) return b.count - a.count;
+      if (a.category !== b.category) return a.category < b.category ? -1 : 1;
+      return a.fieldName < b.fieldName ? -1 : 1;
+    })
+    .slice(0, limit)
+    .map(function(fix, index) {
+      return {
+        rank: index + 1,
+        count: fix.count,
+        category: fix.category,
+        fieldName: fix.fieldName,
+        stage: fix.stage,
+        recommendation: fix.recommendation || 'Review the grouped warning rows and resolve the underlying metadata issue.',
+        sampleRows: fix.sampleRows.join(', ')
+      };
+    });
+}
+
+function vamRecommendTopFix_(issue) {
+  if (issue.category === 'Missing Required Field') {
+    return 'Complete this required field or document a blocker for the listed rows.';
+  }
+  if (issue.category === 'Invalid Controlled Value') {
+    return issue.suggestion || 'Replace values with the approved controlled vocabulary.';
+  }
+  if (issue.category === 'Duplicate Asset ID') {
+    return 'Resolve duplicate identity or document the duplicate relationship before advancing.';
+  }
+  if (issue.category === 'Blocked From Advancing') {
+    return issue.suggestion || 'Complete the missing stage-gate fields before advancing workflow.';
+  }
+  if (issue.category === 'Drive File ID Suggestion') {
+    return 'Review the parsed Drive File ID suggestion before writing any value to the asset row.';
+  }
+  if (issue.category === 'Drive File ID Mismatch') {
+    return 'Review exact Drive file mapping before changing the Drive File ID.';
+  }
+  if (issue.category === 'Canonical Filename Suggestion') {
+    return 'Review the suggested canonical filename before writing any value to the asset row.';
+  }
+  return issue.suggestion || 'Review the grouped warning rows and resolve the metadata issue.';
 }
 
 function vamExtractDriveFileId_(value) {
