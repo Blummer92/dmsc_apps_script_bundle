@@ -5,9 +5,12 @@ This documents the warning-only governance validator added for the `Visual Asset
 ## What It Adds
 
 - `VisualAssetGovernance.gs`
-- `VisualAssetGovernanceMenu.gs`
+- `VisualAssetGovernanceMenu.gs` with standalone-safe trigger/control helpers
 - Public runner: `runVisualAssetValidationDashboard()`
-- Menu installer: `installVisualAssetGovernanceMenuTrigger()`
+- Manual runner alias: `runVisualAssetValidationDashboardNow()`
+- Daily trigger installer: `installDailyVisualAssetValidationTrigger()`
+- Trigger cleanup: `removeVisualAssetValidationTriggers()`
+- Read-only summary: `getVisualAssetValidationSummary()`
 - Read-only report builder: `buildVisualAssetValidationReport()`
 - Helper report functions:
   - `getVisualAssetMissingRequiredFields()`
@@ -40,23 +43,26 @@ The validator currently targets:
 
 1. Push this bundle to the existing Apps Script project.
 2. Open the Apps Script editor.
-3. Run `runVisualAssetValidationDashboard()`.
+3. Run `runVisualAssetValidationDashboard()` or `runVisualAssetValidationDashboardNow()`.
 4. Authorize the script if prompted.
 5. Open the Visual Asset Metadata workbook and review the `Validation Dashboard` tab.
 
-## Menu Setup
+## Optional Daily Trigger
 
-The existing project already owns `onOpen()` in `Code.gs`, so this bundle avoids adding a second `onOpen()` function. To add a separate spreadsheet menu safely:
+This project is currently deployed as a standalone Apps Script project. Because of that, `SpreadsheetApp.getUi()` and spreadsheet custom menus are not available from this project context.
 
-1. Push `VisualAssetGovernance.gs` and `VisualAssetGovernanceMenu.gs` to Apps Script.
-2. In the Apps Script editor, run `installVisualAssetGovernanceMenuTrigger()` once.
-3. Reload the Visual Asset Metadata spreadsheet.
-4. Use the new `Visual Asset Governance` menu.
+To refresh the dashboard automatically each day:
 
-Menu items:
+1. In the Apps Script editor, run `installDailyVisualAssetValidationTrigger()` once.
+2. Confirm authorization if prompted.
+3. The script will run `runVisualAssetValidationDashboard()` daily at approximately 7 AM in the script timezone.
 
-- `Refresh Validation Dashboard` runs `runVisualAssetValidationDashboardFromMenu()`.
-- `Show Missing Required Count` runs `showVisualAssetMissingRequiredCount()`.
-- `Remove Visual Asset Menu Trigger` removes the installable open trigger.
+To remove old failed menu triggers or the daily validation trigger, run:
 
-Keep only one simple `onOpen()` function in the Apps Script project. The existing `Code.gs` `onOpen()` remains the owner of the `DMSC Dashboard` menu.
+```javascript
+removeVisualAssetValidationTriggers()
+```
+
+## Why There Is No Spreadsheet Menu Here
+
+Custom spreadsheet menus require a container-bound Apps Script project. This project is standalone, so the supported controls are manual editor runs and installable time-based triggers.
