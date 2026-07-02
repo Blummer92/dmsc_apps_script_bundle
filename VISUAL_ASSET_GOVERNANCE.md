@@ -10,6 +10,7 @@ This file documents the warning-only governance validator added for the `Visual 
 - Dashboard log-flow test runner: `testVisualAssetDashboardLoggingOnly()`
 - Read-only report builder: `buildVisualAssetValidationReport()`
 - Generated dashboard tab: `Validation Dashboard`
+- Top Fixes dashboard section grouped by issue category, field, and workflow stage
 - Helper report functions:
   - `getVisualAssetMissingRequiredFields()`
   - `getVisualAssetDriveFileIdSuggestions()`
@@ -62,9 +63,17 @@ Look for these events in the latest run:
 - `READ_HEADERS`
 - `READ_COMPLETE`
 - `VALIDATION_STEP`
+- `TOP_FIX`
 - `DASHBOARD_WRITE_COMPLETE`
 - `RUN_COMPLETE`
 - `END runVisualAssetValidationDashboard`
+
+## Dashboard Layout
+
+- Rows `1:5`: run header and scan metadata
+- Rows `7:14`: summary counts
+- Rows `16:22`: Top Fixes grouped by issue type, field, workflow stage, and sample rows
+- Row `25` onward: detailed warning-only issue table
 
 ## Optional Menu Wiring
 
