@@ -10,11 +10,20 @@ Project URL:
 
 ## Files In This Folder
 
+Apps Script files:
+
 - `.clasp.json`
+- `.claspignore`
 - `appsscript.json`
 - `VAM_SourceApprovedAudit.gs`
 - `VAM_SourceApprovedAuditSmokeTest.gs`
 - `VAM_SourceApprovedAuditTests.gs`
+
+Codespaces-only files, ignored by clasp:
+
+- `test-local.js`
+- `CODESPACES_TEST.md`
+- `PUSH_STEPS.md`
 
 ## Push With clasp
 
@@ -22,10 +31,18 @@ From this folder:
 
 ```bash
 clasp login
+cat .claspignore
 clasp push
 ```
 
 If prompted, confirm that you want to update the project.
+
+Only these files should appear in Apps Script:
+
+- `appsscript.json`
+- `VAM_SourceApprovedAudit.gs`
+- `VAM_SourceApprovedAuditSmokeTest.gs`
+- `VAM_SourceApprovedAuditTests.gs`
 
 ## Test Order
 
