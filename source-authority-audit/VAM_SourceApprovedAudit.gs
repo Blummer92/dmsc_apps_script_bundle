@@ -14,10 +14,10 @@ const VAM_SOURCE_AUDIT_CONFIG = {
   COLUMNS: {
     approvalStatus: 'Source Approval Status',
     assetId: 'Asset ID',
-    title: 'Asset title or filename',
+    title: 'Asset Name',
     driveFileId: 'Drive File ID',
-    sourceFileLink: 'Source file link',
-    sourceAuthorityNotes: 'Source Authority Notes'
+    sourceFileLink: 'Drive Link',
+    sourceAuthorityNotes: 'Source Authority Review'
   }
 };
 
