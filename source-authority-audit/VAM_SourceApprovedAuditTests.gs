@@ -60,10 +60,10 @@ function assertSourceAuditEquals_(expected, actual, message) {
 function fakeSourceAuditValues_(rows) {
   return [[
     'Asset ID',
-    'Asset title or filename',
+    'Asset Name',
     'Drive File ID',
-    'Source file link',
+    'Drive Link',
     'Source Approval Status',
-    'Source Authority Notes'
+    'Source Authority Review'
   ]].concat(rows);
 }
