@@ -16,6 +16,8 @@ Expected:
 Local Codespaces fixture test passed.
 ```
 
+`test-local.js` is a Node-only Codespaces fixture. It must not run inside Apps Script. The `.claspignore` file keeps it out of `clasp push`.
+
 ## 2. Install clasp
 
 ```bash
@@ -34,6 +36,7 @@ Open the printed Google login URL, authorize, then return to Codespaces.
 
 ```bash
 cat .clasp.json
+cat .claspignore
 clasp status
 ```
 
@@ -43,10 +46,27 @@ The script ID should be:
 1XyFLtngqGWq6nYegE3tkiHZiOHS1XmzNCiEJFX2OnoTGowiWGnkOfYN6
 ```
 
+The ignored files should include:
+
+```text
+test-local.js
+CODESPACES_TEST.md
+PUSH_STEPS.md
+```
+
 ## 5. Push
 
 ```bash
 clasp push
+```
+
+Only these Apps Script files should be pushed:
+
+```text
+appsscript.json
+VAM_SourceApprovedAudit.gs
+VAM_SourceApprovedAuditSmokeTest.gs
+VAM_SourceApprovedAuditTests.gs
 ```
 
 ## 6. Run In Apps Script
