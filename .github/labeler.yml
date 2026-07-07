@@ -1,0 +1,18 @@
+apps-script-builder-dashboard:
+  - apps-script-builder-dashboard/**
+
+drive-metadata-dashboard:
+  - drive-metadata-dashboard/**
+
+search-feature-app:
+  - search-feature-app/**
+
+root-dashboard-bundle:
+  - Code.gs
+  - Dashboard.html
+  - DashboardCss.html
+  - DashboardJs.html
+  - appsscript.json
+
+ci:
+  - .github/**
