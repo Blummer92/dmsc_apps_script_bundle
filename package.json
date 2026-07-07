@@ -1,0 +1,32 @@
+{
+  "name": "dmsc-dashboard",
+  "version": "1.0.0",
+  "description": "Digital Media Source Control Dashboard - Google Apps Script with test suite",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:phase1": "jest tests/phase1"
+  },
+  "keywords": ["apps-script", "metadata", "dashboard"],
+  "author": "DMSC Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@testing-library/dom": "^9.3.3",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "testMatch": ["**/tests/**/*.test.js"],
+    "collectCoverageFrom": [
+      "Code.gs",
+      "DashboardJs.html",
+      "!**/node_modules/**"
+    ],
+    "coveragePathIgnorePatterns": [
+      "/node_modules/"
+    ],
+    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"]
+  }
+}
