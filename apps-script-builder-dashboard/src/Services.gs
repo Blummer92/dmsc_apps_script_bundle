@@ -129,6 +129,93 @@ function createProject(project) {
   }
 }
 
+function getProject(projectId) {
+  if (!projectId) {
+    throw new Error('getProject requires a project_id.');
+  }
+
+  const spreadsheet = getDashboardSpreadsheet_();
+  const sheet = spreadsheet.getSheetByName(APP_CONFIG.SHEETS.PROJECTS);
+  const found = findProjectRow_(sheet, DASHBOARD_SCHEMA.PROJECTS, projectId);
+
+  if (!found) {
+    throw new Error(`Project not found: ${projectId}`);
+  }
+
+  return found.record;
+}
+
+function updateProject(projectId, payload, options) {
+  if (!projectId) {
+    throw new Error('updateProject requires a project_id.');
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const spreadsheet = getDashboardSpreadsheet_();
+    const sheet = spreadsheet.getSheetByName(APP_CONFIG.SHEETS.PROJECTS);
+    const headers = DASHBOARD_SCHEMA.PROJECTS;
+    const found = findProjectRow_(sheet, headers, projectId);
+
+    if (!found) {
+      throw new Error(`Project not found: ${projectId}`);
+    }
+
+    const sync = prepareOperationalSync(payload, found.record, options);
+    const changedFields = sync.diff.filter((entry) => entry.changed);
+
+    if (sync.dry_run || !changedFields.length) {
+      return Object.assign({}, sync, { project_id: projectId, applied: false });
+    }
+
+    const now = nowIso_();
+    const cleanPayload = filterAppsScriptOperationalPayload(payload);
+    const updatedRecord = Object.assign({}, found.record, cleanPayload, { updated_at: now });
+
+    sheet.getRange(found.rowNumber, 1, 1, headers.length).setValues([rowFromObject_(headers, updatedRecord)]);
+
+    changedFields.forEach((entry) => {
+      logChange({
+        project_id: projectId,
+        change_type: 'project_update',
+        changed_field: entry.field,
+        previous_value: entry.previous_value,
+        new_value: entry.new_value,
+        reason: (options && options.reason) || 'Live operational sync update.',
+        changed_by_agent: (options && options.changed_by_agent) || 'Google Apps Script Builder Agent',
+        requires_owner_review: RELATION_FIELDS.includes(entry.field),
+      });
+    });
+
+    return Object.assign({}, sync, { project_id: projectId, applied: true, updated_at: now });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function findProjectRow_(sheet, headers, projectId) {
+  const idIndex = headers.indexOf('project_id');
+  const values = sheet.getDataRange().getValues();
+
+  for (let i = 1; i < values.length; i++) {
+    if (values[i][idIndex] === projectId) {
+      return { rowNumber: i + 1, record: objectFromRow_(headers, values[i]) };
+    }
+  }
+
+  return null;
+}
+
+function objectFromRow_(headers, row) {
+  const record = {};
+  headers.forEach((header, index) => {
+    record[header] = row[index];
+  });
+  return record;
+}
+
 function getDashboardSummary() {
   const spreadsheet = getDashboardSpreadsheet_();
   return {
