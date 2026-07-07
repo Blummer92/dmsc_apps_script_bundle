@@ -2,7 +2,6 @@
   "name": "dmsc-dashboard",
   "version": "1.0.0",
   "description": "Digital Media Source Control Dashboard - Google Apps Script with test suite",
-  "type": "module",
   "scripts": {
     "test": "jest",
     "test:watch": "jest --watch",

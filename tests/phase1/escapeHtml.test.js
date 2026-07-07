@@ -54,8 +54,11 @@ describe('escapeHtml()', () => {
 
     test('prevents event attribute with mixed quotes', () => {
       const malicious = '<a href=\'">\nonclick=alert(1)>';
-      expect(escapeHtml(malicious)).not.toContain('onclick=');
-      expect(escapeHtml(malicious)).toContain('&lt;');
+      const escaped = escapeHtml(malicious);
+      // The onclick part is on a new line, it will still be escaped
+      expect(escaped).toContain('&lt;');
+      expect(escaped).not.toContain('<a '); // No unescaped opening tag
+      expect(escaped).not.toContain('>'); // No unescaped closing tag with >, only &gt;
     });
   });
 
@@ -76,11 +79,18 @@ describe('escapeHtml()', () => {
       expect(escapeHtml(123)).toBe('123');
     });
 
-    test('handles already-escaped content without double-escaping', () => {
-      // This tests that we don't double-escape - a single pass should be safe
+    test('handles pre-escaped content correctly', () => {
+      // If content is already escaped and passed to escapeHtml again, it will be double-escaped
+      // This is safe behavior - the function treats input as raw data
       const once = escapeHtml('<script>');
+      expect(once).toBe('&lt;script&gt;');
+
+      // Passing already-escaped content through again will escape the ampersand
       const twice = escapeHtml(once);
-      expect(twice).not.toContain('&amp;lt;'); // Not double-escaped
+      expect(twice).toBe('&amp;lt;script&amp;gt;');
+
+      // This is correct behavior - never pass already-escaped content to escapeHtml
+      // escapeHtml always treats its input as raw, unescaped data
     });
 
     test('handles text with no special characters', () => {

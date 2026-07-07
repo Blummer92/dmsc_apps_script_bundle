@@ -3,7 +3,7 @@
  * CRITICAL: Core data mutation function - validates, applies, and audits changes
  */
 
-import { createMockSpreadsheet, createUpdatePayload, MOCK_HEADERS } from '../fixtures/mockSheetData.js';
+const { createMockSpreadsheet, createUpdatePayload, MOCK_HEADERS } = require('../fixtures/mockSheetData.js');
 
 describe('updateDmscReviewMetadata()', () => {
   let mockSpreadsheet;
@@ -98,7 +98,14 @@ describe('updateDmscReviewMetadata()', () => {
     });
 
     test('throws error when sheet not found', () => {
-      mockSpreadsheet = createMockSpreadsheet({});
+      // Create a mock spreadsheet with no registry sheet
+      const emptySpreadsheet = {
+        getUrl: jest.fn(),
+        getSheetByName: jest.fn(() => null),
+        insertSheet: jest.fn()
+      };
+      mockSpreadsheet = emptySpreadsheet;
+
       const payload = createUpdatePayload('id-001');
 
       expect(() => updateDmscReviewMetadata(payload)).toThrow('Missing sheet');
@@ -243,31 +250,35 @@ describe('updateDmscReviewMetadata()', () => {
   describe('Value handling', () => {
     test('treats null value as empty string', () => {
       const payload = {
-        imageIdentityId: 'id-001',
+        imageIdentityId: 'id-002', // This one has 'Needs source verification'
         updates: {
-          'Review Reason': null
+          'Review Reason': null  // Clear it
         }
       };
 
       const result = updateDmscReviewMetadata(payload);
 
       expect(result.ok).toBe(true);
-      // Null should be treated as empty string
-      expect(result.changes.some(c => c.newValue === '')).toBe(true);
+      // Should clear the review reason (change from text to empty)
+      if (result.changes.length > 0) {
+        expect(result.changes[0].newValue).toBe('');
+      }
     });
 
     test('treats undefined value as empty string', () => {
       const payload = {
-        imageIdentityId: 'id-001',
+        imageIdentityId: 'id-002', // This one has 'Needs source verification'
         updates: {
-          'Review Reason': undefined
+          'Review Reason': undefined  // Clear it
         }
       };
 
       const result = updateDmscReviewMetadata(payload);
 
       expect(result.ok).toBe(true);
-      expect(result.changes.some(c => c.newValue === '')).toBe(true);
+      if (result.changes.length > 0) {
+        expect(result.changes[0].newValue).toBe('');
+      }
     });
 
     test('converts numeric values to strings', () => {

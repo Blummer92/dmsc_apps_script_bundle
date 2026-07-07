@@ -2,7 +2,7 @@
  * Mock sheet data and helper functions for testing
  */
 
-export const MOCK_HEADERS = [
+const MOCK_HEADERS = [
   'Image Identity ID',
   'File ID',
   'Filename',
@@ -16,7 +16,7 @@ export const MOCK_HEADERS = [
   'Prompt Evidence Status'
 ];
 
-export const MOCK_REGISTRY_ROWS = [
+const MOCK_REGISTRY_ROWS = [
   [
     'id-001',
     'file-abc123',
@@ -58,7 +58,7 @@ export const MOCK_REGISTRY_ROWS = [
   ]
 ];
 
-export const MOCK_AUDIT_LOG_DATA = [
+const MOCK_AUDIT_LOG_DATA = [
   ['Image Identity ID', 'Action', 'Timestamp', 'Actor', 'Source', 'Field', 'Old Value', 'New Value'],
   [
     'id-001',
@@ -75,7 +75,7 @@ export const MOCK_AUDIT_LOG_DATA = [
 /**
  * Creates a mock sheet object with common methods
  */
-export function createMockSheet(name = 'Merged Image Prompt Metadata', data = null) {
+function createMockSheet(name = 'Merged Image Prompt Metadata', data = null) {
   const sheetData = data || [MOCK_HEADERS, ...MOCK_REGISTRY_ROWS];
 
   return {
@@ -98,7 +98,7 @@ export function createMockSheet(name = 'Merged Image Prompt Metadata', data = nu
 /**
  * Creates a mock spreadsheet object
  */
-export function createMockSpreadsheet(sheets = {}) {
+function createMockSpreadsheet(sheets = {}) {
   const defaultSheets = {
     'Merged Image Prompt Metadata': createMockSheet('Merged Image Prompt Metadata'),
     'DMSC Audit Log': createMockSheet('DMSC Audit Log', MOCK_AUDIT_LOG_DATA)
@@ -121,7 +121,7 @@ export function createMockSpreadsheet(sheets = {}) {
 /**
  * Helper to create a test update payload
  */
-export function createUpdatePayload(imageIdentityId, updates = {}) {
+function createUpdatePayload(imageIdentityId, updates = {}) {
   return {
     imageIdentityId,
     updates: {
@@ -133,3 +133,12 @@ export function createUpdatePayload(imageIdentityId, updates = {}) {
     }
   };
 }
+
+module.exports = {
+  MOCK_HEADERS,
+  MOCK_REGISTRY_ROWS,
+  MOCK_AUDIT_LOG_DATA,
+  createMockSheet,
+  createMockSpreadsheet,
+  createUpdatePayload
+};
