@@ -1,0 +1,8 @@
+{
+  "required_sheet_fields": ["alpha", "delta_missing_from_gs"],
+  "computed_fields": ["computed_one", "beta"],
+  "expected_sheet_headers": ["alpha", "beta"],
+  "fields": [
+    { "field": "alpha" }
+  ]
+}

@@ -6,7 +6,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:phase1": "jest tests/phase1"
+    "test:phase1": "jest tests/phase1",
+    "check:schema-drift": "node scripts/check-schema-drift.mjs",
+    "check:schema-drift:self-test": "node scripts/check-schema-drift.mjs --self-test"
   },
   "keywords": ["apps-script", "metadata", "dashboard"],
   "author": "DMSC Team",

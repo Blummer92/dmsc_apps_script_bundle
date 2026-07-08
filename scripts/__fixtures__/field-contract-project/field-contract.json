@@ -1,0 +1,28 @@
+{
+  "fields": [
+    {
+      "field": "alpha",
+      "classification": "Canonical metadata",
+      "owner_database": "Owner A",
+      "consuming_database": "Consumer A",
+      "safe_sync_rule": "Completely different wording for alpha.",
+      "blocked_until_owner_review": false
+    },
+    {
+      "field": "beta",
+      "classification": "Lookup only",
+      "owner_database": "Owner B",
+      "consuming_database": "Consumer B",
+      "safe_sync_rule": "Display only, worded differently.",
+      "blocked_until_owner_review": true
+    },
+    {
+      "field": "delta_only_in_json",
+      "classification": "Canonical metadata",
+      "owner_database": "Owner D",
+      "consuming_database": "Consumer D",
+      "safe_sync_rule": "Only documented here.",
+      "blocked_until_owner_review": false
+    }
+  ]
+}

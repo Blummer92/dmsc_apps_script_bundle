@@ -1,0 +1,4 @@
+{
+  "writable_field_allowlist": ["alpha"],
+  "denylist": ["beta"]
+}
