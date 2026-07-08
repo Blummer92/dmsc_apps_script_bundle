@@ -176,7 +176,7 @@ const FIELD_CONTRACT = Object.freeze([
   {
     field_name: 'source_document_relation',
     classification: APP_CONFIG.OWNERSHIP.RELATION_ONLY,
-    owner_database: 'Curriculum source-of-truth or Drive Operations Manager',
+    owner_database: 'Curriculum source-of-truth dashboard or Drive Operations Manager',
     consuming_database: 'Apps Script Builder Dashboard',
     safe_sync_rule: 'Store relation or link only; do not claim source authority.',
     blocked_until_owner_review: true,
@@ -264,7 +264,7 @@ const FIELD_CONTRACT = Object.freeze([
   {
     field_name: 'source_document_file_id',
     classification: APP_CONFIG.OWNERSHIP.BLOCKED,
-    owner_database: 'Curriculum source-of-truth or Drive Metadata Operations Agent',
+    owner_database: 'Curriculum source-of-truth dashboard or Drive Metadata Operations Agent',
     consuming_database: 'Apps Script Builder Dashboard',
     safe_sync_rule: 'Schema placeholder only in MVP; source references remain relation, lookup, or summary-only.',
     blocked_until_owner_review: true,
@@ -272,7 +272,7 @@ const FIELD_CONTRACT = Object.freeze([
   {
     field_name: 'source_document_url',
     classification: APP_CONFIG.OWNERSHIP.BLOCKED,
-    owner_database: 'Curriculum source-of-truth or Drive Metadata Operations Agent',
+    owner_database: 'Curriculum source-of-truth dashboard or Drive Metadata Operations Agent',
     consuming_database: 'Apps Script Builder Dashboard',
     safe_sync_rule: 'Schema placeholder only in MVP; source references remain relation, lookup, or summary-only.',
     blocked_until_owner_review: true,
