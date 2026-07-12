@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "node tests/ControlledVocabularyService.test.mjs",
     "clasp:login": "node scripts/clasp-sync.mjs login",
     "clasp:push": "node scripts/clasp-sync.mjs push",
     "clasp:preflight-push": "node scripts/codespaces-clasp-preflight-push.mjs",
