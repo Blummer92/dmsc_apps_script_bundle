@@ -69,54 +69,6 @@ var NotionSyncService = (function() {
     'Version',
     'Cognitive load rating'
   ];
-  const CONTROLLED_OPTIONS = {
-    'Asset type': ['icon', 'diagram', 'worksheet image', 'slide image', 'process visual', 'poster visual'],
-    'Approved use': ['worksheet', 'slide', 'poster', 'student-facing', 'teacher-facing'],
-    'Reuse status': ['approved', 'draft', 'needs revision', 'retired'],
-    'Cognitive load rating': ['low', 'medium', 'high']
-  };
-  const CONTROLLED_ALIASES = {
-    'Asset type': {
-      icon: 'icon',
-      icons: 'icon',
-      icon_set: 'icon',
-      diagram: 'diagram',
-      worksheet: 'worksheet image',
-      worksheet_image: 'worksheet image',
-      slide: 'slide image',
-      slide_image: 'slide image',
-      process: 'process visual',
-      process_visual: 'process visual',
-      poster: 'poster visual',
-      poster_visual: 'poster visual'
-    },
-    'Approved use': {
-      worksheet: 'worksheet',
-      worksheets: 'worksheet',
-      slide: 'slide',
-      slides: 'slide',
-      poster: 'poster',
-      posters: 'poster',
-      student: 'student-facing',
-      student_facing: 'student-facing',
-      teacher: 'teacher-facing',
-      teacher_facing: 'teacher-facing'
-    },
-    'Reuse status': {
-      approved: 'approved',
-      source_approved: 'approved',
-      draft: 'draft',
-      needs_revision: 'needs revision',
-      revision_needed: 'needs revision',
-      retired: 'retired'
-    },
-    'Cognitive load rating': {
-      low: 'low',
-      medium: 'medium',
-      med: 'medium',
-      high: 'high'
-    }
-  };
   const ACCESSIBILITY_KEYWORDS = [
     'accessibility',
     'accessible',
@@ -683,7 +635,7 @@ var NotionSyncService = (function() {
     const accessibilityNotes = pickAccessibilityNotes_(sourceProperties.visual_consistency_notes);
     addVisualEntry_(schema, properties, entries, skipped, 'Accessibility notes', accessibilityNotes.value, accessibilityNotes.sourceColumn, accessibilityNotes.reason);
 
-    const assetType = normalizeControlledValue_('Asset type', pickFirstSourceValue_(sourceProperties, ['asset_category']).value);
+    const assetType = ControlledVocabularyService.normalizeFlat('Asset type', pickFirstSourceValue_(sourceProperties, ['asset_category']).value);
     addVisualEntry_(schema, properties, entries, skipped, 'Asset type', assetType.value, 'asset_category', assetType.reason);
 
     const keywords = parseKeywords_(pickFirstSourceValue_(sourceProperties, ['fast_sort_tags']).value);
@@ -692,11 +644,11 @@ var NotionSyncService = (function() {
     addVisualEntry_(schema, properties, entries, skipped, 'Style family', pickFirstSourceValue_(sourceProperties, ['unit_visual_system']).value, 'unit_visual_system');
 
     const approvedUseSource = pickFirstSourceValue_(sourceProperties, ['approved_use', 'source_approved_use', 'use_boundary', 'source_use_boundary']);
-    const approvedUse = normalizeControlledValue_('Approved use', approvedUseSource.value);
+    const approvedUse = ControlledVocabularyService.normalizeFlat('Approved use', approvedUseSource.value);
     addVisualEntry_(schema, properties, entries, skipped, 'Approved use', approvedUse.value, approvedUseSource.sourceColumn, approvedUse.reason);
 
     const reuseStatusSource = pickFirstSourceValue_(sourceProperties, ['reuse_status', 'source_reuse_status', 'source_review_outcome']);
-    const reuseStatus = normalizeControlledValue_('Reuse status', reuseStatusSource.value);
+    const reuseStatus = ControlledVocabularyService.normalizeFlat('Reuse status', reuseStatusSource.value);
     addVisualEntry_(schema, properties, entries, skipped, 'Reuse status', reuseStatus.value, reuseStatusSource.sourceColumn, reuseStatus.reason);
 
     addVisualEntry_(schema, properties, entries, skipped, 'Instructional purpose', pickFirstSourceValue_(sourceProperties, ['asset_label']).value, 'asset_label');
@@ -705,7 +657,7 @@ var NotionSyncService = (function() {
     const version = pickFirstSourceValue_(sourceProperties, ['version', 'asset_version', 'source_version']);
     addVisualEntry_(schema, properties, entries, skipped, 'Version', version.value, version.sourceColumn);
     const cognitiveLoadSource = pickFirstSourceValue_(sourceProperties, ['reviewed_cognitive_load_rating', 'cognitive_load_rating', 'source_cognitive_load_rating']);
-    const cognitiveLoad = normalizeControlledValue_('Cognitive load rating', cognitiveLoadSource.value);
+    const cognitiveLoad = ControlledVocabularyService.normalizeFlat('Cognitive load rating', cognitiveLoadSource.value);
     addVisualEntry_(schema, properties, entries, skipped, 'Cognitive load rating', cognitiveLoad.value, cognitiveLoadSource.sourceColumn, cognitiveLoad.reason);
 
     if (!schema.Thumbnail) {
@@ -752,7 +704,7 @@ var NotionSyncService = (function() {
       return { ok: true, reason: '' };
     }
     const values = Array.isArray(value) ? value : [value];
-    const allowed = CONTROLLED_OPTIONS[fieldName] || getSchemaOptions_(propertySchema);
+    const allowed = ControlledVocabularyService.approvedOptions(fieldName) || getSchemaOptions_(propertySchema);
     const schemaOptions = getSchemaOptions_(propertySchema);
     const invalid = values.filter(function(item) {
       return allowed.indexOf(item) === -1 || (schemaOptions.length && schemaOptions.indexOf(item) === -1);
@@ -802,17 +754,6 @@ var NotionSyncService = (function() {
       if (value) return { value: value, sourceColumn: name };
     }
     return { value: '', sourceColumn: sourceNames.join(' | ') };
-  }
-
-  function normalizeControlledValue_(fieldName, rawValue) {
-    const value = String(rawValue || '').trim();
-    if (!value) return { value: '', reason: 'no reviewed source value available' };
-    const aliases = CONTROLLED_ALIASES[fieldName] || {};
-    const direct = CONTROLLED_OPTIONS[fieldName] || [];
-    if (direct.indexOf(value) !== -1) return { value: value, reason: '' };
-    const normalized = normalize_(value);
-    if (aliases[normalized]) return { value: aliases[normalized], reason: '' };
-    return { value: '', reason: 'source value is outside approved options: ' + value };
   }
 
   function parseKeywords_(rawValue) {

@@ -18,68 +18,6 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     fast_sort_tags: 'Fast Sort Tags',
     visual_consistency_notes: 'Visual Consistency Notes'
   };
-  const CONTROLLED_OPTIONS = {
-    'Asset type': ['icon', 'diagram', 'worksheet image', 'slide image', 'process visual', 'poster visual'],
-    'Approved use': ['worksheet', 'slide', 'poster', 'student-facing', 'teacher-facing'],
-    'Reuse status': ['approved', 'draft', 'needs revision', 'retired'],
-    'Cognitive load rating': ['low', 'medium', 'high']
-  };
-  const CONTROLLED_ALIASES = {
-    'Asset type': {
-      icon: 'icon',
-      icons: 'icon',
-      icon_set: 'icon',
-      iconset: 'icon',
-      single_icon: 'icon',
-      ui_icon: 'icon',
-      prop: 'poster visual',
-      prop_asset: 'poster visual',
-      graphic: 'poster visual',
-      illustration: 'poster visual',
-      product_asset: 'poster visual',
-      product: 'poster visual',
-      visual_asset: 'poster visual',
-      background: 'poster visual',
-      poster: 'poster visual',
-      poster_visual: 'poster visual',
-      diagram: 'diagram',
-      worksheet: 'worksheet image',
-      worksheet_image: 'worksheet image',
-      worksheet_graphic: 'worksheet image',
-      asset_sheet: 'worksheet image',
-      slide: 'slide image',
-      slide_image: 'slide image',
-      ui_screenshot: 'slide image',
-      process: 'process visual',
-      process_visual: 'process visual'
-    },
-    'Approved use': {
-      worksheet: 'worksheet',
-      worksheets: 'worksheet',
-      slide: 'slide',
-      slides: 'slide',
-      poster: 'poster',
-      posters: 'poster',
-      student: 'student-facing',
-      student_facing: 'student-facing',
-      teacher: 'teacher-facing',
-      teacher_facing: 'teacher-facing'
-    },
-    'Reuse status': {
-      approved: 'approved',
-      source_approved: 'approved',
-      draft: 'draft',
-      needs_revision: 'needs revision',
-      revision_needed: 'needs revision',
-      retired: 'retired'
-    },
-    'Cognitive load rating': {
-      low: 'low',
-      medium: 'medium',
-      med: 'medium',
-      high: 'high'
-    }
-  };
 
   function build(record, options) {
     const allowGuessedPrompts = Boolean(options && options.allowGuessedPrompts);
@@ -105,7 +43,7 @@ var VisualAssetLibraryPromptMetadataService = (function() {
         sourceColumn: sourceColumnFor_('fast_sort_tags', parsed, prompt, sourceSuffix),
         reason: fastSortTags ? '' : 'no keyword source value available'
       },
-      'Asset type': normalizeControlledValue_('Asset type', assetCategory, sourceColumnFor_('asset_category', parsed, prompt, sourceSuffix)),
+      'Asset type': { value: assetCategory, sourceColumn: sourceColumnFor_('asset_category', parsed, prompt, sourceSuffix), reason: assetCategory ? '' : 'no reviewed source value available' },
       'Style family': {
         value: capNotionRichText_(unitVisualSystem),
         sourceColumn: sourceColumnFor_('unit_visual_system', parsed, prompt, sourceSuffix),
@@ -175,16 +113,6 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     return fieldName || '';
   }
 
-  function normalizeControlledValue_(fieldName, rawValue, sourceColumn) {
-    const value = String(rawValue || '').trim();
-    if (!value) return { value: '', sourceColumn: sourceColumn || '', reason: 'no reviewed source value available' };
-    const direct = CONTROLLED_OPTIONS[fieldName] || [];
-    if (direct.indexOf(value) !== -1) return { value: value, sourceColumn: sourceColumn || '', reason: '' };
-    const alias = (CONTROLLED_ALIASES[fieldName] || {})[normalize_(value)];
-    if (alias) return { value: alias, sourceColumn: sourceColumn || '', reason: '' };
-    return { value: '', sourceColumn: sourceColumn || '', reason: 'source value is outside approved options and needs mapping: ' + value };
-  }
-
   function parseKeywords_(rawValue) {
     const text = String(rawValue || '').trim();
     if (!text) return [];
@@ -240,9 +168,5 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     return String(value).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
   }
 
-  function normalize_(value) {
-    return String(value || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  }
-
-  return { build: build, CONTROLLED_OPTIONS: CONTROLLED_OPTIONS };
+  return { build: build };
 })();

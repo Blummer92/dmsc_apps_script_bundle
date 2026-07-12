@@ -10,6 +10,7 @@ const REQUIRED_FILES = [
   'src/SheetReadService.gs',
   'src/NotionSyncService.gs',
   'src/PropertyAliasService.gs',
+  'src/ControlledVocabularyService.gs',
   'src/AssetTypeMappingService.gs',
   'src/KeywordStrategyService.gs',
   'src/VisualAssetLibraryDryRunProofService.gs',
