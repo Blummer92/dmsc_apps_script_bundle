@@ -143,6 +143,7 @@
         <td>
           <div class="asset-name">${escapeHtml(record.fileName || '(Untitled asset)')}</div>
           <div class="asset-path">${escapeHtml(record.fullPath || record.normalizedFilename || '')}</div>
+          <button class="btn ghost inspect-record-button" type="button" data-id="${escapeHtml(record.imageIdentityId)}">Inspect</button>
         </td>
         <td>${badge(record.promptEvidenceStatus, promptBadgeType(record.promptEvidenceStatus))}</td>
         <td>${badge(record.sourceControlClearanceNeeded === 'Yes' ? 'Clearance Needed' : record.sourceVerificationStatus, record.sourceControlClearanceNeeded === 'Yes' ? 'danger' : 'ok')}</td>
@@ -159,6 +160,14 @@
           event.preventDefault();
           selectRecord(row.dataset.id);
         }
+      });
+    });
+
+    body.querySelectorAll('.inspect-record-button').forEach(function(button) {
+      button.addEventListener('click', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        selectRecord(button.dataset.id);
       });
     });
   }
@@ -203,15 +212,22 @@
       <div class="prompt-box">${escapeHtml(record.projectedImagePrompt || record.promptEvidenceExcerpt || 'No prompt evidence available.')}</div>
     `;
 
-    document.getElementById('tab-source').innerHTML = detailList([
-      ['Source Group', record.sourceGroup || 'Unknown'],
-      ['Source Type', record.sourceType || 'Unknown'],
-      ['Source Evidence Status', record.sourceEvidenceStatus],
-      ['Source Classification Confidence', record.sourceClassificationConfidence || '-'],
-      ['Source Verification Status', record.sourceVerificationStatus],
-      ['Source-Control Clearance Needed', record.sourceControlClearanceNeeded],
-      ['Do Not Use Reason', record.doNotUseReason || '-']
-    ]);
+    document.getElementById('tab-source').innerHTML = `
+      ${detailList([
+        ['Source Group', record.sourceGroup || 'Unknown'],
+        ['Source Type', record.sourceType || 'Unknown'],
+        ['Source Evidence Status', record.sourceEvidenceStatus],
+        ['Source Classification Confidence', record.sourceClassificationConfidence || '-'],
+        ['Source Verification Status', record.sourceVerificationStatus],
+        ['Source-Control Clearance Needed', record.sourceControlClearanceNeeded],
+        ['Do Not Use Reason', record.doNotUseReason || '-']
+      ])}
+      <div id="sourceApprovalPanel" class="routing-form source-approval-panel">
+        <h3 style="margin:14px 0 8px;">Source Approval</h3>
+        <div class="state-panel">Loading approval preview...</div>
+      </div>
+    `;
+    loadSourceApprovalPreview(record.imageIdentityId);
 
     document.getElementById('tab-audit').innerHTML = audit.length
       ? audit.map(item => `<div class="audit-item"><strong>${escapeHtml(item.action)}</strong><small>${escapeHtml(item.timestamp)} - ${escapeHtml(item.actor)} - ${escapeHtml(item.source)}</small><div>${escapeHtml(item.field)}: ${escapeHtml(item.oldValue)} → ${escapeHtml(item.newValue)}</div></div>`).join('')
@@ -239,6 +255,95 @@
 
     document.getElementById('saveRoutingButton').addEventListener('click', saveRoutingMetadata);
     setActiveTab(state.activeTab);
+  }
+
+  function loadSourceApprovalPreview(fileId) {
+    const panel = document.getElementById('sourceApprovalPanel');
+    if (!panel) return;
+
+    google.script.run
+      .withSuccessHandler(renderSourceApprovalPreview)
+      .withFailureHandler(function(error) {
+        panel.innerHTML = `
+          <h3 style="margin:14px 0 8px;">Source Approval</h3>
+          <div class="state-panel">${escapeHtml(error && error.message ? error.message : String(error))}</div>
+        `;
+      })
+      .getDmscSourceApprovalPreview({ fileId: fileId });
+  }
+
+  function renderSourceApprovalPreview(preview) {
+    const panel = document.getElementById('sourceApprovalPanel');
+    if (!panel) return;
+
+    const blockers = preview.blockers && preview.blockers.length
+      ? `<div class="state-panel"><strong>Blockers:</strong><br>${preview.blockers.map(escapeHtml).join('<br>')}</div>`
+      : '';
+
+    const warnings = preview.warnings && preview.warnings.length
+      ? `<div class="state-panel"><strong>Warnings:</strong><br>${preview.warnings.map(escapeHtml).join('<br>')}</div>`
+      : '';
+
+    const alreadyApproved = preview.currentState.sourceApprovalStatus === 'Approved';
+    const canApprove = preview.canApproveWithEvidence && !alreadyApproved;
+
+    panel.innerHTML = `
+      <h3 style="margin:14px 0 8px;">Source Approval</h3>
+      ${detailList([
+        ['Current Approval Status', preview.currentState.sourceApprovalStatus || '-'],
+        ['Current Evidence', preview.currentState.approvalEvidenceUrl || '-'],
+        ['Source Verification', preview.currentState.sourceVerificationStatus || '-'],
+        ['Clearance Needed', preview.currentState.sourceControlClearanceNeeded || '-'],
+        ['Can Approve With Evidence', preview.canApproveWithEvidence ? 'Yes' : 'No']
+      ])}
+      ${blockers}
+      ${warnings}
+      <label><span>Approval Evidence URL</span>
+        <input id="sourceApprovalEvidenceUrl" type="url" placeholder="Paste evidence URL required for production approval" ${canApprove ? '' : 'disabled'}>
+      </label>
+      <label><span>Restrictions</span>
+        <textarea id="sourceApprovalRestrictions" placeholder="Optional restrictions or usage limits" ${canApprove ? '' : 'disabled'}></textarea>
+      </label>
+      <label><span>Source Notes</span>
+        <textarea id="sourceApprovalNotes" placeholder="Optional approval notes" ${canApprove ? '' : 'disabled'}></textarea>
+      </label>
+      <button class="btn primary" type="button" id="approveSourceButton" ${canApprove ? '' : 'disabled'}>
+        Approve Source
+      </button>
+    `;
+
+    const button = document.getElementById('approveSourceButton');
+    if (button) button.addEventListener('click', approveSelectedSource);
+  }
+
+  function approveSelectedSource() {
+    if (!state.currentRecord) return;
+
+    const evidenceUrl = document.getElementById('sourceApprovalEvidenceUrl').value.trim();
+    if (!evidenceUrl) {
+      showToast('Approval evidence URL is required.');
+      return;
+    }
+
+    const button = document.getElementById('approveSourceButton');
+    if (button) button.disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function(response) {
+        showToast('Source approved. Refreshing record...');
+        selectRecord(response.fileId || state.currentRecord.imageIdentityId);
+        loadRows();
+      })
+      .withFailureHandler(function(error) {
+        if (button) button.disabled = false;
+        showError(error);
+      })
+      .approveDmscSourceForAsset({
+        fileId: state.currentRecord.fileId || state.currentRecord.imageIdentityId,
+        approvalEvidenceUrl: evidenceUrl,
+        restrictions: document.getElementById('sourceApprovalRestrictions').value,
+        sourceNotes: document.getElementById('sourceApprovalNotes').value
+      });
   }
 
   function saveRoutingMetadata() {
