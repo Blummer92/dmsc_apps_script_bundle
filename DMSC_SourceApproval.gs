@@ -426,3 +426,132 @@ function testGetDmscSourceApprovalPreview() {
   Logger.log(JSON.stringify(preview, null, 2));
   return preview;
 }
+
+/**
+ * Returns read-only source approval previews for multiple assets.
+ *
+ * Payload shapes:
+ * - { fileIds: ['id1', 'id2', ...] }
+ * - { queueId: 'sourceClearanceNeeded', limit: 5 }
+ *
+ * This function does not write to the workbook. Missing or invalid ids
+ * produce per-record error items instead of failing the whole batch.
+ */
+function getDmscSourceApprovalPreviewBatch(payload) {
+  payload = payload || {};
+
+  let fileIds = [];
+
+  if (payload.fileIds && Object.prototype.toString.call(payload.fileIds) === '[object Array]') {
+    fileIds = payload.fileIds.map(function(id) {
+      return String(id == null ? '' : id).trim();
+    });
+  } else if (payload.queueId || payload.limit) {
+    const queuePage = getDmscDashboardRows({
+      queueId: payload.queueId,
+      page: 1,
+      pageSize: payload.limit || 5
+    });
+    fileIds = queuePage.records.map(function(record) {
+      return String(record.fileId || record.imageIdentityId || '').trim();
+    });
+  } else {
+    throw new Error('getDmscSourceApprovalPreviewBatch requires fileIds[] or { queueId, limit }.');
+  }
+
+  const previews = fileIds.map(function(fileId) {
+    try {
+      return getDmscSourceApprovalPreview(fileId);
+    } catch (error) {
+      return {
+        ok: false,
+        fileId: fileId,
+        error: error && error.message ? error.message : String(error)
+      };
+    }
+  });
+
+  const summary = {
+    previewed: previews.length,
+    readyWithEvidence: 0,
+    blocked: 0,
+    warnings: 0,
+    errors: 0
+  };
+
+  previews.forEach(function(preview) {
+    if (preview.ok !== true) {
+      summary.errors++;
+      return;
+    }
+    if (preview.canApproveWithEvidence) summary.readyWithEvidence++;
+    if (preview.blockers && preview.blockers.length > 0) summary.blocked++;
+    if (preview.warnings && preview.warnings.length > 0) summary.warnings++;
+  });
+
+  return {
+    ok: true,
+    total: previews.length,
+    summary: summary,
+    previews: previews
+  };
+}
+
+/**
+ * Read-only test for the batch source approval preview.
+ *
+ * Loads the first 5 records from the sourceClearanceNeeded queue, runs the
+ * batch preview, and verifies the contract without writing to the workbook.
+ */
+function testGetDmscSourceApprovalPreviewBatch() {
+  const ss = getDashboardSpreadsheet_();
+  const sourceSheet = ss.getSheetByName(DMSC_APP_CONFIG.sourceLibrarySheetName);
+  const auditSheet = ss.getSheetByName(DMSC_APP_CONFIG.auditLogSheetName);
+
+  const sourceRowsBefore = sourceSheet ? sourceSheet.getLastRow() : 0;
+  const auditRowsBefore = auditSheet ? auditSheet.getLastRow() : 0;
+
+  const result = getDmscSourceApprovalPreviewBatch({
+    queueId: 'sourceClearanceNeeded',
+    limit: 5
+  });
+
+  if (result.ok !== true) throw new Error('Batch preview did not return ok=true.');
+  if (!(result.total > 0)) throw new Error('Batch preview returned total=0; expected records in sourceClearanceNeeded queue.');
+  if (!result.previews || result.previews.length !== result.total) {
+    throw new Error('Batch preview total does not match previews length.');
+  }
+  if (!result.summary || result.summary.previewed !== result.total) {
+    throw new Error('Batch preview summary.previewed does not match total.');
+  }
+
+  result.previews.forEach(function(preview, index) {
+    if (preview.ok !== true) {
+      throw new Error('Preview ' + index + ' returned an error: ' + preview.error);
+    }
+    if (!String(preview.fileId || '').trim()) throw new Error('Preview ' + index + ' missing fileId.');
+    if (!String(preview.fileName || '').trim()) throw new Error('Preview ' + index + ' missing fileName.');
+    if (typeof preview.canApproveWithEvidence !== 'boolean') throw new Error('Preview ' + index + ' missing canApproveWithEvidence boolean.');
+    if (!preview.blockers || typeof preview.blockers.length !== 'number') throw new Error('Preview ' + index + ' missing blockers array.');
+    if (!preview.warnings || typeof preview.warnings.length !== 'number') throw new Error('Preview ' + index + ' missing warnings array.');
+  });
+
+  const sourceRowsAfter = sourceSheet ? sourceSheet.getLastRow() : 0;
+  const auditRowsAfter = auditSheet ? auditSheet.getLastRow() : 0;
+
+  if (sourceRowsAfter !== sourceRowsBefore) {
+    throw new Error('Batch preview changed source library row count; expected read-only behavior.');
+  }
+  if (auditRowsAfter !== auditRowsBefore) {
+    throw new Error('Batch preview appended audit rows; expected read-only behavior.');
+  }
+
+  Logger.log(JSON.stringify({
+    ok: true,
+    total: result.total,
+    summary: result.summary,
+    firstPreviewFileId: result.previews[0].fileId
+  }, null, 2));
+
+  return result;
+}

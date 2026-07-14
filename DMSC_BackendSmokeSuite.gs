@@ -2,7 +2,7 @@
  * DMSC backend smoke suite.
  *
  * Purpose:
- * - Runs 20 backend checks in one Apps Script execution.
+ * - Runs 27 backend checks in one Apps Script execution.
  * - Verifies read path, enrichment, queues, detail lookup, safe writes,
  *   unsafe-write blocking, and audit logging.
  *
@@ -305,6 +305,39 @@ function runDmscBackendSmokeSuite() {
     assert(sourceClearanceQueue.total === summary.totalRecords, 'Expected all records to remain in source clearance queue.');
 
     return 'sourceControlClearanceNeeded=' + current.sourceControlClearanceNeeded + ', sourceVerificationStatus=' + current.sourceVerificationStatus;
+  });
+
+  check('27 batch source approval preview is read-only and well formed', function() {
+    const sourceSheet = ss.getSheetByName(DMSC_APP_CONFIG.sourceLibrarySheetName);
+    const auditSheet = ss.getSheetByName(DMSC_APP_CONFIG.auditLogSheetName);
+    const sourceRowsBefore = sourceSheet ? sourceSheet.getLastRow() : 0;
+    const auditRowsBefore = auditSheet ? auditSheet.getLastRow() : 0;
+
+    const batch = getDmscSourceApprovalPreviewBatch({
+      queueId: 'sourceClearanceNeeded',
+      limit: 5
+    });
+
+    assert(batch.ok === true, 'Batch preview did not return ok=true.');
+    assert(batch.total > 0, 'Batch preview returned no records.');
+    assert(batch.previews && batch.previews.length === batch.total, 'Batch preview total does not match previews length.');
+    assert(batch.summary && batch.summary.previewed === batch.total, 'Batch preview summary.previewed does not match total.');
+
+    batch.previews.forEach(function(preview, index) {
+      assert(preview.ok === true, 'Preview ' + index + ' returned an error: ' + preview.error);
+      assertText(preview.fileId, 'Preview ' + index + ' missing fileId.');
+      assertText(preview.fileName, 'Preview ' + index + ' missing fileName.');
+      assert(typeof preview.canApproveWithEvidence === 'boolean', 'Preview ' + index + ' missing canApproveWithEvidence boolean.');
+      assert(preview.blockers && typeof preview.blockers.length === 'number', 'Preview ' + index + ' missing blockers array.');
+      assert(preview.warnings && typeof preview.warnings.length === 'number', 'Preview ' + index + ' missing warnings array.');
+    });
+
+    const sourceRowsAfter = sourceSheet ? sourceSheet.getLastRow() : 0;
+    const auditRowsAfter = auditSheet ? auditSheet.getLastRow() : 0;
+    assert(sourceRowsAfter === sourceRowsBefore, 'Batch preview changed source library row count.');
+    assert(auditRowsAfter === auditRowsBefore, 'Batch preview appended audit rows.');
+
+    return 'total=' + batch.total + ', readyWithEvidence=' + batch.summary.readyWithEvidence + ', errors=' + batch.summary.errors;
   });
 
   const passed = results.filter(function(result) { return result.status === 'PASS'; }).length;
