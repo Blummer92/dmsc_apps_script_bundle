@@ -274,16 +274,16 @@ function runDmscBackendSmokeSuite() {
     return status || '(blank)';
   });
 
-  check('24 source library approval evidence is blank or non-production', function() {
+  check('24 source library production approval evidence is not present', function() {
+    const status = String(firstSourceLibraryRecord.source_approval_status || '').trim();
     const evidence = String(firstSourceLibraryRecord.approval_evidence_url || '').trim();
-    const approvedBy = String(firstSourceLibraryRecord.approved_by || '').trim();
     const approvalDate = String(firstSourceLibraryRecord.approval_date || '').trim();
 
-    assert(!evidence, 'Selected asset has approval_evidence_url; expected blank during pilot.');
-    assert(!approvedBy, 'Selected asset has approved_by; expected blank during pilot.');
-    assert(!approvalDate, 'Selected asset has approval_date; expected blank during pilot.');
+    assert(status !== 'Approved', 'Selected asset is marked Approved; expected pilot/non-production source state.');
+    assert(!evidence, 'Selected asset has approval_evidence_url; expected no production approval evidence during pilot.');
+    assert(!approvalDate, 'Selected asset has approval_date; expected no production approval date during pilot.');
 
-    return 'approval evidence fields blank';
+    return 'status=' + (status || '(blank)') + ', production evidence absent';
   });
 
   check('25 source clearance remains blocked until approval workflow exists', function() {
