@@ -19,6 +19,7 @@ const DMSC_APP_CONFIG = {
   spreadsheetId: '1S3GNwqu0ehPXUA1j4FEksH1uEMKlxyEwAZWfIADPfpo',
   registrySheetName: 'Merged Image Prompt Metadata',
   driveImagesSheetName: 'Drive Images',
+  sourceLibrarySheetName: 'DM Source Library Pilot',
   auditLogSheetName: 'DMSC Audit Log',
   defaultPageSize: 50,
   maxPageSize: 100,
@@ -290,6 +291,17 @@ function getRegistrySheetInfo_() {
   if (!sheet) sheet = ss.getSheetByName(DMSC_APP_CONFIG.driveImagesSheetName);
   if (!sheet) throw new Error('Could not find registry sheet or Drive Images sheet.');
 
+  const baseInfo = getSheetInfoFromSheet_(sheet);
+  const enrichedRows = enrichRegistryRows_(ss, baseInfo.rows);
+
+  return {
+    headers: baseInfo.headers,
+    rows: enrichedRows,
+    sheetName: sheet.getName()
+  };
+}
+
+function getSheetInfoFromSheet_(sheet) {
   const values = sheet.getDataRange().getValues();
   if (values.length === 0) return { headers: [], rows: [], sheetName: sheet.getName() };
 
@@ -303,6 +315,63 @@ function getRegistrySheetInfo_() {
     if (Object.keys(record).length > 2) rows.push(record);
   }
   return { headers: headers, rows: rows, sheetName: sheet.getName() };
+}
+
+function enrichRegistryRows_(ss, rows) {
+  const driveSheet = ss.getSheetByName(DMSC_APP_CONFIG.driveImagesSheetName);
+  const sourceSheet = ss.getSheetByName(DMSC_APP_CONFIG.sourceLibrarySheetName);
+
+  const driveRowsByFileId = driveSheet
+    ? indexRowsByAnyHeader_(getSheetInfoFromSheet_(driveSheet).rows, ['File ID', 'file_id'])
+    : {};
+  const sourceRowsByFileId = sourceSheet
+    ? indexRowsByAnyHeader_(getSheetInfoFromSheet_(sourceSheet).rows, ['file_id', 'File ID'])
+    : {};
+
+  return rows.map(function(record) {
+    const fileId = getAnyValue_(record, ['File ID', 'file_id', 'Image Identity ID', 'ImageIdentityID']);
+    const enriched = copyRecord_(record);
+
+    mergeSupplementalRecord_(enriched, driveRowsByFileId[fileId], 'Drive Images');
+    mergeSupplementalRecord_(enriched, sourceRowsByFileId[fileId], 'DM Source Library Pilot');
+
+    return enriched;
+  });
+}
+
+function indexRowsByAnyHeader_(rows, headerNames) {
+  const index = {};
+  rows.forEach(function(row) {
+    const key = String(getAnyValue_(row, headerNames) || '').trim();
+    if (key && !index[key]) index[key] = row;
+  });
+  return index;
+}
+
+function copyRecord_(record) {
+  const copy = {};
+  Object.keys(record || {}).forEach(function(key) {
+    copy[key] = record[key];
+  });
+  return copy;
+}
+
+function mergeSupplementalRecord_(target, source, sourceLabel) {
+  if (!source) return;
+
+  Object.keys(source).forEach(function(key) {
+    if (key.indexOf('__') === 0) return;
+
+    const value = source[key];
+    const hasValue = value != null && String(value).trim() !== '';
+    if (!hasValue) return;
+
+    if (target[key] == null || String(target[key]).trim() === '') {
+      target[key] = value;
+    }
+
+    target[sourceLabel + ': ' + key] = value;
+  });
 }
 
 function buildListRecord_(record) {
@@ -374,33 +443,39 @@ function buildDetailRecord_(record) {
 }
 
 function deriveDashboardFields_(record) {
-  const fileName = getAnyValue_(record, ['File Name', 'Original Filename', 'Name', 'Title']);
-  const fileId = getAnyValue_(record, ['File ID', 'Image Identity ID', 'ImageIdentityID', 'Id', 'ID']);
-  const driveUrl = getAnyValue_(record, ['Drive URL', 'File URL', 'URL']);
-  const projected = getAnyValue_(record, ['Projected Image Prompt', 'AI Projected Prompt', 'Final Projected Image Prompt']);
+  const fileName = getAnyValue_(record, ['File Name', 'file_name', 'Original Filename', 'Name', 'Title']);
+  const fileId = getAnyValue_(record, ['File ID', 'file_id', 'Image Identity ID', 'ImageIdentityID', 'Id', 'ID']);
+  const driveUrl = getAnyValue_(record, ['Drive URL', 'drive_url', 'File URL', 'URL']);
+  const approvedPrompt = getAnyValue_(record, ['approved_prompt', 'Approved Prompt']);
+  const provisionalPrompt = getAnyValue_(record, ['proposed_prompt_provisional', 'Proposed Prompt Provisional']);
+  const projected = getAnyValue_(record, ['Projected Image Prompt', 'AI Projected Prompt', 'Final Projected Image Prompt']) || approvedPrompt || provisionalPrompt;
   const gemini = getAnyValue_(record, ['Gemini Guessed Prompt', 'Gemini Projected Prompt']);
   const openai = getAnyValue_(record, ['OpenAI Guessed Prompt', 'OpenAI Projected Prompt', 'ChatGPT Guessed Prompt']);
   const promptStatus = getAnyValue_(record, ['Prompt Evidence Status']);
   const promptMatchStatus = getAnyValue_(record, ['Prompt Match Status']);
+  const selectedPromptSource = getAnyValue_(record, ['selected_prompt_source_provisional', 'approved_prompt_source', 'Approved Prompt Source']);
   const matchMethod = getAnyValue_(record, ['Prompt Match Method', 'Match Key Used']);
-  const sourceStatus = getAnyValue_(record, ['Source Verification Status', 'Source Approval Status', 'Source-Control Status']);
+  const sourceApprovalStatus = getAnyValue_(record, ['source_approval_status', 'Source Approval Status']);
+  const sourceStatus = getAnyValue_(record, ['Source Verification Status', 'Source-Control Status']) || normalizeSourceApprovalStatus_(sourceApprovalStatus);
   const sourceClearance = getAnyValue_(record, ['Source-Control Clearance Needed', 'Source Control Clearance Needed']);
-  const humanReview = getAnyValue_(record, ['Human Review Required', 'Needs Review', 'Ready for Human Review']);
+  const computedHumanReview = getAnyValue_(record, ['human_review_needed_computed', 'Human Review Needed Computed']);
+  const humanReview = getAnyValue_(record, ['Human Review Required', 'Needs Review', 'Ready for Human Review']) || normalizeYesNo_(computedHumanReview);
   const nextOwner = getAnyValue_(record, ['Next Owner', 'Owner']);
-  const reviewReason = getAnyValue_(record, ['Review Reason', 'Notes']);
+  const reviewReason = getAnyValue_(record, ['Review Reason', 'Notes', 'source_notes']);
   const confidence = getAnyValue_(record, ['Source Classification Confidence', 'Confidence']);
-  const duplicateGroup = getAnyValue_(record, ['Duplicate Candidate Group', 'DuplicateGroupID']);
+  const duplicateGroup = getAnyValue_(record, ['Duplicate Candidate Group', 'DuplicateGroupID', 'duplicate_resolution_status_provisional']);
   const fullPath = getAnyValue_(record, ['Full Path', 'Path']);
   const normalizedFilename = getAnyValue_(record, ['Normalized Filename']) || normalizeFilenameForDashboard_(fileName);
   const imageIdentityId = getAnyValue_(record, ['Image Identity ID', 'ImageIdentityID']) || fileId || normalizedFilename;
 
-  const hasPrompt = !!cleanText_(projected || openai || gemini);
-  const noPrompt = !hasPrompt || isErrorText_(projected || openai || gemini);
-  const derivedPromptStatus = promptStatus || (noPrompt ? 'No Prompt Evidence' : 'AI Projected Prompt Evidence');
-  const derivedPromptMatchStatus = promptMatchStatus || (noPrompt ? 'No Match' : 'AI Inferred');
+  const promptEvidence = projected || openai || gemini;
+  const hasPrompt = !!cleanText_(promptEvidence);
+  const noPrompt = !hasPrompt || isErrorText_(promptEvidence);
+  const derivedPromptStatus = promptStatus || (noPrompt ? 'No Prompt Evidence' : 'Prompt Evidence Available');
+  const derivedPromptMatchStatus = promptMatchStatus || (noPrompt ? 'No Match' : (selectedPromptSource || matchMethod || 'Evidence Inferred'));
   const derivedSourceStatus = sourceStatus || 'Source Unverified';
   const derivedClearance = sourceClearance || (derivedSourceStatus === 'Source Verified' ? 'No' : 'Yes');
-  const derivedHumanReview = humanReview || 'Yes';
+  const derivedHumanReview = humanReview || (derivedClearance === 'Yes' || noPrompt ? 'Yes' : 'No');
   const derivedNextOwner = nextOwner || (derivedClearance === 'Yes' ? 'Source Authority Agent' : 'Visual Asset Director');
   const numericConfidence = parseFloat(String(confidence).replace('%', ''));
   const strong = hasPrompt && !noPrompt && !duplicateGroup && derivedClearance !== 'Yes' && !isNaN(numericConfidence) && numericConfidence >= 80;
@@ -423,15 +498,15 @@ function deriveDashboardFields_(record) {
     geminiGuessedPrompt: gemini,
     openAiGuessedPrompt: openai,
     projectedImagePrompt: projected,
-    promptSource: getAnyValue_(record, ['Prompt Source']),
+    promptSource: getAnyValue_(record, ['Prompt Source']) || selectedPromptSource,
     promptMatchMethod: matchMethod,
     promptEvidenceStatus: derivedPromptStatus,
     promptMatchStatus: derivedPromptMatchStatus,
-    matchKeyUsed: getAnyValue_(record, ['Match Key Used']) || matchMethod,
-    promptEvidenceExcerpt: getAnyValue_(record, ['Prompt Evidence Excerpt']) || cleanText_(projected || openai || gemini).slice(0, 220),
-    sourceGroup: getAnyValue_(record, ['Source Group', 'Source']),
-    sourceType: getAnyValue_(record, ['Source Type']),
-    sourceEvidenceStatus: getAnyValue_(record, ['Source Evidence Status']) || 'Not Verified',
+    matchKeyUsed: getAnyValue_(record, ['Match Key Used']) || matchMethod || selectedPromptSource,
+    promptEvidenceExcerpt: getAnyValue_(record, ['Prompt Evidence Excerpt']) || cleanText_(promptEvidence).slice(0, 220),
+    sourceGroup: getAnyValue_(record, ['Source Group', 'Source', 'source_system_provisional']),
+    sourceType: getAnyValue_(record, ['Source Type', 'source_type_description_provisional']),
+    sourceEvidenceStatus: getAnyValue_(record, ['Source Evidence Status', 'pilot_review_status']) || 'Not Verified',
     sourceClassificationConfidence: confidence,
     sourceVerificationStatus: derivedSourceStatus,
     sourceControlClearanceNeeded: derivedClearance,
@@ -439,10 +514,10 @@ function deriveDashboardFields_(record) {
     humanReviewRequired: derivedHumanReview,
     reviewReason: reviewReason || buildDefaultReviewReason_(noPrompt, duplicateGroup, derivedClearance),
     nextOwner: derivedNextOwner,
-    doNotUseReason: getAnyValue_(record, ['Do Not Use Reason']),
-    metadataClassificationStatus: getAnyValue_(record, ['Metadata Classification Status']) || 'Metadata Only',
+    doNotUseReason: getAnyValue_(record, ['Do Not Use Reason', 'block_reason_provisional', 'restrictions']),
+    metadataClassificationStatus: getAnyValue_(record, ['Metadata Classification Status', 'review_tier_provisional']) || 'Metadata Only',
     lastMetadataSyncTimestamp: getAnyValue_(record, ['Last Metadata Sync Timestamp', 'Last Sync Timestamp']),
-    notes: getAnyValue_(record, ['Notes']),
+    notes: getAnyValue_(record, ['Notes', 'source_notes']),
     instructionalBlocked: derivedClearance === 'Yes' ? 'Yes' : 'No',
     strongMetadataEvidence: strong ? 'Yes' : 'No'
   };
@@ -588,6 +663,24 @@ function isErrorText_(value) {
   const text = String(value || '').toLowerCase();
   return text.indexOf('api error') !== -1 || text.indexOf('parse error') !== -1 || text.indexOf('failed:') !== -1 || text.indexOf('skipped:') !== -1;
 }
+
+function normalizeSourceApprovalStatus_(value) {
+  const text = String(value || '').toLowerCase().trim();
+  if (!text) return '';
+  if (text.indexOf('approved') !== -1 && text.indexOf('not approved') === -1) return 'Source Verified';
+  if (text.indexOf('rejected') !== -1 || text.indexOf('blocked') !== -1 || text.indexOf('not approved') !== -1) return 'Source Not Approved';
+  if (text.indexOf('review') !== -1 || text.indexOf('pending') !== -1 || text.indexOf('pilot') !== -1) return 'Source Review Needed';
+  return 'Source Unverified';
+}
+
+function normalizeYesNo_(value) {
+  const text = String(value || '').toLowerCase().trim();
+  if (!text) return '';
+  if (text === 'yes' || text === 'true' || text === 'y' || text === '1') return 'Yes';
+  if (text === 'no' || text === 'false' || text === 'n' || text === '0') return 'No';
+  return value;
+}
+
 
 function normalizeFilenameForDashboard_(fileName) {
   return String(fileName || '').toLowerCase().replace(/\.[a-z0-9]{2,8}$/i, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
