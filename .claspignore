@@ -1,0 +1,20 @@
+# Keep clasp scoped to the root DMSC dashboard script only.
+
+# Never push Git / GitHub / repo tooling.
+.git/**
+.github/**
+node_modules/**
+tests/**
+package.json
+package-lock.json
+README.md
+.gitignore
+
+# Ignore sibling Apps Script projects in this repo.
+apps-script-builder-dashboard/**
+drive-metadata-dashboard/**
+search-feature-app/**
+
+# Ignore examples and metadata folders.
+**/.clasp.json.example
+**/metadata/**
