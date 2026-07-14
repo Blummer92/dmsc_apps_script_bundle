@@ -218,6 +218,17 @@ function runDmscBackendSmokeSuite() {
     return 'unsafeChanged=' + unsafeResult.changed + ', auditCount=' + detailAfterUnsafeWrite.audit.length;
   });
 
+  check('21 source approval round-trip restores safely', function() {
+    const result = testApproveDmscSourceForAssetRoundTrip();
+    assert(result && result.ok === true, 'Source approval round-trip did not return ok=true.');
+
+    const restored = getDmscDashboardRecord(first.imageIdentityId).record;
+    assert(restored.sourceVerificationStatus === 'Source Review Needed', 'Expected restore to return Source Review Needed.');
+    assert(restored.sourceControlClearanceNeeded === 'Yes', 'Expected restore to return sourceControlClearanceNeeded=Yes.');
+
+    return 'approval changed=' + result.approvalResult.changed + ', restored=' + restored.sourceControlClearanceNeeded;
+  });
+
   check('21 source library required approval headers exist', function() {
     sourceLibrarySheet = ss.getSheetByName(DMSC_APP_CONFIG.sourceLibrarySheetName);
     assert(sourceLibrarySheet, 'Missing source library sheet.');
