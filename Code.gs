@@ -463,7 +463,8 @@ function deriveDashboardFields_(record) {
   const nextOwner = getAnyValue_(record, ['Next Owner', 'Owner']);
   const reviewReason = getAnyValue_(record, ['Review Reason', 'Notes', 'source_notes']);
   const confidence = getAnyValue_(record, ['Source Classification Confidence', 'Confidence']);
-  const duplicateGroup = getAnyValue_(record, ['Duplicate Candidate Group', 'DuplicateGroupID', 'duplicate_resolution_status_provisional']);
+  const duplicateGroupRaw = getAnyValue_(record, ['Duplicate Candidate Group', 'DuplicateGroupID', 'duplicate_resolution_status_provisional']);
+  const duplicateGroup = normalizeDuplicateGroup_(duplicateGroupRaw);
   const fullPath = getAnyValue_(record, ['Full Path', 'Path']);
   const normalizedFilename = getAnyValue_(record, ['Normalized Filename']) || normalizeFilenameForDashboard_(fileName);
   const imageIdentityId = getAnyValue_(record, ['Image Identity ID', 'ImageIdentityID']) || fileId || normalizedFilename;
@@ -679,6 +680,18 @@ function normalizeYesNo_(value) {
   if (text === 'yes' || text === 'true' || text === 'y' || text === '1') return 'Yes';
   if (text === 'no' || text === 'false' || text === 'n' || text === '0') return 'No';
   return value;
+}
+
+function normalizeDuplicateGroup_(value) {
+  const text = String(value || '').trim();
+  const lower = text.toLowerCase();
+
+  if (!text) return '';
+  if (lower.indexOf('none detected') !== -1) return '';
+  if (lower.indexOf('no duplicate') !== -1) return '';
+  if (lower === 'none' || lower === 'n/a' || lower === 'na') return '';
+
+  return text;
 }
 
 
