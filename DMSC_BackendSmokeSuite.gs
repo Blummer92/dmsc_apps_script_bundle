@@ -54,6 +54,9 @@ function runDmscBackendSmokeSuite() {
   let missingIdentityQueue;
   let noPromptQueue;
   let sourceClearanceQueue;
+  let sourceLibrarySheet;
+  let sourceLibraryHeaders;
+  let firstSourceLibraryRecord;
 
   check('01 config has spreadsheet id', function() {
     assertText(DMSC_APP_CONFIG.spreadsheetId, 'Missing DMSC_APP_CONFIG.spreadsheetId.');
@@ -213,6 +216,84 @@ function runDmscBackendSmokeSuite() {
     assert(detailAfterUnsafeWrite.audit && detailAfterUnsafeWrite.audit.length > 0, 'Expected audit entries for the record.');
 
     return 'unsafeChanged=' + unsafeResult.changed + ', auditCount=' + detailAfterUnsafeWrite.audit.length;
+  });
+
+  check('21 source library required approval headers exist', function() {
+    sourceLibrarySheet = ss.getSheetByName(DMSC_APP_CONFIG.sourceLibrarySheetName);
+    assert(sourceLibrarySheet, 'Missing source library sheet.');
+
+    sourceLibraryHeaders = sourceLibrarySheet
+      .getRange(1, 1, 1, sourceLibrarySheet.getLastColumn())
+      .getValues()[0]
+      .map(function(header) { return String(header || '').trim(); });
+
+    [
+      'file_id',
+      'drive_url',
+      'file_name',
+      'source_approval_status',
+      'approval_evidence_url',
+      'approved_by',
+      'approval_date',
+      'restrictions',
+      'approved_prompt',
+      'approved_prompt_source',
+      'source_notes',
+      'pilot_review_status'
+    ].forEach(function(requiredHeader) {
+      assert(sourceLibraryHeaders.indexOf(requiredHeader) !== -1, 'Missing source library header: ' + requiredHeader);
+    });
+
+    return 'headers=' + sourceLibraryHeaders.length;
+  });
+
+  check('22 source library contains selected asset row', function() {
+    const values = sourceLibrarySheet.getDataRange().getValues();
+    const headers = values[0].map(function(header) { return String(header || '').trim(); });
+    const fileIdIndex = headers.indexOf('file_id');
+    assert(fileIdIndex !== -1, 'Missing file_id header.');
+
+    for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+      if (String(values[rowIndex][fileIdIndex] || '').trim() === first.fileId) {
+        firstSourceLibraryRecord = {};
+        headers.forEach(function(header, columnIndex) {
+          firstSourceLibraryRecord[header] = values[rowIndex][columnIndex];
+        });
+        firstSourceLibraryRecord.__rowNumber = rowIndex + 1;
+        break;
+      }
+    }
+
+    assert(firstSourceLibraryRecord, 'Selected asset was not found in source library by file_id.');
+    return 'row=' + firstSourceLibraryRecord.__rowNumber + ', file_id=' + firstSourceLibraryRecord.file_id;
+  });
+
+  check('23 source library approval status is not production approved', function() {
+    const status = String(firstSourceLibraryRecord.source_approval_status || '').trim();
+    assert(status !== 'Approved', 'Selected asset is already marked Approved; smoke test expects pilot/unapproved source state.');
+    return status || '(blank)';
+  });
+
+  check('24 source library approval evidence is blank or non-production', function() {
+    const evidence = String(firstSourceLibraryRecord.approval_evidence_url || '').trim();
+    const approvedBy = String(firstSourceLibraryRecord.approved_by || '').trim();
+    const approvalDate = String(firstSourceLibraryRecord.approval_date || '').trim();
+
+    assert(!evidence, 'Selected asset has approval_evidence_url; expected blank during pilot.');
+    assert(!approvedBy, 'Selected asset has approved_by; expected blank during pilot.');
+    assert(!approvalDate, 'Selected asset has approval_date; expected blank during pilot.');
+
+    return 'approval evidence fields blank';
+  });
+
+  check('25 source clearance remains blocked until approval workflow exists', function() {
+    const current = getDmscDashboardRecord(first.imageIdentityId).record;
+
+    assert(current.sourceControlClearanceNeeded === 'Yes', 'Expected sourceControlClearanceNeeded=Yes.');
+    assert(current.sourceVerificationStatus === 'Source Review Needed', 'Expected Source Review Needed.');
+    assert(sourceClearanceQueue.total === summary.totalRecords, 'Expected all records to remain in source clearance queue.');
+
+    return 'sourceControlClearanceNeeded=' + current.sourceControlClearanceNeeded + ', sourceVerificationStatus=' + current.sourceVerificationStatus;
   });
 
   const passed = results.filter(function(result) { return result.status === 'PASS'; }).length;
