@@ -335,3 +335,94 @@ function repairDmscSourceApprovalRoundTripTarget() {
     }
   }, null, 2));
 }
+
+/**
+ * Returns a read-only source approval preview for one asset.
+ *
+ * This function does not write to the workbook.
+ */
+function getDmscSourceApprovalPreview(fileIdOrPayload) {
+  const fileId = typeof fileIdOrPayload === 'object'
+    ? String((fileIdOrPayload || {}).fileId || (fileIdOrPayload || {}).imageIdentityId || '').trim()
+    : String(fileIdOrPayload || '').trim();
+
+  if (!fileId) {
+    throw new Error('getDmscSourceApprovalPreview requires fileId or imageIdentityId.');
+  }
+
+  const detail = getDmscDashboardRecord(fileId);
+
+  const ss = getDashboardSpreadsheet_();
+  const sheet = ss.getSheetByName(DMSC_APP_CONFIG.sourceLibrarySheetName);
+  if (!sheet) {
+    throw new Error('Missing source library sheet: ' + DMSC_APP_CONFIG.sourceLibrarySheetName);
+  }
+
+  const lookup = findDmscSourceLibraryRowByFileId_(sheet, fileId);
+  if (!lookup) {
+    throw new Error('No source library row found for fileId: ' + fileId);
+  }
+
+  const sourceRecord = lookup.record;
+  const currentStatus = String(sourceRecord.source_approval_status || '').trim();
+  const currentEvidence = String(sourceRecord.approval_evidence_url || '').trim();
+
+  const blockers = [];
+  const warnings = [];
+
+  if (currentStatus === 'Approved') {
+    warnings.push('Source is already marked Approved.');
+  }
+
+  if (!String(sourceRecord.file_id || '').trim()) {
+    blockers.push('Missing file_id in source library.');
+  }
+
+  if (!String(sourceRecord.drive_url || '').trim()) {
+    blockers.push('Missing drive_url in source library.');
+  }
+
+  if (!String(sourceRecord.file_name || '').trim()) {
+    blockers.push('Missing file_name in source library.');
+  }
+
+  if (!String(sourceRecord.approved_prompt || detail.record.proposedPrompt || '').trim()) {
+    warnings.push('No approved prompt or proposed prompt is available.');
+  }
+
+  return {
+    ok: true,
+    fileId: fileId,
+    fileName: detail.record.fileName,
+    canApproveWithEvidence: blockers.length === 0,
+    requiresApprovalEvidenceUrl: true,
+    currentState: {
+      sourceApprovalStatus: currentStatus,
+      approvalEvidenceUrl: currentEvidence,
+      approvedBy: sourceRecord.approved_by || '',
+      approvalDate: sourceRecord.approval_date || '',
+      pilotReviewStatus: sourceRecord.pilot_review_status || '',
+      sourceVerificationStatus: detail.record.sourceVerificationStatus,
+      sourceControlClearanceNeeded: detail.record.sourceControlClearanceNeeded
+    },
+    proposedChanges: {
+      source_approval_status: 'Approved',
+      approval_evidence_url: '[required evidence URL]',
+      approved_by: getDmscCurrentUserEmail_(),
+      approval_date: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+      pilot_review_status: 'Production Approved'
+    },
+    blockers: blockers,
+    warnings: warnings
+  };
+}
+
+function testGetDmscSourceApprovalPreview() {
+  const rows = getDmscDashboardRows({ page: 1, pageSize: 1 }).records;
+  if (!rows.length) throw new Error('No dashboard rows found.');
+
+  const preview = getDmscSourceApprovalPreview(rows[0].fileId);
+
+  Logger.log(JSON.stringify(preview, null, 2));
+  return preview;
+}
