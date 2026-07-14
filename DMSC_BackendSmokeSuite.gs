@@ -229,7 +229,7 @@ function runDmscBackendSmokeSuite() {
     return 'approval changed=' + result.approvalResult.changed + ', restored=' + restored.sourceControlClearanceNeeded;
   });
 
-  check('21 source library required approval headers exist', function() {
+  check('22 source library required approval headers exist', function() {
     sourceLibrarySheet = ss.getSheetByName(DMSC_APP_CONFIG.sourceLibrarySheetName);
     assert(sourceLibrarySheet, 'Missing source library sheet.');
 
@@ -258,7 +258,7 @@ function runDmscBackendSmokeSuite() {
     return 'headers=' + sourceLibraryHeaders.length;
   });
 
-  check('22 source library contains selected asset row', function() {
+  check('23 source library contains selected asset row', function() {
     const values = sourceLibrarySheet.getDataRange().getValues();
     const headers = values[0].map(function(header) { return String(header || '').trim(); });
     const fileIdIndex = headers.indexOf('file_id');
@@ -279,13 +279,13 @@ function runDmscBackendSmokeSuite() {
     return 'row=' + firstSourceLibraryRecord.__rowNumber + ', file_id=' + firstSourceLibraryRecord.file_id;
   });
 
-  check('23 source library approval status is not production approved', function() {
+  check('24 source library approval status is not production approved', function() {
     const status = String(firstSourceLibraryRecord.source_approval_status || '').trim();
     assert(status !== 'Approved', 'Selected asset is already marked Approved; smoke test expects pilot/unapproved source state.');
     return status || '(blank)';
   });
 
-  check('24 source library production approval evidence is not present', function() {
+  check('25 source library production approval evidence is not present', function() {
     const status = String(firstSourceLibraryRecord.source_approval_status || '').trim();
     const evidence = String(firstSourceLibraryRecord.approval_evidence_url || '').trim();
     const approvalDate = String(firstSourceLibraryRecord.approval_date || '').trim();
@@ -297,7 +297,7 @@ function runDmscBackendSmokeSuite() {
     return 'status=' + (status || '(blank)') + ', production evidence absent';
   });
 
-  check('25 source clearance remains blocked until approval workflow exists', function() {
+  check('26 source clearance remains blocked after restore', function() {
     const current = getDmscDashboardRecord(first.imageIdentityId).record;
 
     assert(current.sourceControlClearanceNeeded === 'Yes', 'Expected sourceControlClearanceNeeded=Yes.');
