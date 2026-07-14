@@ -18,3 +18,9 @@ search-feature-app/**
 # Ignore examples and metadata folders.
 **/.clasp.json.example
 **/metadata/**
+
+# Local VAM audit scratch files
+VAM_SourceApprovedAudit.js
+VAM_SourceApprovedAuditExport.js
+VAM_SourceApprovedAuditSmokeTest.js
+VAM_SourceApprovedAuditTests.js
