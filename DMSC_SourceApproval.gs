@@ -674,3 +674,126 @@ function testGetDmscSourceApprovalPreviewBatch() {
   Logger.log(JSON.stringify(result, null, 2));
   return result;
 }
+
+/**
+ * Creates a read-only batch source approval staging packet.
+ *
+ * This function does not approve assets.
+ * It prepares review items that a UI or reviewer can use before approval.
+ */
+function stageDmscSourceApprovalBatch(payload) {
+  payload = payload || {};
+
+  const previewBatch = getDmscSourceApprovalPreviewBatch({
+    fileIds: payload.fileIds || null,
+    queueId: payload.queueId || 'sourceClearanceNeeded',
+    limit: payload.limit || 10
+  });
+
+  const items = previewBatch.previews.map(function(preview) {
+    if (!preview || preview.ok === false) {
+      return {
+        ok: false,
+        fileId: preview && preview.fileId ? preview.fileId : '',
+        fileName: '',
+        approvalReady: false,
+        evidenceRequired: true,
+        evidenceUrl: '',
+        blockers: preview && preview.blockers ? preview.blockers : ['Preview failed.'],
+        warnings: preview && preview.warnings ? preview.warnings : [],
+        error: preview && preview.error ? preview.error : 'Unknown preview error.'
+      };
+    }
+
+    return {
+      ok: true,
+      fileId: preview.fileId,
+      fileName: preview.fileName,
+      approvalReady: preview.canApproveWithEvidence === true,
+      evidenceRequired: preview.requiresApprovalEvidenceUrl === true,
+      evidenceUrl: '',
+      currentState: preview.currentState,
+      proposedChanges: preview.proposedChanges,
+      blockers: preview.blockers || [],
+      warnings: preview.warnings || [],
+      proposedApprovalPayload: {
+        fileId: preview.fileId,
+        approvalEvidenceUrl: '[required before approval]',
+        restrictions: '',
+        sourceNotes: ''
+      }
+    };
+  });
+
+  const readyCount = items.filter(function(item) {
+    return item.ok === true && item.approvalReady === true;
+  }).length;
+
+  const blockedCount = items.filter(function(item) {
+    return item.ok !== true || item.approvalReady !== true;
+  }).length;
+
+  return {
+    ok: true,
+    total: items.length,
+    summary: {
+      requested: previewBatch.summary ? previewBatch.summary.requested : items.length,
+      staged: items.length,
+      readyForEvidence: readyCount,
+      blocked: blockedCount,
+      errors: previewBatch.errors ? previewBatch.errors.length : 0
+    },
+    items: items,
+    errors: previewBatch.errors || []
+  };
+}
+
+function testStageDmscSourceApprovalBatch() {
+  const ss = getDashboardSpreadsheet_();
+  const auditSheet = ss.getSheetByName(DMSC_APP_CONFIG.auditSheetName);
+  const auditRowsBefore = auditSheet ? auditSheet.getLastRow() : 0;
+
+  const result = stageDmscSourceApprovalBatch({
+    queueId: 'sourceClearanceNeeded',
+    limit: 5
+  });
+
+  const auditRowsAfter = auditSheet ? auditSheet.getLastRow() : 0;
+
+  if (result.ok !== true) {
+    throw new Error('Batch staging did not return ok=true.');
+  }
+
+  if (result.total <= 0) {
+    throw new Error('Batch staging returned no items.');
+  }
+
+  if (auditRowsBefore !== auditRowsAfter) {
+    throw new Error('Batch staging wrote to audit log; expected read-only behavior.');
+  }
+
+  result.items.forEach(function(item, index) {
+    if (!item.fileId) {
+      throw new Error('Staged item ' + index + ' missing fileId.');
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(item, 'approvalReady')) {
+      throw new Error('Staged item ' + index + ' missing approvalReady.');
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(item, 'evidenceRequired')) {
+      throw new Error('Staged item ' + index + ' missing evidenceRequired.');
+    }
+
+    if (!Array.isArray(item.blockers)) {
+      throw new Error('Staged item ' + index + ' missing blockers array.');
+    }
+
+    if (!Array.isArray(item.warnings)) {
+      throw new Error('Staged item ' + index + ' missing warnings array.');
+    }
+  });
+
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}

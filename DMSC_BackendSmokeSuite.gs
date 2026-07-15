@@ -350,6 +350,17 @@ function runDmscBackendSmokeSuite() {
     return 'previews=' + result.total + ', errors=' + result.errors.length;
   });
 
+  check('29 batch source approval staging is read-only', function() {
+    const result = testStageDmscSourceApprovalBatch();
+
+    assert(result && result.ok === true, 'Batch source approval staging did not return ok=true.');
+    assert(result.total > 0, 'Batch source approval staging returned no items.');
+    assert(result.items && result.items.length === result.total, 'Staged item count did not match total.');
+    assert(result.summary.readyForEvidence >= 0, 'Missing readyForEvidence summary count.');
+
+    return 'staged=' + result.total + ', readyForEvidence=' + result.summary.readyForEvidence + ', blocked=' + result.summary.blocked;
+  });
+
   const passed = results.filter(function(result) { return result.status === 'PASS'; }).length;
   const failed = results.filter(function(result) { return result.status === 'FAIL'; }).length;
 
