@@ -340,6 +340,16 @@ function runDmscBackendSmokeSuite() {
     return 'total=' + batch.total + ', readyWithEvidence=' + batch.summary.readyWithEvidence + ', errors=' + batch.summary.errors;
   });
 
+  check('28 batch source approval preview contract is read-only', function() {
+    const result = testGetDmscSourceApprovalPreviewBatch();
+
+    assert(result && result.ok === true, 'Batch source approval preview did not return ok=true.');
+    assert(result.total > 0, 'Batch source approval preview returned no records.');
+    assert(result.previews && result.previews.length === result.total, 'Preview count did not match total.');
+
+    return 'previews=' + result.total + ', errors=' + result.errors.length;
+  });
+
   const passed = results.filter(function(result) { return result.status === 'PASS'; }).length;
   const failed = results.filter(function(result) { return result.status === 'FAIL'; }).length;
 

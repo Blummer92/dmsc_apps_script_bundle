@@ -555,3 +555,122 @@ function testGetDmscSourceApprovalPreviewBatch() {
 
   return result;
 }
+
+/**
+ * Returns read-only source approval previews for multiple assets.
+ *
+ * Supported payloads:
+ * - { fileIds: string[] }
+ * - { queueId: string, limit: number }
+ *
+ * This function does not write to the workbook.
+ */
+function getDmscSourceApprovalPreviewBatch(payload) {
+  payload = payload || {};
+
+  const errors = [];
+  let fileIds = [];
+
+  if (Array.isArray(payload.fileIds) && payload.fileIds.length) {
+    fileIds = payload.fileIds.map(function(fileId) {
+      return String(fileId || '').trim();
+    }).filter(Boolean);
+  } else {
+    const queueId = String(payload.queueId || 'sourceClearanceNeeded').trim();
+    const limit = Math.max(1, Math.min(Number(payload.limit || 10), 50));
+
+    const rows = getDmscDashboardRows({
+      queueId: queueId,
+      page: 1,
+      pageSize: limit
+    }).records || [];
+
+    fileIds = rows.map(function(record) {
+      return String(record.fileId || record.imageIdentityId || '').trim();
+    }).filter(Boolean);
+  }
+
+  const previews = fileIds.map(function(fileId) {
+    try {
+      return getDmscSourceApprovalPreview(fileId);
+    } catch (error) {
+      return {
+        ok: false,
+        fileId: fileId,
+        error: error && error.message ? error.message : String(error),
+        blockers: ['Preview failed for this asset.'],
+        warnings: []
+      };
+    }
+  });
+
+  previews.forEach(function(preview) {
+    if (preview && preview.ok === false) {
+      errors.push({
+        fileId: preview.fileId || '',
+        error: preview.error || 'Unknown preview error.'
+      });
+    }
+  });
+
+  return {
+    ok: true,
+    total: previews.length,
+    summary: {
+      requested: fileIds.length,
+      previewed: previews.length,
+      readyWithEvidence: previews.filter(function(preview) {
+        return preview && preview.ok === true && preview.canApproveWithEvidence === true;
+      }).length,
+      errors: errors.length
+    },
+    previews: previews,
+    errors: errors
+  };
+}
+
+function testGetDmscSourceApprovalPreviewBatch() {
+  const ss = getDashboardSpreadsheet_();
+  const auditSheet = ss.getSheetByName(DMSC_APP_CONFIG.auditSheetName);
+  const auditRowsBefore = auditSheet ? auditSheet.getLastRow() : 0;
+
+  const result = getDmscSourceApprovalPreviewBatch({
+    queueId: 'sourceClearanceNeeded',
+    limit: 5
+  });
+
+  const auditRowsAfter = auditSheet ? auditSheet.getLastRow() : 0;
+
+  if (result.ok !== true) {
+    throw new Error('Batch preview did not return ok=true.');
+  }
+
+  if (result.total <= 0) {
+    throw new Error('Batch preview returned no previews.');
+  }
+
+  if (auditRowsBefore !== auditRowsAfter) {
+    throw new Error('Batch preview wrote to audit log; expected read-only behavior.');
+  }
+
+  result.previews.forEach(function(preview, index) {
+    if (!preview.fileId) {
+      throw new Error('Preview ' + index + ' missing fileId.');
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(preview, 'canApproveWithEvidence') && preview.ok !== false) {
+      throw new Error('Preview ' + index + ' missing canApproveWithEvidence.');
+    }
+
+    if (!Array.isArray(preview.blockers)) {
+      throw new Error('Preview ' + index + ' missing blockers array.');
+    }
+
+    if (!Array.isArray(preview.warnings)) {
+      throw new Error('Preview ' + index + ' missing warnings array.');
+    }
+  });
+
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
