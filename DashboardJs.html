@@ -8,7 +8,8 @@
     nextOwner: '',
     selectedId: '',
     currentRecord: null,
-    activeTab: 'summary'
+    activeTab: 'summary',
+    records: []
   };
 
   document.addEventListener('DOMContentLoaded', initDashboard);
@@ -78,7 +79,8 @@
     google.script.run
       .withSuccessHandler(function(response) {
         setLoading(false);
-        renderRows(response.records || []);
+        state.records = response.records || [];
+        renderRows(state.records);
         updateSummary(response.summary || {});
         updatePagination(response);
       })
@@ -138,16 +140,21 @@
     empty.classList.add('hidden');
     tableWrap.classList.remove('hidden');
     body.innerHTML = records.map(function(record) {
-      const isSelected = record.imageIdentityId === state.selectedId;
-      return `<tr tabindex="0" class="${isSelected ? 'selected' : ''}" data-id="${escapeHtml(record.imageIdentityId)}">
+      const inspectId = record.fileId || record.imageIdentityId;
+      const isSelected = inspectId === state.selectedId;
+      return `<tr tabindex="0" class="${isSelected ? 'selected' : ''}" data-id="${escapeHtml(inspectId)}">
         <td>
           <div class="asset-name">${escapeHtml(record.fileName || '(Untitled asset)')}</div>
           <div class="asset-path">${escapeHtml(record.fullPath || record.normalizedFilename || '')}</div>
-          <button class="btn ghost inspect-record-button" type="button" data-id="${escapeHtml(record.imageIdentityId)}">Inspect</button>
+          <button class="btn ghost inspect-record-button" type="button" data-id="${escapeHtml(record.fileId || record.imageIdentityId)}" onclick="selectRecord(this.dataset.id); return false;">Inspect</button>
         </td>
         <td>${badge(record.promptEvidenceStatus, promptBadgeType(record.promptEvidenceStatus))}</td>
         <td>${badge(record.sourceControlClearanceNeeded === 'Yes' ? 'Clearance Needed' : record.sourceVerificationStatus, record.sourceControlClearanceNeeded === 'Yes' ? 'danger' : 'ok')}</td>
-        <td>${badge(record.humanReviewRequired === 'Yes' ? 'Needs Review' : 'No Review Flag', record.humanReviewRequired === 'Yes' ? 'warning' : 'ok')}<div class="asset-path">${escapeHtml(record.reviewReason || '')}</div></td>
+        <td>
+          ${badge(record.humanReviewRequired === 'Yes' ? 'Needs Review' : 'No Review Flag', record.humanReviewRequired === 'Yes' ? 'warning' : 'ok')}
+          <div class="asset-path">${escapeHtml(record.reviewReason || '')}</div>
+          <button class="btn ghost inspect-record-button" type="button" data-id="${escapeHtml(record.fileId || record.imageIdentityId)}" onclick="selectRecord(this.dataset.id); return false;">Inspect</button>
+        </td>
         <td>${escapeHtml(record.nextOwner || '-')}</td>
         <td>${escapeHtml(record.lastMetadataSyncTimestamp || '-')}</td>
       </tr>`;
@@ -174,15 +181,39 @@
 
   function selectRecord(identifier) {
     state.selectedId = identifier;
+
+    const immediateRecord = state.records.find(function(record) {
+      return record.fileId === identifier || record.imageIdentityId === identifier;
+    });
+
+    if (immediateRecord) {
+      state.currentRecord = immediateRecord;
+      renderInspector(immediateRecord, []);
+      showToast('Selected record. Loading details...');
+    } else {
+      document.getElementById('inspectorEmpty').classList.add('hidden');
+      document.getElementById('inspectorContent').classList.remove('hidden');
+      document.getElementById('inspectorTitle').textContent = 'Loading selected record...';
+      document.getElementById('inspectorPath').textContent = identifier;
+      showToast('Inspecting record...');
+    }
+
+    document.querySelectorAll('.registry-table tr').forEach(function(row) {
+      row.classList.toggle('selected', row.dataset.id === identifier);
+    });
+
     google.script.run
       .withSuccessHandler(function(response) {
         state.currentRecord = response.record;
         renderInspector(response.record, response.audit || []);
-        document.querySelectorAll('.registry-table tr').forEach(function(row) {
-          row.classList.toggle('selected', row.dataset.id === identifier);
-        });
       })
-      .withFailureHandler(showError)
+      .withFailureHandler(function(error) {
+        const message = error && error.message ? error.message : String(error);
+        showError(error);
+        document.getElementById('inspectorTitle').textContent = immediateRecord ? immediateRecord.fileName : 'Record lookup failed';
+        document.getElementById('inspectorPath').textContent = identifier;
+        document.getElementById('tab-summary').innerHTML = '<div class="state-panel">' + escapeHtml(message) + '</div>';
+      })
       .getDmscDashboardRecord(identifier);
   }
 
@@ -395,12 +426,30 @@
 
   function openSelectedRow() {
     if (!state.currentRecord) return;
+
+    if (state.currentRecord.driveUrl) {
+      openAssetPopup(state.currentRecord.driveUrl);
+      return;
+    }
+
     google.script.run
       .withSuccessHandler(function(response) {
-        window.open(response.url, '_blank');
+        openAssetPopup(response.url);
       })
       .withFailureHandler(showError)
       .getDmscSpreadsheetRowLink(state.currentRecord.imageIdentityId);
+  }
+
+  function openAssetPopup(url) {
+    const popup = window.open(
+      url,
+      'dmscAssetPreview',
+      'popup=yes,width=1100,height=800,left=120,top=80,resizable=yes,scrollbars=yes'
+    );
+
+    if (popup && popup.focus) {
+      popup.focus();
+    }
   }
 
   function runDriveScan() {
