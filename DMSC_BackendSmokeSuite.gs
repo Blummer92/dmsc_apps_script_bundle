@@ -361,6 +361,19 @@ function runDmscBackendSmokeSuite() {
     return 'staged=' + result.total + ', readyForEvidence=' + result.summary.readyForEvidence + ', blocked=' + result.summary.blocked;
   });
 
+  check('30 Notion library sync packet is read-only', function() {
+    const result = testBuildDmscNotionLibrarySyncPacket();
+
+    assert(result && result.ok === true, 'Notion sync packet did not return ok=true.');
+    assert(result.summary.visualAssets > 0, 'No Visual Asset Library packets were created.');
+    assert(result.summary.prompts > 0, 'No Prompt Library packets were created.');
+    assert(result.notionTargets.visualAssetLibrary, 'Missing Visual Asset Library target.');
+    assert(result.notionTargets.promptLibrary, 'Missing Prompt Library target.');
+    assert(result.notionTargets.iconSystem, 'Missing Icon System target.');
+
+    return 'visualAssets=' + result.summary.visualAssets + ', icons=' + result.summary.icons + ', prompts=' + result.summary.prompts;
+  });
+
   const passed = results.filter(function(result) { return result.status === 'PASS'; }).length;
   const failed = results.filter(function(result) { return result.status === 'FAIL'; }).length;
 
