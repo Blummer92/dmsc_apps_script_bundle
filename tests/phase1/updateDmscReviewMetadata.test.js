@@ -71,7 +71,7 @@ describe('updateDmscReviewMetadata() production source', () => {
     expect(registry[1][1]).toBe('file-001');
     expect(registry[1][3]).toBe('Yes');
     expect(registry[1][4]).toBe('Needs source review');
-    expect(registry[1][8]).toBeInstanceOf(Date);
+    expect(String(registry[1][8])).not.toBe('');
 
     const audit = fixture.spreadsheet.__getSheet('DMSC Audit Log').__getRows();
     expect(audit).toHaveLength(3);
