@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "targets": {
+    "root-dashboard": {
+      "projectDir": ".",
+      "manifest": "appsscript.json",
+      "rootDir": "",
+      "claspIgnore": ".claspignore",
+      "expectedScriptIdEnv": "DMSC_ROOT_EXPECTED_SCRIPT_ID",
+      "requiredFiles": ["Code.gs", "Dashboard.html", "DashboardCss.html", "DashboardJs.html", "appsscript.json"],
+      "forbiddenPrefixes": ["apps-script-builder-dashboard/", "drive-metadata-dashboard/", "search-feature-app/", ".github/", "tests/", "node_modules/"]
+    },
+    "builder-dashboard": {
+      "projectDir": "apps-script-builder-dashboard",
+      "manifest": "src/appsscript.json",
+      "rootDir": "src",
+      "claspIgnore": null,
+      "expectedScriptIdEnv": "DMSC_BUILDER_EXPECTED_SCRIPT_ID",
+      "requiredFiles": ["src/Code.gs", "src/Services.gs", "src/Validation.gs", "src/Ui.html", "src/appsscript.json"],
+      "forbiddenPrefixes": ["../", "metadata/", "appsscript.json"]
+    },
+    "drive-metadata-dashboard": {
+      "projectDir": "drive-metadata-dashboard",
+      "manifest": "appsscript.json",
+      "rootDir": ".",
+      "claspIgnore": ".claspignore",
+      "expectedScriptIdEnv": "DMSC_DRIVE_METADATA_EXPECTED_SCRIPT_ID",
+      "requiredFiles": ["appsscript.json", "src/Code.gs", "src/SheetReadService.gs", "src/NotionSyncService.gs"],
+      "forbiddenPrefixes": ["../", "metadata/", "scripts/", "node_modules/"]
+    },
+    "search-feature": {
+      "projectDir": "search-feature-app",
+      "manifest": "appsscript.json",
+      "rootDir": ".",
+      "claspIgnore": ".claspignore",
+      "expectedScriptIdEnv": "DMSC_SEARCH_EXPECTED_SCRIPT_ID",
+      "requiredFiles": ["appsscript.json", "src/Code.gs", "src/SearchService.gs", "src/SheetSearchService.gs", "src/Ui.html"],
+      "forbiddenPrefixes": ["../", "metadata/", "node_modules/"]
+    }
+  }
+}
