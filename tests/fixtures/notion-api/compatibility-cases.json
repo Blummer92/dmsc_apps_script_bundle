@@ -1,0 +1,53 @@
+{
+  "legacyDatabase": {
+    "object": "database",
+    "id": "00000000-0000-0000-0000-000000000001",
+    "properties": {
+      "Asset title": { "id": "title", "type": "title", "title": {} },
+      "file_id": { "id": "file", "type": "rich_text", "rich_text": {} }
+    }
+  },
+  "legacyQueryPage1": {
+    "object": "list",
+    "results": [{ "object": "page", "id": "00000000-0000-0000-0000-000000000101", "properties": {} }],
+    "has_more": true,
+    "next_cursor": "cursor-2"
+  },
+  "legacyQueryPage2": {
+    "object": "list",
+    "results": [{ "object": "page", "id": "00000000-0000-0000-0000-000000000102", "properties": {} }],
+    "has_more": false,
+    "next_cursor": null
+  },
+  "newDataSource": {
+    "object": "data_source",
+    "id": "00000000-0000-0000-0000-000000000201",
+    "parent": { "type": "database_id", "database_id": "00000000-0000-0000-0000-000000000001" },
+    "properties": {}
+  },
+  "multiSourceDatabase": {
+    "object": "database",
+    "id": "00000000-0000-0000-0000-000000000001",
+    "data_sources": [
+      { "id": "00000000-0000-0000-0000-000000000201", "name": "Primary" },
+      { "id": "00000000-0000-0000-0000-000000000202", "name": "Archive" }
+    ]
+  },
+  "duplicateFileIdQuery": {
+    "object": "list",
+    "results": [
+      { "object": "page", "id": "00000000-0000-0000-0000-000000000301", "properties": {} },
+      { "object": "page", "id": "00000000-0000-0000-0000-000000000302", "properties": {} }
+    ],
+    "has_more": false,
+    "next_cursor": null
+  },
+  "errors": {
+    "rateLimited": { "status": 429, "headers": { "Retry-After": "2" }, "body": { "code": "rate_limited" } },
+    "serverError": { "status": 503, "headers": {}, "body": { "code": "service_unavailable" } },
+    "malformedJson": { "status": 200, "rawBody": "{not-json" },
+    "preResponseFailure": { "kind": "NETWORK_FAILURE", "responseReceived": false },
+    "ambiguousCreate": { "kind": "UNKNOWN_OUTCOME", "operation": "create", "responseReceived": false },
+    "ambiguousUpdate": { "kind": "UNKNOWN_OUTCOME", "operation": "update", "responseReceived": false }
+  }
+}
