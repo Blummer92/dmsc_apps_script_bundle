@@ -1,238 +1,107 @@
-# DMSC Dashboard Test Suite
+# DMSC Dashboard test suite
 
-Automated tests for the Digital Media Source Control Dashboard backend and frontend.
+The root test suite is credential-free and executes selected production Apps Script source under Node/Jest.
 
-## Overview
+## Production-source harness
 
-This project implements a phased testing approach, starting with critical functions (Phase 1) and expanding to cover all major functionality.
+`tests/helpers/appsScriptHarness.js` loads real `.gs` files and JavaScript inside Apps Script HTML `<script>` blocks into a controlled Node `vm` context.
 
-**Current Phase: Phase 1 - Critical Functions**
-- `updateDmscReviewMetadata()` - Data mutation and validation
-- `appendAuditEntry_()` - Audit logging and compliance
-- `escapeHtml()` - XSS prevention (security)
+The harness separates:
 
-## Getting Started
+1. source selection and deterministic file order;
+2. Apps Script runtime doubles;
+3. fixture state;
+4. side-effect evidence;
+5. failure injection;
+6. test assertions.
 
-### Installation
+It provides explicit doubles for:
+
+- `SpreadsheetApp`;
+- `PropertiesService`;
+- `LockService`;
+- `UrlFetchApp`;
+- `Session`;
+- `Utilities`;
+- `Logger`;
+- `HtmlService`.
+
+Network access is blocked by default. A test must inject `fetchImpl` deliberately before `UrlFetchApp.fetch()` can return a value.
+
+Unsupported or undeclared Apps Script globals fail with a normal reference error instead of silently returning a successful mock value.
+
+## Current production-source coverage
+
+The Phase 1 tests now load the repository implementations of:
+
+- `updateDmscReviewMetadata()` and its helpers from `Code.gs`;
+- `appendAuditEntry_()` from `Code.gs`;
+- `escapeHtml()` from `DashboardJs.html`.
+
+The tests no longer contain copied implementations of those functions.
+
+A controlled source transform test changes the production allowlist inside the isolated VM and proves the metadata-update result changes. The repository file itself is never modified by that characterization test.
+
+## Running tests
 
 ```bash
-npm install
-```
-
-### Running Tests
-
-```bash
-# Run all tests
+npm ci
 npm test
-
-# Run tests in watch mode (re-run on file changes)
-npm run test:watch
-
-# Run Phase 1 tests only
 npm run test:phase1
-
-# Generate coverage report
-npm run test:coverage
 ```
 
-## Test Structure
+Additional safety checks:
 
-```
-tests/
-├── README.md                           # This file
-├── setup.js                            # Global test setup, mocks Apps Script APIs
-├── fixtures/
-│   └── mockSheetData.js               # Mock data and helper functions
-├── phase1/
-│   ├── escapeHtml.test.js             # Security: XSS prevention
-│   ├── appendAuditEntry.test.js       # Compliance: Audit logging
-│   └── updateDmscReviewMetadata.test.js # Data mutation validation
-├── phase2/                            # (Coming next)
-│   ├── filterRecords.test.js
-│   ├── getDmscDashboardRows.test.js
-│   ├── matchesQueue.test.js
-│   └── getDmscDashboardSummary.test.js
-└── phase3/                            # (Coming later)
-    ├── renderRows.test.js
-    ├── renderQueues.test.js
-    └── stateManagement.test.js
-```
-
-## Phase 1 Test Details
-
-### 1. escapeHtml() Tests (26 test cases)
-
-**Purpose:** Prevent XSS injection attacks by verifying HTML entity escaping.
-
-**Coverage:**
-- Basic HTML escaping (< > & " ')
-- Script injection prevention
-- Event handler injection prevention
-- Edge cases (null, undefined, empty, numeric)
-- Real-world scenarios (filenames, paths, user input)
-
-**To run:**
 ```bash
-npm test -- escapeHtml.test.js
+npm run test:clasp-preflight
+npm run test:validate-live
 ```
 
-### 2. appendAuditEntry_() Tests (18 test cases)
-
-**Purpose:** Verify audit log integrity, compliance, and accountability tracking.
-
-**Coverage:**
-- Valid entry creation with changes
-- Multiple changes logging
-- SYSTEM actor for automated actions
-- Empty/null changes handling
-- Audit sheet auto-creation
-- Timestamp and data preservation
-- Compliance requirements (Image ID tracking, action recording, non-skippable entries)
-
-**To run:**
-```bash
-npm test -- appendAuditEntry.test.js
-```
-
-### 3. updateDmscReviewMetadata() Tests (27 test cases)
-
-**Purpose:** Verify safe updates to metadata with proper validation and change tracking.
-
-**Coverage:**
-- Input validation (missing IDs, records not found)
-- Safe header enforcement (security - prevents editing unsafe fields)
-- Multiple simultaneous updates
-- Change detection (only report actual changes)
-- Value handling (null, undefined, numeric, string)
-- Return value structure
-- Sheet write operations
-- Partial updates
-
-**To run:**
-```bash
-npm test -- updateDmscReviewMetadata.test.js
-```
-
-## Mock Data
-
-The test suite includes fixtures for common data:
+## Adding a production-source test
 
 ```javascript
-import { 
-  MOCK_HEADERS,
-  MOCK_REGISTRY_ROWS,
-  MOCK_AUDIT_LOG_DATA,
-  createMockSheet,
-  createMockSpreadsheet,
-  createUpdatePayload
-} from '../fixtures/mockSheetData.js';
-```
+const {
+  createAppsScriptHarness,
+  createAppsScriptRuntime,
+  createSpreadsheetFixture
+} = require('../helpers/appsScriptHarness.js');
 
-### Available Fixtures
-
-- **MOCK_HEADERS** - Column headers from the registry sheet
-- **MOCK_REGISTRY_ROWS** - Sample data rows (3 records)
-- **MOCK_AUDIT_LOG_DATA** - Sample audit log entries
-- **createMockSheet(name, data)** - Factory for mock sheet objects
-- **createMockSpreadsheet(sheets)** - Factory for mock spreadsheet objects
-- **createUpdatePayload(imageIdentityId, updates)** - Factory for update payloads
-
-## Coverage Goals
-
-| Component | Target | Phase |
-|-----------|--------|-------|
-| Security functions | 100% | 1 |
-| Data mutations | 100% | 1 |
-| Filtering & sorting | 90% | 2 |
-| UI rendering | 70% | 3 |
-| **Overall backend** | 90% | 1-2 |
-| **Overall frontend** | 65% | 3 |
-
-## Writing New Tests
-
-### 1. Create a test file
-
-```javascript
-// tests/phase1/myFunction.test.js
-import { createMockSheet } from '../fixtures/mockSheetData.js';
-
-describe('myFunction()', () => {
-  let mockSheet;
-
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockSheet = createMockSheet();
-  });
-
-  test('does something', () => {
-    // Arrange
-    // Act
-    // Assert
-  });
+const fixture = createSpreadsheetFixture({
+  'Example Sheet': [['Header'], ['Value']]
 });
+const runtime = createAppsScriptRuntime({ spreadsheet: fixture.spreadsheet });
+const harness = createAppsScriptHarness({ runtime });
+
+harness.loadFiles(['Code.gs']);
+const productionFunction = harness.getFunction('productionFunction');
 ```
 
-### 2. Use fixtures for mock data
+Files are evaluated in the order supplied to `loadFiles()`. Later declarations replace earlier global declarations, matching the repository's deliberate bundle-order model. Tests that depend on multiple Apps Script files must state that order explicitly.
 
-```javascript
-const mockSpreadsheet = createMockSpreadsheet({
-  'My Sheet': createMockSheet('My Sheet', customData)
-});
-```
+HTML files are loaded with `{ path: 'Client.html', html: true }`, which evaluates their `<script>` blocks. Required browser globals such as `document` must be injected explicitly.
 
-### 3. Clear mocks between tests
+## Fixture and evidence APIs
 
-```javascript
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-```
+Stateful Spreadsheet fixtures expose:
 
-## Debugging Tests
+- `__getRows()` for read-back assertions;
+- `__getEvents()` for range and formatting evidence;
+- `__getSheet(name)` for exact destination inspection.
 
-### Run a single test
+The runtime exposes `getEvents(type)` for:
 
-```bash
-npm test -- --testNamePattern="escapes < character"
-```
+- Spreadsheet opens and flushes;
+- Script Property reads/writes;
+- lock acquisition/release;
+- URL fetch attempts;
+- sleeps;
+- generated operation IDs;
+- logger calls.
 
-### Run with verbose output
+These capabilities support later offline work for Notion transport, source-audit recovery, Visual Asset Library write safety, and deployable entry-point checks.
 
-```bash
-npm test -- --verbose
-```
+## Limitations
 
-### Watch a specific file
+The harness is not the Apps Script runtime. It does not prove OAuth scopes, trigger behavior, UI rendering, Google service latency, quota behavior, or external-system behavior. Those concerns require separately authorized staging validation.
 
-```bash
-npm test -- --watch escapeHtml.test.js
-```
-
-## Common Issues
-
-### "ReferenceError: SpreadsheetApp is not defined"
-
-The setup.js file should be loaded automatically. Check that `jest.config.setupFilesAfterEnv` points to `tests/setup.js`.
-
-### Mock not being called
-
-Reset mocks in beforeEach:
-```javascript
-beforeEach(() => {
-  jest.clearAllMocks();
-});
-```
-
-### Tests failing with "undefined is not a function"
-
-Ensure the implementation function is imported or defined in the test file.
-
-## Next Steps
-
-After Phase 1 is complete and passing:
-
-1. **Phase 2** - Filtering, pagination, queue matching (5-7 days)
-2. **Phase 3** - Frontend rendering and state management (6-8 days)
-3. **Phase 4** - Edge cases, integration, CI/CD (3-5 days)
-
-Track progress in the [Test Coverage Analysis](../test-coverage-analysis.html).
+Ordinary Jest and Cloud Build runs must not use credentials, execute Apps Script, call Notion, modify Sheets or Drive, or deploy with clasp.
