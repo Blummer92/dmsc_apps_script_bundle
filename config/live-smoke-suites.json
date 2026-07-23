@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "suites": {
+    "root-read-only": {
+      "target": "root-dashboard",
+      "classification": "read-only",
+      "entryPoint": "runDmscReadOnlySmokeChecks",
+      "authorizationRequired": false,
+      "productionAllowed": false,
+      "knownSideEffects": []
+    },
+    "root-source-approval-round-trip": {
+      "target": "root-dashboard",
+      "classification": "mutation",
+      "entryPoint": "runDmscAuthorizedSourceApprovalRoundTrip",
+      "authorizationRequired": true,
+      "productionAllowed": false,
+      "requiredProperties": [
+        "DMSC_LIVE_SMOKE_MODE",
+        "DMSC_LIVE_SMOKE_CONFIRMATION",
+        "DMSC_LIVE_SMOKE_TARGET_FILE_ID"
+      ],
+      "knownSideEffects": [
+        "temporary source-library field mutations",
+        "append-only audit rows during mutation and restoration"
+      ]
+    },
+    "legacy-backend-smoke-suite": {
+      "target": "root-dashboard",
+      "classification": "blocked",
+      "entryPoint": "runDmscBackendSmokeSuite",
+      "authorizationRequired": true,
+      "productionAllowed": false,
+      "blockedReason": "Selects the first record, changes routing metadata, invokes a legacy source-approval round trip, and does not provide suite-level restoration evidence."
+    },
+    "legacy-source-approval-round-trip": {
+      "target": "root-dashboard",
+      "classification": "blocked",
+      "entryPoint": "testApproveDmscSourceForAssetRoundTrip",
+      "authorizationRequired": true,
+      "productionAllowed": false,
+      "blockedReason": "Selects the first dashboard record and lacks explicit target authorization and structured cleanup reporting."
+    },
+    "visual-asset-library-production-suite": {
+      "target": "drive-metadata-dashboard",
+      "classification": "blocked",
+      "entryPoint": "testVisualAssetLibraryProductionSyncTestSuite",
+      "authorizationRequired": true,
+      "productionAllowed": false,
+      "blockedReason": "Issue #33 must remove direct write bypasses and non-write history mutations before this surface can enter an approved live lane."
+    }
+  }
+}
