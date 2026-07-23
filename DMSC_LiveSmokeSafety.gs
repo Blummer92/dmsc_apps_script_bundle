@@ -81,6 +81,7 @@ function runDmscAuthorizedSourceApprovalRoundTrip() {
   const auditRowsBefore = auditSheet ? auditSheet.getLastRow() : 0;
   const mutations = [];
   let assertionPassed = false;
+  let assertionError = '';
   let cleanupAttempted = false;
   let cleanupVerified = false;
   let cleanupError = '';
@@ -99,6 +100,8 @@ function runDmscAuthorizedSourceApprovalRoundTrip() {
       throw new Error('Expected sourceControlClearanceNeeded=No after temporary approval.');
     }
     assertionPassed = true;
+  } catch (error) {
+    assertionError = error && error.message ? error.message : String(error);
   } finally {
     cleanupAttempted = true;
     try {
@@ -127,7 +130,7 @@ function runDmscAuthorizedSourceApprovalRoundTrip() {
 
   const auditRowsAfter = auditSheet ? auditSheet.getLastRow() : auditRowsBefore;
   const appendOnlyAuditRows = Math.max(0, auditRowsAfter - auditRowsBefore);
-  const overallStatus = assertionPassed && cleanupVerified ? 'PASS' : 'FAIL';
+  const overallStatus = assertionPassed && !assertionError && cleanupVerified ? 'PASS' : 'FAIL';
   const report = {
     suite: 'root-source-approval-round-trip',
     classification: 'mutation',
@@ -136,6 +139,7 @@ function runDmscAuthorizedSourceApprovalRoundTrip() {
     finishedAt: new Date(),
     overallStatus: overallStatus,
     assertionPassed: assertionPassed,
+    assertionError: assertionError,
     mutations: mutations,
     cleanup: {
       required: true,
