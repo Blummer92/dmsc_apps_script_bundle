@@ -7,6 +7,7 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:phase1": "jest tests/phase1",
+    "test:entry-points": "node scripts/check-apps-script-entry-points.mjs && jest tests/entry-points",
     "test:clasp-preflight": "node scripts/test-clasp-target-preflight.mjs",
     "test:validate-live": "node scripts/test-validate-live.mjs",
     "clasp:preflight": "node scripts/clasp-target-preflight.mjs",
