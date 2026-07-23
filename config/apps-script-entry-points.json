@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "scanRoots": ["."],
+  "excludedDirectories": [".git", "node_modules", "tests", "docs", "scripts", "config"],
+  "temporaryDuplicateExceptions": {
+    "getDmscSourceApprovalPreviewBatch": "Duplicate declarations in DMSC_SourceApproval.gs must be resolved by #46.",
+    "testGetDmscSourceApprovalPreviewBatch": "Duplicate declarations in DMSC_SourceApproval.gs must be resolved by #46."
+  },
+  "explicitClassifications": {
+    "approveDmscSourceForAsset": "mutation",
+    "testApproveDmscSourceForAssetRoundTrip": "retired",
+    "repairDmscSourceApprovalRoundTripTarget": "retired",
+    "inspectDmscSourceApprovalState": "read_only",
+    "getDmscSourceApprovalPreview": "read_only",
+    "getDmscSourceApprovalPreviewBatch": "read_only",
+    "stageDmscSourceApprovalBatch": "read_only",
+    "testGetDmscSourceApprovalPreview": "development_test",
+    "testGetDmscSourceApprovalPreviewBatch": "development_test",
+    "testStageDmscSourceApprovalBatch": "development_test"
+  },
+  "classificationRules": [
+    { "pattern": "^test", "classification": "development_test" },
+    { "pattern": "^(get|list|find|inspect|preview|build|validate|audit)", "classification": "read_or_analysis" },
+    { "pattern": "^(approve|apply|append|create|delete|insert|move|patch|repair|restore|set|sync|update|upsert|write)", "classification": "mutation_or_manager" },
+    { "pattern": "_$", "classification": "internal_helper" }
+  ]
+}
