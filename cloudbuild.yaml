@@ -9,5 +9,10 @@ steps:
     entrypoint: npm
     args: ["test"]
 
+  - name: node:20
+    id: clasp-preflight-self-test
+    entrypoint: npm
+    args: ["run", "test:clasp-preflight"]
+
 options:
   logging: CLOUD_LOGGING_ONLY
