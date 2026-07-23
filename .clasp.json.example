@@ -1,5 +1,5 @@
 {
-  "scriptId": "1dMavHEBgs3Gwa23HvpcXbV42IU9AlDQUrGQ3Poy7CfUaRGPcHdflQSaY",
+  "scriptId": "PASTE_SCRIPT_ID_HERE",
   "rootDir": "",
   "scriptExtensions": [
     ".js",
@@ -14,4 +14,3 @@
   "filePushOrder": [],
   "skipSubdirectories": false
 }
-

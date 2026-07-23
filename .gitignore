@@ -7,3 +7,7 @@ coverage/
 .cache/
 dist/
 build/
+
+# Local clasp target configuration. Commit only placeholder examples.
+.clasp.json
+**/.clasp.json

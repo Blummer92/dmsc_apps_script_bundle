@@ -81,25 +81,16 @@ Enable the Google Sheets advanced service in Apps Script if it is not already en
 
 ## Notion Staging Sync
 
-The 10-row validation lane remains available:
-
-- `dryRunNotionRows2To11()` builds and logs the approved row 2-11 payloads without writing to Notion.
+- `dryRunNotionRows2To11()` builds and logs approved row 2-11 payloads without writing to Notion.
 - `syncNotionRows2To11ToStaging()` writes rows 2-11 only after the 10-row staging guards pass.
-
-The expanded staging batch lane is available for scaling eligible rows safely:
-
 - `dryRunNotionEligibleStagingBatch()` builds one eligible-row batch without writing to Notion.
 - `syncNotionEligibleStagingBatchToStaging()` writes one eligible-row batch after expanded staging guards pass.
 
-Expanded batches are cursor-based. The function returns `next_cursor_row`; set `DM_NOTION_SYNC_CURSOR_ROW` to that value before the next batch. The script does not write progress back to Sheets.
-
-Full operating steps are in `STAGING_SYNC_RUNBOOK.md`.
+Expanded batches are cursor-based. Full operating steps are in `STAGING_SYNC_RUNBOOK.md`.
 
 This is not production deployment and does not grant export, generation, prompt overwrite, production source approval, readiness updates, production Notion sync, or full Notion sync activation.
 
 ## Tier Logic
-
-Every record must have exactly one Review Tier.
 
 - Tier 1: searchable/reviewable inside dashboard only; never exportable.
 - Tier 2: reference-only; never generation eligible.
@@ -114,73 +105,28 @@ This project must not include source approval, DM Source Library writes, Drive f
 
 Limited internal pilot guidance is tracked in `PILOT_CHECKLIST.md`. This pilot package does not approve production deployment.
 
-## Codespaces clasp Preflight Push
+## Local clasp setup
 
-Use this workflow when syncing from GitHub Codespaces to the bound Apps Script project.
-
-```bash
-cd /workspaces/dmsc_apps_script_bundle/drive-metadata-dashboard
-git pull
-cp .clasp.json.example .clasp.json
-npm run clasp:login
-npm run clasp:preflight-push
-```
-
-The preflight script checks all of the following before pushing:
-
-- current folder is exactly `/workspaces/dmsc_apps_script_bundle/drive-metadata-dashboard`
-- `.clasp.json` exists
-- `.clasp.json` uses Script ID `1r8ZxoTdefHTE59qW9NuZqeBJHZhqg4XlKxNvV0fKP3u5uQa7Ov8vjKLr`
-- no nested duplicate project folder should be used for pushing
-- `src/NotionDryRun.gs`, `src/SheetReadService.gs`, `src/NotionSyncService.gs`, and `appsscript.json` are present
-- `npx @google/clasp status` shows the required files as tracked
-- `npx @google/clasp push` completes
-- a second clasp status runs after push
-
-If preflight fails because `.clasp.json` is missing, run:
+Complete target identifiers are intentionally not committed.
 
 ```bash
 cd /workspaces/dmsc_apps_script_bundle/drive-metadata-dashboard
 cp .clasp.json.example .clasp.json
-npm run clasp:preflight-push
-```
-
-If preflight fails because files are missing, run:
-
-```bash
-cd /workspaces/dmsc_apps_script_bundle/drive-metadata-dashboard
-git pull
-npm run clasp:preflight-push
-```
-
-After pushing, reload Apps Script and test dry runs first:
-
-- `dryRunNotionRows2To11`
-- `dryRunNotionEligibleStagingBatch`
-
-Do not run staging sync functions until the required staging script properties are set. This workflow does not run Notion sync, modify Drive Images, create production records, or approve production deployment.
-
-## clasp Deployment
-
-Login once:
-
-```bash
+# Replace PASTE_SCRIPT_ID_HERE in the local file only.
+export DMSC_EXPECTED_SCRIPT_ID="<local expected Script ID>"
 npm run clasp:login
+npm run clasp:preflight-push
 ```
 
-Push this project to an existing Apps Script project by providing the Script ID from Apps Script Project Settings:
+Despite its legacy name, `clasp:preflight-push` now performs **preflight only**. It validates the project directory, local target match, root directory, required files, and clasp upload candidate list. It prints only a short SHA-256 target fingerprint and does not execute `clasp push`.
 
-```bash
-SCRIPT_ID="1r8ZxoTdefHTE59qW9NuZqeBJHZhqg4XlKxNvV0fKP3u5uQa7Ov8vjKLr" npm run clasp:push
-```
+A future push requires separate explicit authorization after issue #18 safeguards are complete. Do not run `clasp push`, `clasp push --force`, or deployment commands as part of ordinary validation.
 
-Check deployment status or open the Apps Script project:
+After any separately approved deployment, reload Apps Script and test dry-run functions first. Do not run staging sync functions until all required staging Script Properties are set.
 
-```bash
-SCRIPT_ID="1r8ZxoTdefHTE59qW9NuZqeBJHZhqg4XlKxNvV0fKP3u5uQa7Ov8vjKLr" npm run clasp:status
-SCRIPT_ID="1r8ZxoTdefHTE59qW9NuZqeBJHZhqg4XlKxNvV0fKP3u5uQa7Ov8vjKLr" npm run clasp:open
-```
+## Target confidentiality
 
-The helper writes `.clasp.json` locally from `SCRIPT_ID`. That local file is intentionally not committed.
-
-Avoid `npm run clasp:pull` unless the Apps Script editor has newer manual edits that should replace your local files. Reload the bound spreadsheet and open `Drive Metadata > Open Dashboard` after pushing.
+- `.clasp.json` is local and ignored by Git.
+- `.clasp.json.example` contains placeholders only.
+- Do not paste full Script IDs into README files, issues, PR comments, logs, screenshots, or preflight output.
+- Use the redacted fingerprint printed by preflight when confirming the selected target.
