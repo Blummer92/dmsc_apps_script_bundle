@@ -14,5 +14,10 @@ steps:
     entrypoint: npm
     args: ["run", "test:clasp-preflight"]
 
+  - name: node:20
+    id: live-validation-gate-self-test
+    entrypoint: npm
+    args: ["run", "test:validate-live"]
+
 options:
   logging: CLOUD_LOGGING_ONLY
