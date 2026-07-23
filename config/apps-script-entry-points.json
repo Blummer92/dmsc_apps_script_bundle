@@ -1,10 +1,15 @@
 {
-  "schemaVersion": 1,
-  "scanRoots": ["."],
+  "schemaVersion": 2,
+  "projects": [
+    { "name": "root-dashboard", "root": ".", "recursive": false },
+    { "name": "builder-dashboard", "root": "apps-script-builder-dashboard/src", "recursive": true },
+    { "name": "drive-metadata-dashboard", "root": "drive-metadata-dashboard/src", "recursive": true },
+    { "name": "search-feature", "root": "search-feature-app/src", "recursive": true }
+  ],
   "excludedDirectories": [".git", "node_modules", "tests", "docs", "scripts", "config"],
   "temporaryDuplicateExceptions": {
-    "getDmscSourceApprovalPreviewBatch": "Duplicate declarations in DMSC_SourceApproval.gs must be resolved by #46.",
-    "testGetDmscSourceApprovalPreviewBatch": "Duplicate declarations in DMSC_SourceApproval.gs must be resolved by #46."
+    "root-dashboard:getDmscSourceApprovalPreviewBatch": "Duplicate declarations in DMSC_SourceApproval.gs must be resolved by #46.",
+    "root-dashboard:testGetDmscSourceApprovalPreviewBatch": "Duplicate declarations in DMSC_SourceApproval.gs must be resolved by #46."
   },
   "explicitClassifications": {
     "approveDmscSourceForAsset": "mutation",
