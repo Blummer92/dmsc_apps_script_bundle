@@ -1,5 +1,8 @@
 'use strict';
 
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const checker = require('../../scripts/apps-script-entry-point-callers.cjs');
 
 const inventory = [
@@ -34,6 +37,39 @@ describe('Apps Script caller-reference checker', () => {
     expect(checker.discoverGoogleScriptRunCallers(source, 'Client.html', 'root-dashboard')).toEqual([
       expect.objectContaining({ symbol: 'safeHandler', callerType: 'html', invocationStyle: 'member-call' })
     ]);
+  });
+
+  test('does not classify nested success and failure handlers as server calls', () => {
+    const source = `
+      google.script.run
+        .withSuccessHandler((value) => render(normalize(value)))
+        .withFailureHandler((error) => showError(formatError(error)))
+        .safeHandler({
+          payload: buildPayload(getValue())
+        });
+    `;
+
+    const results = checker.discoverGoogleScriptRunCallers(
+      source,
+      'Client.html',
+      'root-dashboard'
+    );
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        symbol: 'safeHandler',
+        callerType: 'html',
+        invocationStyle: 'member-call'
+      })
+    ]);
+
+    expect(results.map((item) => item.symbol)).not.toContain(
+      'withSuccessHandler'
+    );
+
+    expect(results.map((item) => item.symbol)).not.toContain(
+      'withFailureHandler'
+    );
   });
 
   test('detects literal and unresolved bracket dispatch separately', () => {
@@ -189,6 +225,148 @@ describe('Apps Script caller-reference checker', () => {
       expect.objectContaining({ symbol: 'safeHandler', invocationStyle: 'ScriptApp.newTrigger' }),
       expect.objectContaining({ symbol: 'onEdit', invocationStyle: 'onEdit' })
     ]));
+  });
+
+  test('does not treat local HTML helpers as deployable direct-source callers', () => {
+    const repositoryRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'entry-point-callers-')
+    );
+
+    try {
+      fs.writeFileSync(
+        path.join(repositoryRoot, 'Client.html'),
+        `
+          <script>
+            function escapeHtml(value) {
+              return String(value);
+            }
+
+            const escaped = escapeHtml('example');
+
+            google.script.run
+              .withSuccessHandler(render)
+              .safeHandler(escaped);
+          </script>
+        `
+      );
+
+      const entryPolicy = {
+        projects: [
+          {
+            name: 'root-dashboard',
+            root: '.',
+            recursive: false
+          }
+        ]
+      };
+
+      const callerPolicy = {
+        temporaryReferenceExceptions: [],
+        reviewedDynamicReferences: []
+      };
+
+      const report = checker.buildCallerReport(
+        repositoryRoot,
+        entryPolicy,
+        callerPolicy,
+        [
+          {
+            project: 'root-dashboard',
+            symbol: 'escapeHtml',
+            classification: 'read_only'
+          },
+          {
+            project: 'root-dashboard',
+            symbol: 'safeHandler',
+            classification: 'read_only'
+          }
+        ]
+      );
+
+      expect(report.callers).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            symbol: 'safeHandler',
+            callerType: 'html',
+            invocationStyle: 'member-call'
+          })
+        ])
+      );
+
+      expect(report.callers).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            symbol: 'escapeHtml',
+            callerType: 'direct-source'
+          })
+        ])
+      );
+
+      expect(report.errors).toEqual([]);
+    } finally {
+      fs.rmSync(repositoryRoot, {
+        recursive: true,
+        force: true
+      });
+    }
+  });
+
+  test('sorts callers after canonical project resolution', () => {
+    const records = [
+      {
+        project: 'zz-alias',
+        symbol: 'aHandler',
+        callerType: 'registry',
+        file: 'config/live-smoke-suites.json',
+        line: 1,
+        invocationStyle: 'json-entryPoint',
+        executable: true,
+        dynamic: false
+      },
+      {
+        project: 'aa-alias',
+        symbol: 'zHandler',
+        callerType: 'registry',
+        file: 'config/live-smoke-suites.json',
+        line: 1,
+        invocationStyle: 'json-entryPoint',
+        executable: true,
+        dynamic: false
+      }
+    ];
+
+    const inventory = [
+      {
+        project: 'root-dashboard',
+        symbol: 'aHandler',
+        classification: 'read_only'
+      },
+      {
+        project: 'root-dashboard',
+        symbol: 'zHandler',
+        classification: 'read_only'
+      }
+    ];
+
+    expect(
+      checker.evaluateCallers(
+        records,
+        inventory,
+        {
+          temporaryReferenceExceptions: [],
+          reviewedDynamicReferences: []
+        }
+      )
+    ).toEqual([]);
+
+    const sorted = checker.dedupeAndSort(records);
+
+    expect(
+      sorted.map((item) => `${item.project}:${item.symbol}`)
+    ).toEqual([
+      'root-dashboard:aHandler',
+      'root-dashboard:zHandler'
+    ]);
   });
 
   test('deduplicates caller rows and sorts deterministically', () => {

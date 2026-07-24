@@ -108,52 +108,169 @@ function discoverMenuCallers(source, file, project) {
   return results;
 }
 
-function discoverGoogleScriptRunCallers(source, file, project) {
-  const results = [];
-  const searchable = maskComments(source);
-  const memberPattern = /google\.script\.run(?:(?:\s*\.\s*(?:withSuccessHandler|withFailureHandler|withUserObject)\s*\([^)]*\))*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g;
-  let match;
-  while ((match = memberPattern.exec(searchable))) {
-    results.push({
-      project,
-      symbol: match[1],
-      callerType: 'html',
-      file,
-      line: lineNumber(source, match.index),
-      invocationStyle: 'member-call',
-      executable: true,
-      dynamic: false
-    });
+function findClosingParen(source, openIndex) {
+  let depth = 0;
+  let quote = '';
+  let escaped = false;
+
+  for (let index = openIndex; index < source.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1] || '';
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+
+      if (character === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (character === quote) {
+        quote = '';
+      }
+
+      continue;
+    }
+
+    if (character === "'" || character === '"' || character === '`') {
+      quote = character;
+      continue;
+    }
+
+    if (character === '/' && next === '/') {
+      const newline = source.indexOf('\n', index + 2);
+      if (newline === -1) return -1;
+      index = newline;
+      continue;
+    }
+
+    if (character === '/' && next === '*') {
+      const closing = source.indexOf('*/', index + 2);
+      if (closing === -1) return -1;
+      index = closing + 1;
+      continue;
+    }
+
+    if (character === '(') {
+      depth += 1;
+      continue;
+    }
+
+    if (character === ')') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
   }
 
-  const literalBracketPattern = /google\.script\.run\s*\[\s*(['"])([A-Za-z_$][\w$]*)\1\s*\]\s*\(/g;
+  return -1;
+}
+
+function discoverGoogleScriptRunCallers(source, file, project) {
+  const results = [];
+  const sourceText = String(source);
+  const helperMethods = new Set([
+    'withSuccessHandler',
+    'withFailureHandler',
+    'withUserObject'
+  ]);
+  const runPattern = /google\.script\.run\b/g;
+
+  let runMatch;
+  while ((runMatch = runPattern.exec(sourceText))) {
+    let cursor = runPattern.lastIndex;
+    const methods = [];
+
+    while (cursor < sourceText.length) {
+      while (/\s/.test(sourceText[cursor] || '')) cursor += 1;
+      if (sourceText[cursor] !== '.') break;
+
+      cursor += 1;
+      while (/\s/.test(sourceText[cursor] || '')) cursor += 1;
+
+      const identifierMatch = sourceText
+        .slice(cursor)
+        .match(/^[A-Za-z_$][\w$]*/);
+
+      if (!identifierMatch) break;
+
+      const methodName = identifierMatch[0];
+      const methodIndex = cursor;
+      cursor += methodName.length;
+
+      while (/\s/.test(sourceText[cursor] || '')) cursor += 1;
+      if (sourceText[cursor] !== '(') break;
+
+      const closingParen = findClosingParen(sourceText, cursor);
+      if (closingParen === -1) break;
+
+      methods.push({
+        name: methodName,
+        index: methodIndex
+      });
+
+      cursor = closingParen + 1;
+    }
+
+    const target = [...methods]
+      .reverse()
+      .find((method) => !helperMethods.has(method.name));
+
+    if (target) {
+      results.push({
+        project,
+        symbol: target.name,
+        callerType: 'html',
+        file,
+        line: lineNumber(sourceText, target.index),
+        invocationStyle: 'member-call',
+        executable: true,
+        dynamic: false
+      });
+    }
+
+    if (cursor > runPattern.lastIndex) {
+      runPattern.lastIndex = cursor;
+    }
+  }
+
+  const searchable = maskComments(sourceText);
+  const literalBracketPattern =
+    /google\.script\.run\s*\[\s*(['"])([A-Za-z_$][\w$]*)\1\s*\]\s*\(/g;
+
+  let match;
   while ((match = literalBracketPattern.exec(searchable))) {
     results.push({
       project,
       symbol: match[2],
       callerType: 'html',
       file,
-      line: lineNumber(source, match.index),
+      line: lineNumber(sourceText, match.index),
       invocationStyle: 'bracket-literal',
       executable: true,
       dynamic: false
     });
   }
 
-  const dynamicBracketPattern = /google\.script\.run\s*\[\s*([^'"\]\s][^\]]*)\]\s*\(/g;
+  const dynamicBracketPattern =
+    /google\.script\.run\s*\[\s*([^'"\]\s][^\]]*)\]\s*\(/g;
+
   while ((match = dynamicBracketPattern.exec(searchable))) {
     results.push({
       project,
       symbol: '',
       callerType: 'dynamic-string',
       file,
-      line: lineNumber(source, match.index),
+      line: lineNumber(sourceText, match.index),
       invocationStyle: 'bracket-dynamic',
       executable: true,
       dynamic: true,
       expression: match[1].trim()
     });
   }
+
   return results;
 }
 
@@ -390,11 +507,14 @@ function buildCallerReport(repositoryRoot, entryPolicy, callerPolicy, inventory)
     const source = fs.readFileSync(full, 'utf8');
     const project = projectForFile(relative, entryPolicy);
 
-    if (isGovernedSource(relative, entryPolicy) && (extension === '.gs' || extension === '.js' || extension === '.html')) {
-      records.push(...discoverMenuCallers(source, relative, project));
-      records.push(...discoverGoogleScriptRunCallers(source, relative, project));
-      records.push(...discoverDirectCalls(source, relative, project, knownSymbols));
-      records.push(...discoverTriggerReferences(source, relative, project));
+    if (isGovernedSource(relative, entryPolicy)) {
+      if (extension === '.gs') {
+        records.push(...discoverMenuCallers(source, relative, project));
+        records.push(...discoverDirectCalls(source, relative, project, knownSymbols));
+        records.push(...discoverTriggerReferences(source, relative, project));
+      } else if (extension === '.html') {
+        records.push(...discoverGoogleScriptRunCallers(source, relative, project));
+      }
     }
     if (relative === 'config/live-smoke-suites.json') {
       records.push(...discoverRegistryCallers(source, relative, 'root-dashboard'));
@@ -404,8 +524,13 @@ function buildCallerReport(repositoryRoot, entryPolicy, callerPolicy, inventory)
     }
   }
 
-  const callers = dedupeAndSort(records);
-  const errors = evaluateCallers(callers, inventory, callerPolicy);
+  const evaluatedCallers = dedupeAndSort(records);
+  const errors = evaluateCallers(
+    evaluatedCallers,
+    inventory,
+    callerPolicy
+  );
+  const callers = dedupeAndSort(evaluatedCallers);
   return { callers, errors };
 }
 
