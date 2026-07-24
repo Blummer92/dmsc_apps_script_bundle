@@ -1,7 +1,5 @@
 var VisualAssetLibraryValidationService = (function() {
   const VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID = 'collection://da5cba48-50fd-4377-9790-8df8f6f2c7dd';
-  const NOTION_API_BASE_URL = 'https://api.notion.com/v1';
-  const NOTION_VERSION = '2022-06-28';
   const EXPANDED_SCOPE = 'ELIGIBLE_STAGING_BATCH';
   const DEFAULT_BATCH_SIZE = 25;
   const MAX_BATCH_SIZE = 50;
@@ -38,7 +36,6 @@ var VisualAssetLibraryValidationService = (function() {
       row_progress: managerResult.row_progress || [],
       dry_run_proof: VisualAssetLibraryDryRunProofService.save({ summary: summary, field_validation: validation, row_progress: managerResult.row_progress || [] }, schema, context, batch)
     };
-
     Logger.log('VISUAL ASSET LIBRARY FIELD VALIDATION ONLY - No Notion write executed.');
     Logger.log(JSON.stringify(summary, null, 2));
     logJsonInChunks_(validation, 6000);
@@ -81,44 +78,17 @@ var VisualAssetLibraryValidationService = (function() {
     const batchEndRow = Math.min(context.endRow, batchStartRow + context.batchSize - 1);
     const readResult = SheetReadService.readSpreadsheetRowsById(context.spreadsheetId, context.sheetName, batchStartRow, batchEndRow);
     if (readResult.warnings.length) throw new Error('Blocked: ' + readResult.warnings.join(' '));
-    return {
-      startRow: batchStartRow,
-      endRow: batchEndRow,
-      nextCursorRow: batchEndRow < context.endRow ? batchEndRow + 1 : null,
-      records: readResult.records
-    };
+    return { startRow: batchStartRow, endRow: batchEndRow, nextCursorRow: batchEndRow < context.endRow ? batchEndRow + 1 : null, records: readResult.records };
   }
 
   function buildFieldValidation_(progress) {
     const rows = [];
     progress.forEach(function(item) {
       (item.field_results || []).forEach(function(field) {
-        rows.push({
-          source_row: item.source_row,
-          notion_page_id: '',
-          notion_page_url: item.notion_page_url || '',
-          file_id: item.file_id || '',
-          field_name: field.field,
-          old_value: field.actual || '',
-          proposed_value: field.expected || '',
-          source_column_used: field.canonical || '',
-          skipped: isBlockingField_(item, field),
-          reason: isBlockingField_(item, field) ? field.reason || item.detail || 'Field requires review before sync.' : ''
-        });
+        rows.push({ source_row: item.source_row, notion_page_id: '', notion_page_url: item.notion_page_url || '', file_id: item.file_id || '', field_name: field.field, old_value: field.actual || '', proposed_value: field.expected || '', source_column_used: field.canonical || '', skipped: isBlockingField_(item, field), reason: isBlockingField_(item, field) ? field.reason || item.detail || 'Field requires review before sync.' : '' });
       });
       if (item.status === 'failed' && !(item.field_results || []).length) {
-        rows.push({
-          source_row: item.source_row,
-          notion_page_id: '',
-          notion_page_url: item.notion_page_url || '',
-          file_id: item.file_id || '',
-          field_name: 'Row validation',
-          old_value: '',
-          proposed_value: '',
-          source_column_used: '',
-          skipped: true,
-          reason: item.detail || 'Row failed validation.'
-        });
+        rows.push({ source_row: item.source_row, notion_page_id: '', notion_page_url: item.notion_page_url || '', file_id: item.file_id || '', field_name: 'Row validation', old_value: '', proposed_value: '', source_column_used: '', skipped: true, reason: item.detail || 'Row failed validation.' });
       }
     });
     return rows;
@@ -134,9 +104,7 @@ var VisualAssetLibraryValidationService = (function() {
   function buildSkippedRows_(records, progress) {
     const byRow = {};
     progress.forEach(function(item) { byRow[item.source_row] = item; });
-    return records.filter(function(record) { return !byRow[record.rowNumber]; }).map(function(record) {
-      return { source_row: record.rowNumber, file_id: record.file_id || '', reason: 'row was not returned by sync manager dry run' };
-    });
+    return records.filter(function(record) { return !byRow[record.rowNumber]; }).map(function(record) { return { source_row: record.rowNumber, file_id: record.file_id || '', reason: 'row was not returned by sync manager dry run' }; });
   }
 
   function fetchSchema_(context) {
@@ -155,13 +123,22 @@ var VisualAssetLibraryValidationService = (function() {
   function normalizeNotionId_(value) { return String(value || '').replace(/-/g, ''); }
 
   function notionRequest_(context, method, path, body) {
-    const options = { method: method, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + context.notionToken, 'Notion-Version': NOTION_VERSION } };
-    if (body) { options.contentType = 'application/json'; options.payload = JSON.stringify(body); }
-    const response = UrlFetchApp.fetch(NOTION_API_BASE_URL + path, options);
-    const status = response.getResponseCode();
-    const text = response.getContentText();
-    if (status < 200 || status >= 300) throw new Error('Notion API error ' + status + ': ' + text);
-    return text ? JSON.parse(text) : {};
+    return NotionTransport.requestOrThrow({
+      token: context.notionToken,
+      method: method,
+      path: path,
+      body: body,
+      operationClass: classifyOperation_(method, path)
+    });
+  }
+
+  function classifyOperation_(method, path) {
+    const normalizedMethod = String(method || '').toLowerCase();
+    if (normalizedMethod === 'get') return NotionTransport.OPERATION.IDEMPOTENT_READ;
+    if (normalizedMethod === 'post' && /\/query(?:$|\?)/.test(String(path || ''))) return NotionTransport.OPERATION.IDEMPOTENT_QUERY;
+    if (normalizedMethod === 'post' && String(path || '') === '/pages') return NotionTransport.OPERATION.CREATE;
+    if (normalizedMethod === 'patch') return NotionTransport.OPERATION.UPDATE;
+    return NotionTransport.OPERATION.UNKNOWN;
   }
 
   function logJsonInChunks_(value, chunkSize) {
