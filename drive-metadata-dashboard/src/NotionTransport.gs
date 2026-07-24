@@ -21,16 +21,37 @@ var NotionTransport = (function() {
   function request(spec, dependencies) {
     spec = spec || {};
     dependencies = dependencies || {};
+
     const operationClass = normalizeOperationClass_(spec.operationClass);
     const method = String(spec.method || 'get').toLowerCase();
-    const operationId = String(spec.operationId || createOperationId_(dependencies)).trim();
-    const startedAt = now_(dependencies);
-    const deadline = Number(spec.deadlineMs || (startedAt + Number(spec.maxElapsedMs || DEFAULT_MAX_ELAPSED_MS)));
-    const maxAttempts = Math.max(1, Number(spec.maxAttempts || DEFAULT_MAX_ATTEMPTS));
-    const timeoutSeconds = Math.max(1, Number(spec.timeoutSeconds || DEFAULT_TIMEOUT_SECONDS));
-    const reserveMs = Math.max(0, Number(spec.reserveMs || DEFAULT_RESERVE_MS));
-    const endpoint = normalizeEndpoint_(spec.path || spec.endpoint || '');
+    const startedAt = safeNow_(dependencies);
+    const operationId = resolveOperationId_(spec, dependencies);
+    const deadline = resolveDeadline_(spec, startedAt);
+    const maxAttempts = positiveInteger_(spec.maxAttempts, DEFAULT_MAX_ATTEMPTS);
+    const timeoutSeconds = positiveInteger_(spec.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS);
+    const reserveMs = nonNegativeNumber_(spec.reserveMs, DEFAULT_RESERVE_MS);
+    const endpointResult = normalizeEndpoint_(spec.path || spec.endpoint || '');
+    const endpoint = endpointResult.endpoint;
     const evidence = [];
+
+    if (!operationId) {
+      return result_('BLOCKED_INVALID_REQUEST', '', operationClass, method, endpoint, startedAt, dependencies, {
+        errorCode: 'MISSING_OPERATION_ID',
+        evidence: evidence
+      });
+    }
+    if (operationClass === OPERATION.UNKNOWN) {
+      return result_('BLOCKED_INVALID_REQUEST', operationId, operationClass, method, endpoint, startedAt, dependencies, {
+        errorCode: 'UNKNOWN_OPERATION_CLASS',
+        evidence: evidence
+      });
+    }
+    if (!endpointResult.ok) {
+      return result_('BLOCKED_INVALID_REQUEST', operationId, operationClass, method, endpoint, startedAt, dependencies, {
+        errorCode: endpointResult.errorCode,
+        evidence: evidence
+      });
+    }
 
     const payloadCheck = validatePayload_(spec.body);
     if (!payloadCheck.ok) {
@@ -55,31 +76,61 @@ var NotionTransport = (function() {
       try {
         response = fetch_(buildUrl_(endpoint), buildOptions_(spec, method, timeoutSeconds), dependencies);
       } catch (error) {
-        evidence.push(attemptEvidence_(attempt, 0, false, 'PRE_RESPONSE_FAILURE', error && error.message));
+        evidence.push(attemptEvidence_(attempt, 0, false, 'PRE_RESPONSE_FAILURE', error && error.message, 0));
         if (isWrite_(operationClass)) {
           return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, 'PRE_RESPONSE_FAILURE');
         }
-        if (attempt >= maxAttempts || !hasBudget_(deadline, DEFAULT_BASE_DELAY_MS + reserveMs, dependencies)) {
+        if (attempt >= maxAttempts) {
           return result_('RETRY_EXHAUSTED', operationId, operationClass, method, endpoint, startedAt, dependencies, {
             attempts: attempt,
             evidence: evidence,
             errorCode: 'PRE_RESPONSE_FAILURE'
           });
         }
-        sleep_(computeBackoff_(attempt, null, dependencies, spec), dependencies);
+        const delayMs = computeBackoff_(attempt, null, dependencies, spec);
+        evidence[evidence.length - 1].retryDelayMs = delayMs;
+        if (!hasBudget_(deadline, delayMs + timeoutSeconds * 1000 + reserveMs, dependencies)) {
+          return result_('BUDGET_EXHAUSTED', operationId, operationClass, method, endpoint, startedAt, dependencies, {
+            attempts: attempt,
+            evidence: evidence,
+            errorCode: 'INSUFFICIENT_EXECUTION_BUDGET'
+          });
+        }
+        sleep_(delayMs, dependencies);
         continue;
       }
 
-      const status = Number(response.getResponseCode());
-      const text = String(response.getContentText() || '');
+      const status = responseCode_(response);
+      const text = responseText_(response);
       const headers = getHeaders_(response);
       let parsed;
+      let malformed = false;
       try {
         parsed = text ? JSON.parse(text) : {};
       } catch (error) {
-        evidence.push(attemptEvidence_(attempt, status, true, 'MALFORMED_JSON', 'response body redacted'));
+        parsed = {};
+        malformed = true;
+      }
+
+      if (malformed) {
+        evidence.push(attemptEvidence_(attempt, status, true, 'MALFORMED_JSON', 'response body redacted', 0));
         if (isWrite_(operationClass)) {
           return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, 'MALFORMED_JSON');
+        }
+        if (isRetryableRead_(operationClass, status) && attempt < maxAttempts) {
+          const retryAfterMs = parseRetryAfter_(headerValue_(headers, 'Retry-After'), safeNow_(dependencies));
+          const delayMs = computeBackoff_(attempt, retryAfterMs, dependencies, spec);
+          evidence[evidence.length - 1].retryDelayMs = delayMs;
+          if (!hasBudget_(deadline, delayMs + timeoutSeconds * 1000 + reserveMs, dependencies)) {
+            return result_('BUDGET_EXHAUSTED', operationId, operationClass, method, endpoint, startedAt, dependencies, {
+              attempts: attempt,
+              statusCode: status,
+              errorCode: 'MALFORMED_JSON',
+              evidence: evidence
+            });
+          }
+          sleep_(delayMs, dependencies);
+          continue;
         }
         return result_('PERMANENT_FAILURE', operationId, operationClass, method, endpoint, startedAt, dependencies, {
           attempts: attempt,
@@ -90,7 +141,7 @@ var NotionTransport = (function() {
       }
 
       if (status >= 200 && status < 300) {
-        evidence.push(attemptEvidence_(attempt, status, true, 'SUCCESS', ''));
+        evidence.push(attemptEvidence_(attempt, status, true, 'SUCCESS', '', 0));
         return result_('SUCCESS', operationId, operationClass, method, endpoint, startedAt, dependencies, {
           attempts: attempt,
           statusCode: status,
@@ -101,10 +152,23 @@ var NotionTransport = (function() {
 
       const errorCode = safeErrorCode_(parsed, status);
       const retryGuidance = safeRetryGuidance_(parsed);
-      evidence.push(attemptEvidence_(attempt, status, true, errorCode, retryGuidance));
+      evidence.push(attemptEvidence_(attempt, status, true, errorCode, retryGuidance, 0));
 
-      if (isWrite_(operationClass) && isUnknownWriteStatus_(status)) {
-        return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, errorCode);
+      if (isWrite_(operationClass)) {
+        if (status === 429) {
+          const retryAfterMs = parseRetryAfter_(headerValue_(headers, 'Retry-After'), safeNow_(dependencies));
+          evidence[evidence.length - 1].retryDelayMs = Number.isFinite(retryAfterMs) ? Math.min(retryAfterMs, maximumDelay_(spec)) : 0;
+          return result_('RATE_LIMITED_WRITE_NOT_RETRIED', operationId, operationClass, method, endpoint, startedAt, dependencies, {
+            attempts: attempt,
+            statusCode: status,
+            errorCode: errorCode,
+            retryGuidance: retryGuidance,
+            evidence: evidence
+          });
+        }
+        if (isUnknownWriteStatus_(status)) {
+          return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, errorCode);
+        }
       }
 
       if (!isRetryableRead_(operationClass, status) || attempt >= maxAttempts) {
@@ -117,8 +181,9 @@ var NotionTransport = (function() {
         });
       }
 
-      const retryAfterMs = parseRetryAfter_(headers['Retry-After'] || headers['retry-after'], now_(dependencies));
+      const retryAfterMs = parseRetryAfter_(headerValue_(headers, 'Retry-After'), safeNow_(dependencies));
       const delayMs = computeBackoff_(attempt, retryAfterMs, dependencies, spec);
+      evidence[evidence.length - 1].retryDelayMs = delayMs;
       if (!hasBudget_(deadline, delayMs + timeoutSeconds * 1000 + reserveMs, dependencies)) {
         return result_('BUDGET_EXHAUSTED', operationId, operationClass, method, endpoint, startedAt, dependencies, {
           attempts: attempt,
@@ -141,12 +206,14 @@ var NotionTransport = (function() {
     const outcome = request(spec, dependencies);
     if (outcome.status === 'SUCCESS' || outcome.status === 'VERIFIED_SUCCESS') return outcome.data;
     const error = new Error('Notion transport ' + outcome.status + ' [' + outcome.errorCode + ']');
+    error.name = 'NotionTransportError';
     error.notionTransportOutcome = outcome;
     throw error;
   }
 
   function verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempts, evidence, errorCode) {
-    if (typeof spec.verify !== 'function' || !hasBudget_(deadline, Number(spec.verificationReserveMs || DEFAULT_RESERVE_MS), dependencies)) {
+    const verificationBudgetMs = positiveInteger_(spec.verificationBudgetMs, DEFAULT_TIMEOUT_SECONDS * 1000 + DEFAULT_RESERVE_MS);
+    if (typeof spec.verify !== 'function' || !hasBudget_(deadline, verificationBudgetMs, dependencies)) {
       return result_('UNKNOWN_OUTCOME', operationId, operationClass, method, endpoint, startedAt, dependencies, {
         attempts: attempts,
         errorCode: errorCode,
@@ -154,6 +221,7 @@ var NotionTransport = (function() {
         verification: { status: 'NOT_RUN' }
       });
     }
+
     let verification;
     try {
       verification = spec.verify({ operationId: operationId, deadlineMs: deadline });
@@ -165,6 +233,7 @@ var NotionTransport = (function() {
         verification: { status: 'ERROR', detail: redactText_(error && error.message) }
       });
     }
+
     const matches = Array.isArray(verification) ? verification : (verification && verification.matches) || [];
     if (matches.length > 1) {
       return result_('DUPLICATE_IDENTITY_BLOCKED', operationId, operationClass, method, endpoint, startedAt, dependencies, {
@@ -174,7 +243,7 @@ var NotionTransport = (function() {
         verification: { status: 'MULTIPLE_MATCHES', count: matches.length }
       });
     }
-    if (matches.length === 1 && (!spec.verifyMatch || spec.verifyMatch(matches[0]) === true)) {
+    if (matches.length === 1 && typeof spec.verifyMatch === 'function' && spec.verifyMatch(matches[0]) === true) {
       return result_('VERIFIED_SUCCESS', operationId, operationClass, method, endpoint, startedAt, dependencies, {
         attempts: attempts,
         errorCode: errorCode,
@@ -210,10 +279,16 @@ var NotionTransport = (function() {
 
   function validatePayload_(body) {
     if (body === undefined || body === null) return { ok: true };
-    const serialized = JSON.stringify(body);
-    if (serialized.length > MAX_PAYLOAD_BYTES) return { ok: false, code: 'PAYLOAD_BYTES_EXCEEDED', detail: 'Payload exceeds 500 KB.' };
+    let serialized;
+    try {
+      serialized = JSON.stringify(body);
+    } catch (error) {
+      return { ok: false, code: 'PAYLOAD_SERIALIZATION_FAILED', detail: 'Payload could not be serialized.' };
+    }
+    if (serialized === undefined) return { ok: false, code: 'PAYLOAD_SERIALIZATION_FAILED', detail: 'Payload could not be serialized.' };
+    if (serialized.length > MAX_PAYLOAD_BYTES) return { ok: false, code: 'PAYLOAD_BYTES_EXCEEDED', detail: 'Payload exceeds the temporary 500 KB preflight ceiling.' };
     const count = countElements_(body);
-    if (count > MAX_BLOCK_ELEMENTS) return { ok: false, code: 'PAYLOAD_ELEMENTS_EXCEEDED', detail: 'Payload exceeds 1000 elements.' };
+    if (count > MAX_BLOCK_ELEMENTS) return { ok: false, code: 'PAYLOAD_ELEMENTS_EXCEEDED', detail: 'Payload exceeds the temporary 1000-element preflight ceiling.' };
     return { ok: true };
   }
 
@@ -244,50 +319,120 @@ var NotionTransport = (function() {
   }
 
   function computeBackoff_(attempt, retryAfterMs, dependencies, spec) {
-    if (Number.isFinite(retryAfterMs)) return Math.min(retryAfterMs, Number(spec.maxDelayMs || DEFAULT_MAX_DELAY_MS));
-    const base = Number(spec.baseDelayMs || DEFAULT_BASE_DELAY_MS);
-    const maximum = Number(spec.maxDelayMs || DEFAULT_MAX_DELAY_MS);
+    if (Number.isFinite(retryAfterMs)) return Math.min(retryAfterMs, maximumDelay_(spec));
+    const base = nonNegativeNumber_(spec.baseDelayMs, DEFAULT_BASE_DELAY_MS);
+    const maximum = maximumDelay_(spec);
     const jitter = Number(jitter_(dependencies));
-    return Math.min(maximum, Math.max(0, Math.round(base * Math.pow(2, attempt - 1) * (0.5 + Math.max(0, Math.min(1, jitter))))));
+    const boundedJitter = Number.isFinite(jitter) ? Math.max(0, Math.min(1, jitter)) : 0;
+    return Math.min(maximum, Math.max(0, Math.round(base * Math.pow(2, attempt - 1) * (0.5 + boundedJitter))));
   }
 
   function result_(status, operationId, operationClass, method, endpoint, startedAt, dependencies, extra) {
+    extra = extra || {};
     const output = {
       status: status,
       operationId: operationId,
       operationClass: operationClass,
       method: method,
       endpoint: endpoint,
-      elapsedMs: Math.max(0, now_(dependencies) - startedAt),
-      responseReceived: Boolean(extra && extra.statusCode),
-      attempts: extra && extra.attempts || 0,
-      statusCode: extra && extra.statusCode || 0,
-      errorCode: extra && extra.errorCode || '',
-      retryGuidance: extra && extra.retryGuidance || '',
-      verification: extra && extra.verification || null,
-      evidence: extra && extra.evidence || []
+      elapsedMs: Math.max(0, safeNow_(dependencies) - startedAt),
+      responseReceived: Boolean(extra.statusCode),
+      attempts: extra.attempts || 0,
+      statusCode: extra.statusCode || 0,
+      errorCode: extra.errorCode || '',
+      retryGuidance: extra.retryGuidance || '',
+      verification: extra.verification || null,
+      evidence: extra.evidence || []
     };
-    if (extra && Object.prototype.hasOwnProperty.call(extra, 'data')) output.data = extra.data;
-    if (extra && extra.detail) output.detail = extra.detail;
+    if (Object.prototype.hasOwnProperty.call(extra, 'data')) output.data = extra.data;
+    if (extra.detail) output.detail = extra.detail;
     return output;
   }
 
-  function attemptEvidence_(attempt, statusCode, responseReceived, code, detail) {
-    return { attempt: attempt, statusCode: statusCode || 0, responseReceived: responseReceived === true, code: String(code || ''), detail: redactText_(detail) };
+  function attemptEvidence_(attempt, statusCode, responseReceived, code, detail, retryDelayMs) {
+    return {
+      attempt: attempt,
+      statusCode: statusCode || 0,
+      responseReceived: responseReceived === true,
+      code: String(code || ''),
+      detail: redactText_(detail),
+      retryDelayMs: Number(retryDelayMs || 0)
+    };
   }
 
-  function safeErrorCode_(parsed, status) { return String(parsed && (parsed.code || parsed.error) || ('HTTP_' + status)).slice(0, 120); }
+  function safeErrorCode_(parsed, status) { return redactText_(parsed && (parsed.code || parsed.error) || ('HTTP_' + status)).slice(0, 120); }
   function safeRetryGuidance_(parsed) { return redactText_(parsed && parsed.additional_data && parsed.additional_data.retry_guidance || ''); }
-  function redactText_(value) { return String(value || '').replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]').replace(/(?:secret_|ntn_)[A-Za-z0-9_-]+/g, '[REDACTED]').slice(0, 500); }
-  function normalizeEndpoint_(path) { const value = String(path || ''); return value.indexOf(API_BASE_URL) === 0 ? value.slice(API_BASE_URL.length) : value; }
-  function buildUrl_(endpoint) { return endpoint.indexOf('http') === 0 ? endpoint : API_BASE_URL + endpoint; }
-  function getHeaders_(response) { return response && typeof response.getAllHeaders === 'function' ? response.getAllHeaders() || {} : {}; }
-  function hasBudget_(deadline, requiredMs, dependencies) { return now_(dependencies) + Math.max(0, requiredMs) <= deadline; }
+  function redactText_(value) {
+    return String(value || '')
+      .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
+      .replace(/(?:secret_|ntn_)[A-Za-z0-9_-]+/g, '[REDACTED]')
+      .replace(/token[-_=: ]+[A-Za-z0-9._-]+/gi, 'token=[REDACTED]')
+      .slice(0, 500);
+  }
+
+  function normalizeEndpoint_(path) {
+    const value = String(path || '').trim();
+    if (!value) return { ok: false, endpoint: '', errorCode: 'MISSING_ENDPOINT' };
+    if (/^https?:\/\//i.test(value)) {
+      if (value.indexOf(API_BASE_URL + '/') !== 0 && value !== API_BASE_URL) {
+        return { ok: false, endpoint: '', errorCode: 'UNAPPROVED_ENDPOINT_HOST' };
+      }
+      return { ok: true, endpoint: value.slice(API_BASE_URL.length) || '/' };
+    }
+    if (value.charAt(0) !== '/') return { ok: false, endpoint: '', errorCode: 'INVALID_ENDPOINT_PATH' };
+    return { ok: true, endpoint: value };
+  }
+
+  function buildUrl_(endpoint) { return API_BASE_URL + endpoint; }
+  function responseCode_(response) { return response && typeof response.getResponseCode === 'function' ? Number(response.getResponseCode()) : 0; }
+  function responseText_(response) { return response && typeof response.getContentText === 'function' ? String(response.getContentText() || '') : ''; }
+  function getHeaders_(response) {
+    if (!response) return {};
+    if (typeof response.getAllHeaders === 'function') return response.getAllHeaders() || {};
+    if (typeof response.getHeaders === 'function') return response.getHeaders() || {};
+    return {};
+  }
+  function headerValue_(headers, name) {
+    const target = String(name || '').toLowerCase();
+    const keys = Object.keys(headers || {});
+    for (let i = 0; i < keys.length; i += 1) {
+      if (String(keys[i]).toLowerCase() === target) return headers[keys[i]];
+    }
+    return null;
+  }
+
+  function resolveOperationId_(spec, dependencies) {
+    const supplied = spec.operationId === undefined || spec.operationId === null ? '' : String(spec.operationId).trim();
+    if (supplied) return supplied;
+    try {
+      return String(createOperationId_(dependencies) || '').trim();
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function resolveDeadline_(spec, startedAt) {
+    const explicit = Number(spec.deadlineMs);
+    if (Number.isFinite(explicit) && explicit > 0) return explicit;
+    return startedAt + positiveInteger_(spec.maxElapsedMs, DEFAULT_MAX_ELAPSED_MS);
+  }
+
+  function hasBudget_(deadline, requiredMs, dependencies) {
+    const current = safeNow_(dependencies);
+    return Number.isFinite(deadline) && Number.isFinite(current) && current + Math.max(0, Number(requiredMs) || 0) <= deadline;
+  }
+
   function fetch_(url, options, dependencies) { return (dependencies.fetch || function(u, o) { return UrlFetchApp.fetch(u, o); })(url, options); }
   function sleep_(ms, dependencies) { return (dependencies.sleep || function(value) { Utilities.sleep(value); })(ms); }
-  function now_(dependencies) { return Number((dependencies.clock || function() { return new Date().getTime(); })()); }
+  function safeNow_(dependencies) {
+    const value = Number((dependencies.clock || function() { return new Date().getTime(); })());
+    return Number.isFinite(value) ? value : new Date().getTime();
+  }
   function jitter_(dependencies) { return Number((dependencies.jitter || function() { return Math.random(); })()); }
   function createOperationId_(dependencies) { return (dependencies.operationIdFactory || function() { return Utilities.getUuid(); })(); }
+  function positiveInteger_(value, fallback) { const number = Number(value); return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback; }
+  function nonNegativeNumber_(value, fallback) { const number = Number(value); return Number.isFinite(number) && number >= 0 ? number : fallback; }
+  function maximumDelay_(spec) { return nonNegativeNumber_(spec.maxDelayMs, DEFAULT_MAX_DELAY_MS); }
 
   return {
     OPERATION: OPERATION,
