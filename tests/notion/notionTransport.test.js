@@ -313,6 +313,67 @@ describe('NotionTransport production source', () => {
     expect(outcome.verification.count).toBe(2);
   });
 
+  // Callers must be able to tell "no response at all" apart from "5xx received", and #43
+  // consumes retry guidance from unknown outcomes. Both were dropped on this path.
+  test('retains observed status code and retry guidance across every unknown-write outcome', () => {
+    const { transport } = buildHarness();
+    function unknownWrite(verify, verifyMatch) {
+      return transport.request(baseSpec({
+        method: 'post',
+        path: '/pages',
+        operationClass: 'CREATE',
+        body: { properties: {} },
+        verify,
+        verifyMatch
+      }), {
+        fetch: () => response(503, { code: 'service_unavailable', additional_data: { retry_guidance: 'reconcile before retrying' } }),
+        clock: () => 1000,
+        jitter: () => 0,
+        sleep: () => {}
+      });
+    }
+
+    const zero = unknownWrite(() => []);
+    expect(zero.status).toBe('UNKNOWN_OUTCOME');
+    expect(zero.statusCode).toBe(503);
+    expect(zero.responseReceived).toBe(true);
+    expect(zero.retryGuidance).toBe('reconcile before retrying');
+
+    const matched = unknownWrite(() => [{ id: 'one' }], () => true);
+    expect(matched.status).toBe('VERIFIED_SUCCESS');
+    expect(matched.statusCode).toBe(503);
+    expect(matched.responseReceived).toBe(true);
+
+    const duplicate = unknownWrite(() => [{ id: 'one' }, { id: 'two' }]);
+    expect(duplicate.statusCode).toBe(503);
+    expect(duplicate.responseReceived).toBe(true);
+
+    const notRun = transport.request(baseSpec({
+      method: 'post', path: '/pages', operationClass: 'CREATE', body: { properties: {} }
+    }), {
+      fetch: () => response(503, { code: 'service_unavailable' }),
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: () => {}
+    });
+    expect(notRun.verification.status).toBe('NOT_RUN');
+    expect(notRun.statusCode).toBe(503);
+    expect(notRun.responseReceived).toBe(true);
+
+    // A genuine pre-response failure still reports no response.
+    const preResponse = transport.request(baseSpec({
+      method: 'post', path: '/pages', operationClass: 'CREATE', body: { properties: {} }, verify: () => []
+    }), {
+      fetch: () => { throw new Error('no response'); },
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: () => {}
+    });
+    expect(preResponse.status).toBe('UNKNOWN_OUTCOME');
+    expect(preResponse.statusCode).toBe(0);
+    expect(preResponse.responseReceived).toBe(false);
+  });
+
   test('fails closed for unknown operation classes before fetch', () => {
     const { transport } = buildHarness();
     let fetched = false;

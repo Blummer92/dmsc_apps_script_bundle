@@ -78,7 +78,7 @@ var NotionTransport = (function() {
       } catch (error) {
         evidence.push(attemptEvidence_(attempt, 0, false, 'PRE_RESPONSE_FAILURE', error && error.message, 0));
         if (isWrite_(operationClass)) {
-          return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, 'PRE_RESPONSE_FAILURE');
+          return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, 'PRE_RESPONSE_FAILURE', { statusCode: 0, retryGuidance: '' });
         }
         if (attempt >= maxAttempts) {
           return result_('RETRY_EXHAUSTED', operationId, operationClass, method, endpoint, startedAt, dependencies, {
@@ -115,7 +115,7 @@ var NotionTransport = (function() {
       if (malformed) {
         evidence.push(attemptEvidence_(attempt, status, true, 'MALFORMED_JSON', 'response body redacted', 0));
         if (isWrite_(operationClass)) {
-          return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, 'MALFORMED_JSON');
+          return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, 'MALFORMED_JSON', { statusCode: status, retryGuidance: '' });
         }
         if (isRetryableRead_(operationClass, status) && attempt < maxAttempts) {
           const retryAfterMs = parseRetryAfter_(headerValue_(headers, 'Retry-After'), safeNow_(dependencies));
@@ -167,7 +167,7 @@ var NotionTransport = (function() {
           });
         }
         if (isUnknownWriteStatus_(status)) {
-          return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, errorCode);
+          return verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempt, evidence, errorCode, { statusCode: status, retryGuidance: retryGuidance });
         }
       }
 
@@ -211,11 +211,18 @@ var NotionTransport = (function() {
     throw error;
   }
 
-  function verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempts, evidence, errorCode) {
+  // statusCode is the HTTP status observed for the ambiguous write, or 0 when no response was
+  // received at all. Callers rely on this to tell "no response" apart from "503 received".
+  function verifyUnknownWrite_(spec, dependencies, operationId, operationClass, method, endpoint, startedAt, deadline, attempts, evidence, errorCode, observed) {
+    observed = observed || {};
+    const statusCode = observed.statusCode || 0;
+    const retryGuidance = observed.retryGuidance || '';
     const verificationBudgetMs = positiveInteger_(spec.verificationBudgetMs, DEFAULT_TIMEOUT_SECONDS * 1000 + DEFAULT_RESERVE_MS);
     if (typeof spec.verify !== 'function' || !hasBudget_(deadline, verificationBudgetMs, dependencies)) {
       return result_('UNKNOWN_OUTCOME', operationId, operationClass, method, endpoint, startedAt, dependencies, {
         attempts: attempts,
+        statusCode: statusCode,
+        retryGuidance: retryGuidance,
         errorCode: errorCode,
         evidence: evidence,
         verification: { status: 'NOT_RUN' }
@@ -228,6 +235,8 @@ var NotionTransport = (function() {
     } catch (error) {
       return result_('UNKNOWN_OUTCOME', operationId, operationClass, method, endpoint, startedAt, dependencies, {
         attempts: attempts,
+        statusCode: statusCode,
+        retryGuidance: retryGuidance,
         errorCode: errorCode,
         evidence: evidence,
         verification: { status: 'ERROR', detail: redactText_(error && error.message) }
@@ -238,6 +247,8 @@ var NotionTransport = (function() {
     if (matches.length > 1) {
       return result_('DUPLICATE_IDENTITY_BLOCKED', operationId, operationClass, method, endpoint, startedAt, dependencies, {
         attempts: attempts,
+        statusCode: statusCode,
+        retryGuidance: retryGuidance,
         errorCode: 'DUPLICATE_IDENTITY',
         evidence: evidence,
         verification: { status: 'MULTIPLE_MATCHES', count: matches.length }
@@ -246,6 +257,8 @@ var NotionTransport = (function() {
     if (matches.length === 1 && typeof spec.verifyMatch === 'function' && spec.verifyMatch(matches[0]) === true) {
       return result_('VERIFIED_SUCCESS', operationId, operationClass, method, endpoint, startedAt, dependencies, {
         attempts: attempts,
+        statusCode: statusCode,
+        retryGuidance: retryGuidance,
         errorCode: errorCode,
         data: matches[0],
         evidence: evidence,
@@ -254,6 +267,8 @@ var NotionTransport = (function() {
     }
     return result_('UNKNOWN_OUTCOME', operationId, operationClass, method, endpoint, startedAt, dependencies, {
       attempts: attempts,
+      statusCode: statusCode,
+      retryGuidance: retryGuidance,
       errorCode: errorCode,
       evidence: evidence,
       verification: { status: matches.length ? 'MISMATCHED' : 'ZERO_MATCHES', count: matches.length }
