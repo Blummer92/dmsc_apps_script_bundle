@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "temporaryReferenceExceptions": [
+    {
+      "symbolKey": "root-dashboard:testApproveDmscSourceForAssetRoundTrip",
+      "caller": "DMSC_BackendSmokeSuite.gs",
+      "callerType": "direct-source",
+      "owner": "issue-46",
+      "reason": "Legacy backend smoke suite still calls the retired first-record mutation test while #41 and #46 replacement work remains open.",
+      "replacement": "runDmscAuthorizedSourceApprovalRoundTrip",
+      "removalIssue": 46,
+      "reviewCondition": "Remove when #41 replacement behavior is merged and #46 retires the legacy suite."
+    },
+    {
+      "symbolKey": "root-dashboard:testApproveDmscSourceForAssetRoundTrip",
+      "caller": "config/live-smoke-suites.json",
+      "callerType": "registry",
+      "owner": "issue-46",
+      "reason": "The symbol remains listed only as an explicitly blocked legacy live-smoke suite.",
+      "replacement": "runDmscAuthorizedSourceApprovalRoundTrip",
+      "removalIssue": 46,
+      "reviewCondition": "Remove with the blocked legacy registry entry during #46."
+    }
+  ],
+  "reviewedDynamicReferences": []
+}
