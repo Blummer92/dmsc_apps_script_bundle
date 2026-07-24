@@ -1,14 +1,15 @@
 'use strict';
 
-const path = require('path');
 const { createAppsScriptHarness, createAppsScriptRuntime } = require('../helpers/appsScriptHarness.js');
 
-function response(status, body, headers = {}) {
-  return {
+function response(status, body, headers = {}, useGetHeaders = false) {
+  const result = {
     getResponseCode: () => status,
-    getContentText: () => typeof body === 'string' ? body : JSON.stringify(body || {}),
-    getAllHeaders: () => headers
+    getContentText: () => typeof body === 'string' ? body : JSON.stringify(body || {})
   };
+  if (useGetHeaders) result.getHeaders = () => headers;
+  else result.getAllHeaders = () => headers;
+  return result;
 }
 
 function buildHarness() {
@@ -70,6 +71,7 @@ describe('NotionTransport production source', () => {
     expect(outcome.status).toBe('SUCCESS');
     expect(attempts).toBe(2);
     expect(sleeps).toHaveLength(1);
+    expect(outcome.evidence[0].retryDelayMs).toBe(sleeps[0]);
   });
 
   test('parses numeric and HTTP-date Retry-After values', () => {
@@ -97,6 +99,27 @@ describe('NotionTransport production source', () => {
 
     expect(outcome.status).toBe('SUCCESS');
     expect(sleeps[0]).toBeLessThanOrEqual(150);
+    expect(outcome.evidence[0].retryDelayMs).toBe(sleeps[0]);
+  });
+
+  test('supports getHeaders response variants and case-insensitive Retry-After', () => {
+    const { transport } = buildHarness();
+    let attempts = 0;
+    const sleeps = [];
+    const outcome = transport.request(baseSpec({ maxAttempts: 2 }), {
+      fetch() {
+        attempts += 1;
+        return attempts === 1
+          ? response(429, { code: 'rate_limited' }, { 'rEtRy-AfTeR': '1' }, true)
+          : response(200, { ok: true });
+      },
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: (ms) => sleeps.push(ms)
+    });
+
+    expect(outcome.status).toBe('SUCCESS');
+    expect(sleeps).toEqual([1000]);
   });
 
   test('returns structured budget exhaustion before fetch', () => {
@@ -111,6 +134,22 @@ describe('NotionTransport production source', () => {
 
     expect(outcome.status).toBe('BUDGET_EXHAUSTED');
     expect(fetched).toBe(false);
+  });
+
+  test('rechecks advancing clock before retry', () => {
+    const { transport } = buildHarness();
+    const times = [1000, 1000, 1000, 59000, 59000];
+    let index = 0;
+    let attempts = 0;
+    const outcome = transport.request(baseSpec({ maxAttempts: 2, maxElapsedMs: 60000 }), {
+      fetch() { attempts += 1; return response(503, { code: 'service_unavailable' }); },
+      clock: () => times[Math.min(index++, times.length - 1)],
+      jitter: () => 0,
+      sleep: () => {}
+    });
+
+    expect(outcome.status).toBe('BUDGET_EXHAUSTED');
+    expect(attempts).toBe(1);
   });
 
   test('classifies pre-response read failures separately and retries them', () => {
@@ -130,6 +169,45 @@ describe('NotionTransport production source', () => {
     expect(outcome.status).toBe('SUCCESS');
     expect(outcome.evidence[0].code).toBe('PRE_RESPONSE_FAILURE');
     expect(JSON.stringify(outcome)).not.toContain('secret_should_be_redacted');
+  });
+
+  test('retries malformed JSON only for retryable read/query responses', () => {
+    const { transport } = buildHarness();
+    let attempts = 0;
+    const outcome = transport.request(baseSpec({ maxAttempts: 2 }), {
+      fetch() {
+        attempts += 1;
+        return attempts === 1 ? response(503, '{bad json') : response(200, { ok: true });
+      },
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: () => {}
+    });
+
+    expect(outcome.status).toBe('SUCCESS');
+    expect(attempts).toBe(2);
+    expect(outcome.evidence[0].code).toBe('MALFORMED_JSON');
+  });
+
+  test('does not retry a rate-limited write', () => {
+    const { transport } = buildHarness();
+    let writes = 0;
+    const outcome = transport.request(baseSpec({
+      method: 'post',
+      path: '/pages',
+      operationClass: 'CREATE',
+      body: { properties: {} },
+      maxAttempts: 3
+    }), {
+      fetch() { writes += 1; return response(429, { code: 'rate_limited' }, { 'Retry-After': '2' }); },
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: () => { throw new Error('write retry sleep should not run'); }
+    });
+
+    expect(writes).toBe(1);
+    expect(outcome.status).toBe('RATE_LIMITED_WRITE_NOT_RETRIED');
+    expect(outcome.evidence[0].retryDelayMs).toBe(2000);
   });
 
   test('does not retry create after an ambiguous failure and preserves UNKNOWN_OUTCOME for zero matches', () => {
@@ -153,7 +231,49 @@ describe('NotionTransport production source', () => {
     expect(outcome.verification.status).toBe('ZERO_MATCHES');
   });
 
-  test('returns VERIFIED_SUCCESS for one matching verification result', () => {
+  test('does not run verification without enough reserved budget', () => {
+    const { transport } = buildHarness();
+    let verified = false;
+    const outcome = transport.request(baseSpec({
+      method: 'patch',
+      path: '/pages/page-1',
+      operationClass: 'UPDATE',
+      body: { properties: {} },
+      maxElapsedMs: 50000,
+      verificationBudgetMs: 50001,
+      verify: () => { verified = true; return []; }
+    }), {
+      fetch: () => response(503, { code: 'service_unavailable' }),
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: () => {}
+    });
+
+    expect(verified).toBe(false);
+    expect(outcome.status).toBe('UNKNOWN_OUTCOME');
+    expect(outcome.verification.status).toBe('NOT_RUN');
+  });
+
+  test('requires verifyMatch before one result may become VERIFIED_SUCCESS', () => {
+    const { transport } = buildHarness();
+    const outcome = transport.request(baseSpec({
+      method: 'patch',
+      path: '/pages/page-1',
+      operationClass: 'UPDATE',
+      body: { properties: {} },
+      verify: () => [{ id: 'page-1' }]
+    }), {
+      fetch: () => response(503, { code: 'service_unavailable' }),
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: () => {}
+    });
+
+    expect(outcome.status).toBe('UNKNOWN_OUTCOME');
+    expect(outcome.verification.status).toBe('MISMATCHED');
+  });
+
+  test('returns VERIFIED_SUCCESS for one exact matching verification result', () => {
     const { transport } = buildHarness();
     const match = { id: 'page-1', properties: { file_id: 'file-1' } };
     const outcome = transport.request(baseSpec({
@@ -193,6 +313,60 @@ describe('NotionTransport production source', () => {
     expect(outcome.verification.count).toBe(2);
   });
 
+  test('fails closed for unknown operation classes before fetch', () => {
+    const { transport } = buildHarness();
+    let fetched = false;
+    const outcome = transport.request(baseSpec({ operationClass: 'something_new' }), {
+      fetch() { fetched = true; return response(200, {}); },
+      clock: () => 1000,
+      operationIdFactory: () => 'generated-id'
+    });
+
+    expect(outcome.status).toBe('BLOCKED_INVALID_REQUEST');
+    expect(outcome.errorCode).toBe('UNKNOWN_OPERATION_CLASS');
+    expect(fetched).toBe(false);
+  });
+
+  test('blocks unapproved absolute hosts before fetch', () => {
+    const { transport } = buildHarness();
+    let fetched = false;
+    const outcome = transport.request(baseSpec({ path: 'https://example.com/notion' }), {
+      fetch() { fetched = true; return response(200, {}); },
+      clock: () => 1000
+    });
+
+    expect(outcome.status).toBe('BLOCKED_INVALID_REQUEST');
+    expect(outcome.errorCode).toBe('UNAPPROVED_ENDPOINT_HOST');
+    expect(fetched).toBe(false);
+  });
+
+  test('blocks blank generated operation IDs', () => {
+    const { transport } = buildHarness();
+    const outcome = transport.request(baseSpec({ operationId: '' }), {
+      operationIdFactory: () => '',
+      clock: () => 1000,
+      fetch: () => response(200, {})
+    });
+
+    expect(outcome.status).toBe('BLOCKED_INVALID_REQUEST');
+    expect(outcome.errorCode).toBe('MISSING_OPERATION_ID');
+  });
+
+  test('rejects circular payloads before fetch', () => {
+    const { transport } = buildHarness();
+    const circular = {};
+    circular.self = circular;
+    let fetched = false;
+    const outcome = transport.request(baseSpec({ method: 'post', operationClass: 'IDEMPOTENT_QUERY', body: circular }), {
+      fetch() { fetched = true; return response(200, {}); },
+      clock: () => 1000
+    });
+
+    expect(outcome.status).toBe('BLOCKED_PAYLOAD_LIMIT');
+    expect(outcome.errorCode).toBe('PAYLOAD_SERIALIZATION_FAILED');
+    expect(fetched).toBe(false);
+  });
+
   test('rejects oversized payloads before fetch', () => {
     const { transport } = buildHarness();
     let fetched = false;
@@ -225,5 +399,23 @@ describe('NotionTransport production source', () => {
 
     expect(outcome.retryGuidance).toContain('reduce page size');
     expect(outcome.retryGuidance).toContain('[REDACTED]');
+  });
+
+  test('requestOrThrow preserves structured outcome without secret leakage', () => {
+    const { transport } = buildHarness();
+    expect.assertions(4);
+    try {
+      transport.requestOrThrow(baseSpec({ maxAttempts: 1 }), {
+        fetch: () => response(500, { code: 'internal_error', message: 'token=private-value' }),
+        clock: () => 1000,
+        jitter: () => 0,
+        sleep: () => {}
+      });
+    } catch (error) {
+      expect(error.name).toBe('NotionTransportError');
+      expect(error.notionTransportOutcome.status).toBe('PERMANENT_FAILURE');
+      expect(JSON.stringify(error.notionTransportOutcome)).not.toContain('private-value');
+      expect(error.message).not.toContain('secret_test_token');
+    }
   });
 });
