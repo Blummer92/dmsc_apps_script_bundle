@@ -23,11 +23,77 @@ function maskComments(source) {
     .replace(/(^|[^:])\/\/.*$/gm, (match, prefix) => prefix + ' '.repeat(Math.max(0, match.length - prefix.length)));
 }
 
+function maskNonCode(source) {
+  const chars = [...String(source)];
+  const output = chars.slice();
+  let state = 'code';
+  let escaped = false;
+
+  for (let index = 0; index < chars.length; index += 1) {
+    const char = chars[index];
+    const next = chars[index + 1] || '';
+
+    if (state === 'line-comment') {
+      if (char === '\n') state = 'code';
+      else output[index] = ' ';
+      continue;
+    }
+    if (state === 'block-comment') {
+      if (char === '*' && next === '/') {
+        output[index] = ' ';
+        output[index + 1] = ' ';
+        index += 1;
+        state = 'code';
+      } else if (char !== '\n') output[index] = ' ';
+      continue;
+    }
+    if (state !== 'code') {
+      if (escaped) {
+        escaped = false;
+        if (char !== '\n') output[index] = ' ';
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        output[index] = ' ';
+        continue;
+      }
+      const terminator = state === 'single' ? "'" : state === 'double' ? '"' : '`';
+      if (char === terminator) state = 'code';
+      if (char !== '\n') output[index] = ' ';
+      continue;
+    }
+
+    if (char === '/' && next === '/') {
+      output[index] = ' ';
+      output[index + 1] = ' ';
+      index += 1;
+      state = 'line-comment';
+    } else if (char === '/' && next === '*') {
+      output[index] = ' ';
+      output[index + 1] = ' ';
+      index += 1;
+      state = 'block-comment';
+    } else if (char === "'") {
+      output[index] = ' ';
+      state = 'single';
+    } else if (char === '"') {
+      output[index] = ' ';
+      state = 'double';
+    } else if (char === '`') {
+      output[index] = ' ';
+      state = 'template';
+    }
+  }
+  return output.join('');
+}
+
 function discoverMenuCallers(source, file, project) {
   const results = [];
+  const searchable = maskComments(source);
   const pattern = /\.addItem\(\s*(['"])(?:\\.|(?!\1)[\s\S])*?\1\s*,\s*(['"])([A-Za-z_$][\w$]*)\2\s*\)/g;
   let match;
-  while ((match = pattern.exec(source))) {
+  while ((match = pattern.exec(searchable))) {
     results.push({
       project,
       symbol: match[3],
@@ -44,10 +110,10 @@ function discoverMenuCallers(source, file, project) {
 
 function discoverGoogleScriptRunCallers(source, file, project) {
   const results = [];
-  const masked = maskComments(source);
+  const searchable = maskComments(source);
   const memberPattern = /google\.script\.run(?:(?:\s*\.\s*(?:withSuccessHandler|withFailureHandler|withUserObject)\s*\([^)]*\))*)\s*\.\s*([A-Za-z_$][\w$]*)\s*\(/g;
   let match;
-  while ((match = memberPattern.exec(masked))) {
+  while ((match = memberPattern.exec(searchable))) {
     results.push({
       project,
       symbol: match[1],
@@ -61,7 +127,7 @@ function discoverGoogleScriptRunCallers(source, file, project) {
   }
 
   const literalBracketPattern = /google\.script\.run\s*\[\s*(['"])([A-Za-z_$][\w$]*)\1\s*\]\s*\(/g;
-  while ((match = literalBracketPattern.exec(masked))) {
+  while ((match = literalBracketPattern.exec(searchable))) {
     results.push({
       project,
       symbol: match[2],
@@ -75,7 +141,7 @@ function discoverGoogleScriptRunCallers(source, file, project) {
   }
 
   const dynamicBracketPattern = /google\.script\.run\s*\[\s*([^'"\]\s][^\]]*)\]\s*\(/g;
-  while ((match = dynamicBracketPattern.exec(masked))) {
+  while ((match = dynamicBracketPattern.exec(searchable))) {
     results.push({
       project,
       symbol: '',
@@ -93,18 +159,20 @@ function discoverGoogleScriptRunCallers(source, file, project) {
 
 function discoverDirectCalls(source, file, project, knownSymbols) {
   const results = [];
-  const masked = maskComments(source);
+  const searchable = maskNonCode(source);
   const declarationOffsets = new Set();
   const declarationPattern = /\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g;
   let match;
-  while ((match = declarationPattern.exec(masked))) declarationOffsets.add(match.index + match[0].lastIndexOf(match[1]));
+  while ((match = declarationPattern.exec(searchable))) {
+    declarationOffsets.add(match.index + match[0].lastIndexOf(match[1]));
+  }
 
   const callPattern = /\b([A-Za-z_$][\w$]*)\s*\(/g;
-  while ((match = callPattern.exec(masked))) {
+  while ((match = callPattern.exec(searchable))) {
     const symbol = match[1];
     if (!knownSymbols.has(symbol)) continue;
     if (declarationOffsets.has(match.index)) continue;
-    const prefix = masked.slice(Math.max(0, match.index - 12), match.index);
+    const prefix = searchable.slice(Math.max(0, match.index - 16), match.index);
     if (/function\s+$/.test(prefix)) continue;
     results.push({
       project,
@@ -150,16 +218,18 @@ function discoverRegistryCallers(source, file, defaultProject) {
 
 function discoverDocumentationReferences(source, file, inventory) {
   const results = [];
+  const lines = String(source).split('\n');
   for (const item of inventory) {
-    const pattern = new RegExp(`\\b${item.symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g');
+    const escaped = item.symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(`\\b${escaped}\\b`, 'g');
     let match;
     while ((match = pattern.exec(source))) {
-      const line = source.split('\n')[lineNumber(source, match.index) - 1] || '';
-      const lower = line.toLowerCase();
+      const currentLine = lines[lineNumber(source, match.index) - 1] || '';
+      const lower = currentLine.toLowerCase();
       let documentKind = 'historical-mention';
       if (/blocked|retired|unsafe|do not|must not/.test(lower)) documentKind = 'safety-warning';
-      else if (/run|execute|open the .* editor|operator/.test(lower)) documentKind = 'operator-instruction';
       else if (/replace|migrate|supersed/.test(lower)) documentKind = 'migration-note';
+      else if (/\brun\b|execute|open the .* editor|operator/.test(lower)) documentKind = 'operator-instruction';
       results.push({
         project: item.project,
         symbol: item.symbol,
@@ -176,6 +246,7 @@ function discoverDocumentationReferences(source, file, inventory) {
 }
 
 function discoverTriggerReferences(source, file, project) {
+  const searchable = maskComments(source);
   const patterns = [
     ['ScriptApp.newTrigger', /ScriptApp\.newTrigger\s*\(\s*(['"])([A-Za-z_$][\w$]*)\1\s*\)/g],
     ['onEdit', /\bfunction\s+(onEdit)\s*\(/g],
@@ -186,7 +257,7 @@ function discoverTriggerReferences(source, file, project) {
   const results = [];
   for (const [style, pattern] of patterns) {
     let match;
-    while ((match = pattern.exec(source))) {
+    while ((match = pattern.exec(searchable))) {
       results.push({
         project,
         symbol: match[2] || match[1],
@@ -285,6 +356,16 @@ function projectForFile(file, entryPolicy) {
   return candidates.length ? candidates[0].name : 'unknown';
 }
 
+function isGovernedSource(file, entryPolicy) {
+  const normalized = file.split(path.sep).join('/');
+  if (/^(tests|scripts|docs|config|node_modules)\//.test(normalized)) return false;
+  return (entryPolicy.projects || []).some((project) => {
+    const root = String(project.root || '.').replace(/^\.\/?/, '').replace(/\/$/, '');
+    if (root === '') return !normalized.includes('/');
+    return normalized === root || normalized.startsWith(root + '/');
+  });
+}
+
 function walk(directory, ignored) {
   if (!fs.existsSync(directory)) return [];
   const output = [];
@@ -309,14 +390,18 @@ function buildCallerReport(repositoryRoot, entryPolicy, callerPolicy, inventory)
     const source = fs.readFileSync(full, 'utf8');
     const project = projectForFile(relative, entryPolicy);
 
-    if (extension === '.gs' || extension === '.js' || extension === '.html') {
+    if (isGovernedSource(relative, entryPolicy) && (extension === '.gs' || extension === '.js' || extension === '.html')) {
       records.push(...discoverMenuCallers(source, relative, project));
       records.push(...discoverGoogleScriptRunCallers(source, relative, project));
       records.push(...discoverDirectCalls(source, relative, project, knownSymbols));
       records.push(...discoverTriggerReferences(source, relative, project));
     }
-    if (relative === 'config/live-smoke-suites.json') records.push(...discoverRegistryCallers(source, relative, 'root-dashboard'));
-    if (extension === '.md') records.push(...discoverDocumentationReferences(source, relative, inventory));
+    if (relative === 'config/live-smoke-suites.json') {
+      records.push(...discoverRegistryCallers(source, relative, 'root-dashboard'));
+    }
+    if (relative.startsWith('docs/') && extension === '.md') {
+      records.push(...discoverDocumentationReferences(source, relative, inventory));
+    }
   }
 
   const callers = dedupeAndSort(records);
