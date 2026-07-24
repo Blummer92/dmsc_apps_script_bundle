@@ -6,6 +6,15 @@ Issue: #45
 
 The repository exposes top-level Apps Script functions as runtime entry points. Operator-side registries do not prevent a function from being run manually, referenced by a menu, or invoked by a trigger. The static checker in `scripts/check-apps-script-entry-points.mjs` inventories every `.gs` and script block in deployable `.html` source, records every declaration location, classifies each symbol, and fails unexplained duplicate declarations.
 
+## Checker architecture
+
+The checker has one implementation source of truth in `scripts/apps-script-entry-point-checker.cjs`.
+
+- `scripts/check-apps-script-entry-points.mjs` is the executable ESM wrapper. It invokes the shared core, writes the generated inventory, and preserves the existing standalone command.
+- `tests/entry-points/checkEntryPoints.test.js` requires the same shared core directly from Jest's CommonJS runtime.
+
+This boundary avoids requiring Node's experimental VM ESM loader for the repository-wide Jest suite. It keeps the CLI portable across the Node 20 environments used locally and by Cloud Build, without duplicating classification or inventory logic.
+
 ## Classification model
 
 The policy file is `config/apps-script-entry-points.json`.
@@ -49,6 +58,8 @@ The command:
 2. writes `docs/apps-script-entry-point-inventory.json` with symbol, classification, and declaration locations;
 3. fails unexplained duplicates;
 4. runs focused checker tests.
+
+The generated JSON is a command artifact. Test and review workflows must remove it after validation unless an intentional inventory refresh is part of the change. It must not remain as an unrelated dirty or committed file.
 
 The scan is credential-free and does not execute Apps Script source, access Google services, inspect live triggers, or make network requests.
 
