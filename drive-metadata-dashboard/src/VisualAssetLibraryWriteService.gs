@@ -1,7 +1,5 @@
 var VisualAssetLibraryWriteService = (function() {
   const VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID = 'collection://da5cba48-50fd-4377-9790-8df8f6f2c7dd';
-  const NOTION_API_BASE_URL = 'https://api.notion.com/v1';
-  const NOTION_VERSION = '2022-06-28';
   const EXPANDED_SCOPE = 'ELIGIBLE_STAGING_BATCH';
   const EXPANDED_WRITE_APPROVAL_VALUE = 'YES_EXPANDED_STAGING_BATCH_ONLY';
   const VISUAL_ASSET_LIBRARY_WRITE_APPROVAL_VALUE = 'YES_VISUAL_ASSET_LIBRARY_ONLY';
@@ -168,13 +166,22 @@ var VisualAssetLibraryWriteService = (function() {
   function normalizeNotionId_(value) { return String(value || '').replace(/-/g, ''); }
 
   function notionRequest_(context, method, path, body) {
-    const options = { method: method, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + context.notionToken, 'Notion-Version': NOTION_VERSION } };
-    if (body) { options.contentType = 'application/json'; options.payload = JSON.stringify(body); }
-    const response = UrlFetchApp.fetch(NOTION_API_BASE_URL + path, options);
-    const status = response.getResponseCode();
-    const text = response.getContentText();
-    if (status < 200 || status >= 300) throw new Error('Notion API error ' + status + ': ' + text);
-    return text ? JSON.parse(text) : {};
+    return NotionTransport.requestOrThrow({
+      token: context.notionToken,
+      method: method,
+      path: path,
+      body: body,
+      operationClass: classifyOperation_(method, path)
+    });
+  }
+
+  function classifyOperation_(method, path) {
+    const normalizedMethod = String(method || '').toLowerCase();
+    if (normalizedMethod === 'get') return NotionTransport.OPERATION.IDEMPOTENT_READ;
+    if (normalizedMethod === 'post' && /\/query(?:$|\?)/.test(String(path || ''))) return NotionTransport.OPERATION.IDEMPOTENT_QUERY;
+    if (normalizedMethod === 'post' && String(path || '') === '/pages') return NotionTransport.OPERATION.CREATE;
+    if (normalizedMethod === 'patch') return NotionTransport.OPERATION.UPDATE;
+    return NotionTransport.OPERATION.UNKNOWN;
   }
 
   return { syncEligibleBatch: syncEligibleBatch };
