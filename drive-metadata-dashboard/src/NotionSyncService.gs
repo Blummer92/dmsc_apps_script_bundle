@@ -2,8 +2,6 @@ var NotionSyncService = (function() {
   const STAGING_DATA_SOURCE_ID = 'collection://bf703afb-7526-4b55-aefa-1c4976032509';
   const VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID = 'collection://da5cba48-50fd-4377-9790-8df8f6f2c7dd';
   const APPROVED_DATA_SOURCE_IDS = [STAGING_DATA_SOURCE_ID, VISUAL_ASSET_LIBRARY_DATA_SOURCE_ID];
-  const NOTION_API_BASE_URL = 'https://api.notion.com/v1';
-  const NOTION_VERSION = '2022-06-28';
   const TEN_ROW_SCOPE = 'TEN_ROW_APPROVAL';
   const EXPANDED_SCOPE = 'ELIGIBLE_STAGING_BATCH';
   const TEN_ROW_WRITE_APPROVAL_VALUE = 'YES_10_ROWS_ONLY';
@@ -13,7 +11,6 @@ var NotionSyncService = (function() {
   const DEFAULT_BATCH_SIZE = 25;
   const MAX_BATCH_SIZE = 50;
   const DEFAULT_EXPANDED_MAX_END_ROW = 454;
-  const NOTION_REQUEST_DELAY_MS = 350;
   const OPTIONAL_SYNC_SOURCE_FIELDS = [
     'approved_prompt',
     'proposed_cleaned_prompt',
@@ -203,6 +200,7 @@ var NotionSyncService = (function() {
     const result = buildBatchSummary_(context, batch, syncResult.synced, syncResult.verified);
     result.field_skips = syncResult.field_skips || [];
     result.mapping_warnings = syncResult.mapping_warnings || [];
+    result.write_outcomes = syncResult.write_outcomes || [];
     Logger.log('EXPANDED STAGING BATCH WRITE COMPLETE - Not production sync.');
     Logger.log(JSON.stringify(result, null, 2));
     return result;
@@ -219,7 +217,7 @@ var NotionSyncService = (function() {
     }
 
     const databaseId = getDatabaseId_(context);
-    const database = notionRequest_(context, 'get', '/databases/' + encodeURIComponent(databaseId));
+    const database = notionRead_(context, '/databases/' + encodeURIComponent(databaseId));
     const schema = database.properties || {};
     const pages = queryAllDatabasePages_(context, databaseId);
     const records = pages.map(function(page) {
@@ -302,31 +300,52 @@ var NotionSyncService = (function() {
 
   function syncPayloadsToStaging_(context, payloads, expectedCount) {
     const databaseId = getDatabaseId_(context);
-    const database = notionRequest_(context, 'get', '/databases/' + encodeURIComponent(databaseId));
+    const database = notionRead_(context, '/databases/' + encodeURIComponent(databaseId));
     const schema = database.properties || {};
     const fieldSkips = [];
     const mappingWarnings = [];
-    const synced = payloads.map(function(payload) {
-      const existingPage = findExistingPageByFileId_(context, databaseId, schema, payload.properties.file_id);
+    const synced = [];
+    const writeOutcomes = [];
+    const unresolved = [];
+
+    payloads.forEach(function(payload) {
+      const fileId = payload.properties.file_id;
+      const existingPage = findExistingPageByFileId_(context, databaseId, schema, fileId);
       const plan = buildNotionPropertyPlan_(schema, payload.properties, context);
       Array.prototype.push.apply(fieldSkips, plan.skipped.map(function(skip) {
-        return Object.assign({ source_row: payload.source_row, file_id: payload.properties.file_id }, skip);
+        return Object.assign({ source_row: payload.source_row, file_id: fileId }, skip);
       }));
       Array.prototype.push.apply(mappingWarnings, plan.warnings.map(function(warning) {
-        return Object.assign({ source_row: payload.source_row, file_id: payload.properties.file_id }, warning);
+        return Object.assign({ source_row: payload.source_row, file_id: fileId }, warning);
       }));
-      const response = existingPage
-        ? notionRequest_(context, 'patch', '/pages/' + encodeURIComponent(existingPage.id), { properties: plan.properties })
-        : notionRequest_(context, 'post', '/pages', { parent: { database_id: databaseId }, properties: plan.properties });
 
-      return {
-        source_row: payload.source_row,
-        file_id: payload.properties.file_id,
-        action: existingPage ? 'updated' : 'created',
-        page_id: response.id,
-        page_url: response.url || buildNotionPageUrl_(response.id)
-      };
+      const outcome = writeNotionPage_(context, databaseId, schema, fileId, existingPage, plan.properties);
+      const evidence = buildWriteEvidence_(payload.source_row, fileId, existingPage, outcome);
+      writeOutcomes.push(evidence);
+
+      if (outcome.status === 'SUCCESS' || outcome.status === 'VERIFIED_SUCCESS') {
+        const page = outcome.data || {};
+        synced.push({
+          source_row: payload.source_row,
+          file_id: fileId,
+          action: existingPage ? 'updated' : 'created',
+          page_id: page.id,
+          page_url: page.url || buildNotionPageUrl_(page.id),
+          write_status: outcome.status,
+          operation_id: outcome.operationId
+        });
+        return;
+      }
+      unresolved.push(evidence);
     });
+
+    // Fail closed. An unconfirmed write is never reported as success and is never rewritten.
+    if (unresolved.length) {
+      const error = new Error('Blocked: ' + unresolved.length + ' Notion write outcome(s) could not be confirmed. No write was retried.');
+      error.notionWriteOutcomes = writeOutcomes;
+      error.unresolvedWriteOutcomes = unresolved;
+      throw error;
+    }
 
     const verified = verifySyncedPayloads_(context, databaseId, schema, payloads);
     const result = {
@@ -338,6 +357,7 @@ var NotionSyncService = (function() {
       verified_count: verified.length,
       synced: synced,
       verified: verified,
+      write_outcomes: writeOutcomes,
       field_skips: fieldSkips,
       mapping_warnings: mappingWarnings
     };
@@ -574,15 +594,25 @@ var NotionSyncService = (function() {
     return String(value || '').replace(/-/g, '');
   }
 
-  function findExistingPageByFileId_(context, databaseId, schema, fileId) {
+  // Exact file_id lookup. Classified IDEMPOTENT_QUERY: query-via-POST is a read, not a create.
+  function queryPagesByFileId_(context, databaseId, schema, fileId, operationId) {
     const fileIdProperty = schema[context.fileIdProperty];
     if (!fileIdProperty) {
       throw new Error('Blocked: Notion database is missing file ID property: ' + context.fileIdProperty);
     }
 
     const filter = buildEqualsFilter_(context.fileIdProperty, fileIdProperty.type, fileId);
-    const result = notionRequest_(context, 'post', '/databases/' + encodeURIComponent(databaseId) + '/query', { filter: filter, page_size: 2 });
-    const pages = result.results || [];
+    const result = notionQuery_(
+      context,
+      '/databases/' + encodeURIComponent(databaseId) + '/query',
+      { filter: filter, page_size: 2 },
+      operationId
+    );
+    return result.results || [];
+  }
+
+  function findExistingPageByFileId_(context, databaseId, schema, fileId) {
+    const pages = queryPagesByFileId_(context, databaseId, schema, fileId);
     if (pages.length > 1) {
       throw new Error('Blocked: duplicate Notion pages found for file_id ' + fileId);
     }
@@ -853,7 +883,7 @@ var NotionSyncService = (function() {
       throw new Error('Blocked: Visual Asset Library dry-run validation requires DM_NOTION_API_TOKEN.');
     }
     const databaseId = getDatabaseId_(context);
-    const database = notionRequest_(context, 'get', '/databases/' + encodeURIComponent(databaseId));
+    const database = notionRead_(context, '/databases/' + encodeURIComponent(databaseId));
     const schema = database.properties || {};
     const rows = [];
     batch.payloads.forEach(function(payload) {
@@ -897,7 +927,7 @@ var NotionSyncService = (function() {
     do {
       const body = { page_size: 100 };
       if (cursor) body.start_cursor = cursor;
-      const result = notionRequest_(context, 'post', '/databases/' + encodeURIComponent(databaseId) + '/query', body);
+      const result = notionQuery_(context, '/databases/' + encodeURIComponent(databaseId) + '/query', body);
       Array.prototype.push.apply(pages, result.results || []);
       cursor = result.has_more ? result.next_cursor : null;
     } while (cursor);
@@ -1006,35 +1036,86 @@ var NotionSyncService = (function() {
     return cleanId ? 'https://www.notion.so/' + cleanId : '';
   }
 
-  function notionRequest_(context, method, path, body) {
-    const options = {
-      method: method,
-      muteHttpExceptions: true,
-      headers: {
-        Authorization: 'Bearer ' + context.notionToken,
-        'Notion-Version': NOTION_VERSION
-      }
-    };
-    if (body) {
-      options.contentType = 'application/json';
-      options.payload = JSON.stringify(body);
-    }
-
-    const response = UrlFetchApp.fetch(NOTION_API_BASE_URL + path, options);
-    throttleNotionRequest_();
-    const status = response.getResponseCode();
-    const text = response.getContentText();
-    const parsed = text ? JSON.parse(text) : {};
-    if (status < 200 || status >= 300) {
-      throw new Error('Notion API error ' + status + ': ' + text);
-    }
-    return parsed;
+  // Every Notion request is delegated to NotionTransport. This service owns no API base URL,
+  // no API version, no throttling, no retry policy, no response parsing, and no error
+  // normalization. NotionTransport is the single source of the 2022-06-28 compatibility ceiling.
+  function notionRead_(context, path, operationId) {
+    return notionRequestOrThrow_(context, 'get', path, null, NotionTransport.OPERATION.IDEMPOTENT_READ, operationId);
   }
 
-  function throttleNotionRequest_() {
-    if (typeof Utilities !== 'undefined' && Utilities.sleep) {
-      Utilities.sleep(NOTION_REQUEST_DELAY_MS);
-    }
+  function notionQuery_(context, path, body, operationId) {
+    return notionRequestOrThrow_(context, 'post', path, body, NotionTransport.OPERATION.IDEMPOTENT_QUERY, operationId);
+  }
+
+  function notionRequestOrThrow_(context, method, path, body, operationClass, operationId) {
+    const spec = {
+      token: context.notionToken,
+      method: method,
+      path: path,
+      operationClass: operationClass
+    };
+    if (body) spec.body = body;
+    if (operationId) spec.operationId = operationId;
+    return NotionTransport.requestOrThrow(spec);
+  }
+
+  // Writes are never blindly retried. An ambiguous outcome is resolved only by an exact
+  // read-only file_id verification that reuses the same stable operation ID.
+  function writeNotionPage_(context, databaseId, schema, fileId, existingPage, properties) {
+    const operationId = createOperationId_(existingPage ? 'update' : 'create');
+    const isUpdate = Boolean(existingPage);
+    return NotionTransport.request({
+      token: context.notionToken,
+      method: isUpdate ? 'patch' : 'post',
+      path: isUpdate ? '/pages/' + encodeURIComponent(existingPage.id) : '/pages',
+      body: isUpdate
+        ? { properties: properties }
+        : { parent: { database_id: databaseId }, properties: properties },
+      operationClass: isUpdate ? NotionTransport.OPERATION.UPDATE : NotionTransport.OPERATION.CREATE,
+      operationId: operationId,
+      verify: function() {
+        return { matches: queryPagesByFileId_(context, databaseId, schema, fileId, operationId) };
+      },
+      verifyMatch: buildPageIdentityMatcher_(context, fileId, existingPage)
+    });
+  }
+
+  function buildPageIdentityMatcher_(context, expectedFileId, existingPage) {
+    const expectedPageId = existingPage ? normalizeNotionId_(existingPage.id) : '';
+    const expectedValue = String(expectedFileId === null || expectedFileId === undefined ? '' : expectedFileId).trim();
+    return function(page) {
+      if (!page || !page.id) return false;
+      if (expectedPageId && normalizeNotionId_(page.id) !== expectedPageId) return false;
+      const actual = extractPropertyValue_((page.properties || {})[context.fileIdProperty]);
+      return expectedValue !== '' && String(actual).trim() === expectedValue;
+    };
+  }
+
+  function buildWriteEvidence_(sourceRow, fileId, existingPage, outcome) {
+    const verification = outcome.verification || {};
+    return {
+      source_row: sourceRow,
+      file_id: fileId,
+      intended_action: existingPage ? 'update' : 'create',
+      operation_id: outcome.operationId,
+      operation_class: outcome.operationClass,
+      transport_status: outcome.status,
+      attempts: outcome.attempts,
+      response_received: outcome.responseReceived,
+      status_code: outcome.statusCode,
+      error_code: outcome.errorCode,
+      retry_guidance: outcome.retryGuidance,
+      verification_status: verification.status || 'NOT_RUN',
+      verification_count: Number(verification.count || 0),
+      retry_delays_ms: (outcome.evidence || []).map(function(item) { return Number(item.retryDelayMs || 0); })
+    };
+  }
+
+  function createOperationId_(prefix) {
+    const suffix = typeof Utilities !== 'undefined' && Utilities.getUuid
+      ? Utilities.getUuid()
+      : String(new Date().getTime());
+    return prefix + '-' + suffix;
   }
 
   function isVisualAssetLibraryTarget_(context) {
