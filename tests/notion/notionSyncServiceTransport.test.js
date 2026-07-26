@@ -414,7 +414,7 @@ describe('NotionSyncService transport migration', () => {
       expect(result.write_outcomes[0].verification_status).toBe('MATCHED');
     });
 
-    test('a rate-limited write is reported without retry', () => {
+    test('a rate-limited write is reported without retry and preserves retry guidance', () => {
       let writeCalls = 0;
       const context = buildHarness({
         fetchImpl(request) {
@@ -422,7 +422,11 @@ describe('NotionSyncService transport migration', () => {
           if (isQuery(request)) return notionResponse(200, { results: [] });
           if (isCreate(request)) {
             writeCalls += 1;
-            return notionResponse(429, { code: 'rate_limited' }, { 'Retry-After': '2' });
+            return notionResponse(
+              429,
+              { code: 'rate_limited', additional_data: { retry_guidance: 'reconcile before retrying' } },
+              { 'Retry-After': '2' }
+            );
           }
           return notionResponse(200, {});
         }
@@ -436,7 +440,9 @@ describe('NotionSyncService transport migration', () => {
       }
 
       expect(error).toBeTruthy();
-      expect(error.unresolvedWriteOutcomes[0].transport_status).toBe('RATE_LIMITED_WRITE_NOT_RETRIED');
+      const outcome = error.unresolvedWriteOutcomes[0];
+      expect(outcome.transport_status).toBe('RATE_LIMITED_WRITE_NOT_RETRIED');
+      expect(outcome.retry_guidance).toBe('reconcile before retrying');
       expect(writeCalls).toBe(1);
     });
   });
@@ -518,6 +524,44 @@ describe('NotionSyncService transport migration', () => {
       expect(() => context.service.syncEligibleStagingBatchToStaging()).toThrow(pattern);
       // Denied runs never reach the transport.
       expect(context.requests.length).toBe(0);
+    });
+  });
+
+  test('blocks Visual Asset Library writes without the dedicated write approval', () => {
+    const context = buildHarness({
+      properties: { DM_NOTION_STAGING_DATA_SOURCE_ID: 'collection://da5cba48-50fd-4377-9790-8df8f6f2c7dd' }
+    });
+    expect(() => context.service.syncEligibleStagingBatchToStaging())
+      .toThrow(/DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED/);
+    expect(context.requests.length).toBe(0);
+  });
+
+  test('introduces no caller-local HTTP 529 handling; 529 remains owned by the shared transport (#65)', () => {
+    const source = require('fs').readFileSync(
+      require('path').resolve(__dirname, '..', '..', 'drive-metadata-dashboard/src/NotionSyncService.gs'),
+      'utf8'
+    );
+    expect(source).not.toMatch(/529/);
+    expect(source).not.toMatch(/service_overload/i);
+  });
+
+  test('never uploads image bytes or Files & media to Notion and never mutates Drive sharing', () => {
+    const source = require('fs').readFileSync(
+      require('path').resolve(__dirname, '..', '..', 'drive-metadata-dashboard/src/NotionSyncService.gs'),
+      'utf8'
+    );
+    // Google Drive stays the image source of truth; Notion stores metadata and a stable
+    // reference only. DriveApp.createFile is retained solely for the pre-existing local audit
+    // export (JSON/CSV report files) and never used to write Notion properties.
+    expect(source).not.toMatch(/file_upload/i);
+    expect(source).not.toMatch(/multipart/i);
+    expect(source).not.toContain('page_cover');
+    expect(source).not.toMatch(/setSharing|addViewer|addEditor|revokePermission|setShareable/i);
+
+    const context = buildHarness({ fetchImpl: fakeNotion() });
+    context.service.syncEligibleStagingBatchToStaging();
+    context.requests.forEach((request) => {
+      expect(request.url).not.toMatch(/file_uploads/);
     });
   });
 });

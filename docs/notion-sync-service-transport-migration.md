@@ -57,20 +57,55 @@ Successful runs surface `write_outcomes` on the returned result. Each entry carr
 `status_code`, `error_code`, `retry_guidance`, `verification_status`, `verification_count`,
 and `retry_delays_ms`.
 
+A write receiving HTTP 429 is never automatically retried: it returns
+`RATE_LIMITED_WRITE_NOT_RETRIED` immediately, and the bounded `Retry-After` guidance is
+preserved on `write_outcome.retry_guidance` rather than being silently dropped.
+
+## HTTP 529 (`service_overload`) — deferred to #65
+
+Notion documents HTTP 529 as a temporary overload response. The shared transport has no
+explicit 529 policy today, and this service intentionally adds none: no caller-local 529
+branching, retry, sleep, or error policy exists in this file. Shared 529 handling is owned by
+#65 and belongs in `NotionTransport.gs`, not here.
+
 ## Preserved boundaries
 
 Staging authorization is unchanged: data-source allow-listing, `DM_NOTION_SYNC_MODE`,
 `DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED`, `DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED`, and the
-token requirement all still gate writes before any transport call is made.
+token requirement all still gate writes before any transport call is made. A denied run issues
+zero Notion requests.
+
+## Metadata and Drive boundaries
+
+Google Drive remains the source of truth for image files; this service writes only metadata and
+a stable Drive reference (`drive_url`, falling back to a canonical URL built from `file_id`) to
+Notion. It never uploads image bytes, calls a Notion file-upload endpoint, creates an image
+block or page cover, or alters Drive sharing. The Visual Asset Library `Thumbnail` property is
+deliberately left unset pending a separate thumbnail technical strategy. No new Notion property
+alias is invented here.
+
+`DriveApp.createFile` is used only by the pre-existing, unrelated local audit-export feature
+(`auditVisualAssetLibrarySync`), which writes JSON/CSV report files to Drive for operator review.
+That call was not introduced or modified by this migration and performs no Notion write of its
+own.
 
 ## Out of scope
 
 Notion 2026 data-source migration (#52), Visual Asset write-gateway authorization (#42),
-preview/live/staging side-effect separation (#43), and UTF-8 payload accounting (#57).
+preview/live/staging side-effect separation (#43), UTF-8 payload byte accounting (#57), payload
+element-limit semantics (#64), HTTP 529 shared transport handling (#65), and the observed
+final-SHA validation matrix (#58).
 
 ## Validation
 
 `tests/notion/notionSyncServiceTransport.test.js` runs against the production source through
 the offline Apps Script harness. Sheets and Drive are in-memory fixtures and outbound network
-access is refused by the harness. No live Notion request, credential, deployment, Sheet, Drive,
-trigger, sharing, or production mutation was used.
+access is refused by the harness. Coverage includes operation classification (schema read as
+`IDEMPOTENT_READ`; exact `file_id` lookup, paginated audit query, and post-write verification all
+as `IDEMPOTENT_QUERY` — proven by a transient-failure retry; create as `CREATE`; update as
+`UPDATE`), the full unknown-write matrix, a 429 write proven non-retried with retry guidance
+preserved, stable operation ID propagation, absence of a second write after inconclusive
+verification, every staging authorization gate (including the Visual Asset Library-specific
+write approval), credential redaction, and the absence of any HTTP 529 handling or
+image-upload/Drive-sharing behavior. No live Notion request, credential, deployment, Sheet,
+Drive, trigger, sharing, or production mutation was used.
