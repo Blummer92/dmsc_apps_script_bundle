@@ -1,9 +1,22 @@
 var VisualAssetLibraryProductionSyncService = (function() {
   const DATA_SOURCE_ID = 'collection://da5cba48-50fd-4377-9790-8df8f6f2c7dd';
-  const NOTION_API_BASE_URL = 'https://api.notion.com/v1';
-  const NOTION_VERSION = '2022-06-28';
-  const REQUEST_DELAY_MS = 350;
   const RICH_TEXT_CHUNK = 1900;
+
+  // Distinct operator-facing mapping for every normalized transport outcome. Row status stays
+  // in the legacy synced/partial/waiting/failed vocabulary so existing consumers keep working;
+  // the transport outcome is carried alongside it on every progress item.
+  const OUTCOME_LABELS = {
+    SUCCESS: 'Write acknowledged by Notion',
+    VERIFIED_SUCCESS: 'Write verified by exact file_id read-back',
+    UNKNOWN_OUTCOME: 'Write outcome unknown; not retried',
+    DUPLICATE_IDENTITY_BLOCKED: 'Blocked: duplicate file_id identity',
+    PERMANENT_FAILURE: 'Permanent write failure',
+    BUDGET_EXHAUSTED: 'Execution budget exhausted before completion',
+    BLOCKED_PAYLOAD_LIMIT: 'Blocked before send: payload limit exceeded',
+    RATE_LIMITED_WRITE_NOT_RETRIED: 'Rate limited; write not retried',
+    RETRY_EXHAUSTED: 'Retries exhausted without a response',
+    BLOCKED_INVALID_REQUEST: 'Blocked before send: invalid request'
+  };
 
   function dryRun(rows) { return runRows_('DRY_RUN', rows || getCurrentBatchRows_()); }
   function sync(rows) { return runRows_('SYNC', rows || getCurrentBatchRows_()); }
@@ -23,7 +36,9 @@ var VisualAssetLibraryProductionSyncService = (function() {
     const record = Object.assign({ rowNumber: rowMetadata && rowMetadata.rowNumber || rowMetadata && rowMetadata.source_row || 0 }, rowMetadata || {});
     const expected = buildExpected_(record, context.schema, aliases, context);
     const result = upsertVisualAssetPage_(context, databaseId, aliases, expected, 'SYNC');
-    const verification = verifyExpectedAgainstPage_(expected, result.page);
+    const verification = isConfirmedWrite_(result.outcome.status)
+      ? verifyExpectedAgainstPage_(expected, result.page)
+      : buildOutcomeVerification_(expected, result.outcome);
     return Object.assign({}, result, { verification: verification });
   }
 
@@ -42,6 +57,7 @@ var VisualAssetLibraryProductionSyncService = (function() {
       let verification;
       let status;
       let detail;
+      let writeEvidence = null;
       const expected = buildExpected_(record, context.schema, aliases, context);
 
       try {
@@ -54,9 +70,16 @@ var VisualAssetLibraryProductionSyncService = (function() {
           detail = verification.summary;
         } else if (operation === 'SYNC') {
           const upsert = upsertVisualAssetPage_(context, databaseId, aliases, expected, operation, matches);
-          page = upsert.page;
-          verification = verifyExpectedAgainstPage_(expected, page);
-          status = verification.ok ? 'synced' : 'partial';
+          writeEvidence = upsert.outcome;
+          if (isConfirmedWrite_(writeEvidence.status)) {
+            page = upsert.page;
+            verification = verifyExpectedAgainstPage_(expected, page);
+            status = verification.ok ? 'synced' : 'partial';
+          } else {
+            // Unconfirmed writes never report as synced and are never rewritten.
+            verification = buildOutcomeVerification_(expected, writeEvidence);
+            status = 'failed';
+          }
           detail = verification.summary;
         } else {
           verification = verifyExpectedAgainstPage_(expected, page);
@@ -69,9 +92,9 @@ var VisualAssetLibraryProductionSyncService = (function() {
         detail = error.message || String(error);
       }
 
-      const item = buildProgressItem_(record, page, status, detail, verification, operation, rowStarted);
+      const item = buildProgressItem_(record, page, status, detail, verification, operation, rowStarted, writeEvidence);
       progress.push(item);
-      history.push(buildHistoryEntry_(record, operation, item, verification, rowStarted));
+      history.push(buildHistoryEntry_(record, operation, item, verification, rowStarted, writeEvidence));
     });
 
     VisualAssetLibrarySyncHistoryService.append(history);
@@ -89,7 +112,7 @@ var VisualAssetLibraryProductionSyncService = (function() {
     const context = getContext_();
     validateContext_(context);
     const databaseId = getDatabaseId_(context);
-    const database = notionRequest_(context, 'get', '/databases/' + encodeURIComponent(databaseId));
+    const database = notionRead_(context, '/databases/' + encodeURIComponent(databaseId));
     context.schema = database.properties || {};
     return context;
   }
@@ -144,14 +167,48 @@ var VisualAssetLibraryProductionSyncService = (function() {
       const field = expected.fields[canonical];
       properties[field.property] = formatProperty_(context.schema[field.property], field.value);
     });
-    const response = page
-      ? notionRequest_(context, 'patch', '/pages/' + encodeURIComponent(page.id), { properties: properties })
-      : notionRequest_(context, 'post', '/pages', { parent: { database_id: databaseId }, properties: properties });
-    const verifiedPage = notionRequest_(context, 'get', '/pages/' + encodeURIComponent(response.id));
-    return { action: page ? 'updated' : 'created', page_id: response.id, page_url: response.url || buildNotionPageUrl_(response.id), page: verifiedPage };
+
+    // One stable operation ID spans the write and its verification query. An ambiguous write
+    // is never reissued; it is resolved only by an exact read-only file_id verification.
+    const operationId = createOperationId_(page ? 'update' : 'create');
+    const intendedAction = page ? 'updated' : 'created';
+    const outcome = NotionTransport.request({
+      token: context.notionToken,
+      method: page ? 'patch' : 'post',
+      path: page ? '/pages/' + encodeURIComponent(page.id) : '/pages',
+      body: page ? { properties: properties } : { parent: { database_id: databaseId }, properties: properties },
+      operationClass: page ? NotionTransport.OPERATION.UPDATE : NotionTransport.OPERATION.CREATE,
+      operationId: operationId,
+      verify: function() {
+        return { matches: findNotionPagesByFileId_(context, databaseId, aliases, fileId, operationId) };
+      },
+      verifyMatch: buildPageIdentityMatcher_(context, aliases, expected, page)
+    });
+    const evidence = buildWriteEvidence_(outcome, intendedAction);
+
+    if (!isConfirmedWrite_(outcome.status)) {
+      return { action: intendedAction, page_id: '', page_url: '', page: null, outcome: evidence };
+    }
+
+    const response = outcome.data || {};
+    // VERIFIED_SUCCESS already carries a freshly read page from the verification query, so no
+    // second read-back is issued. SUCCESS reads the page back explicitly.
+    const verifiedPage = outcome.status === 'VERIFIED_SUCCESS'
+      ? response
+      : notionRead_(context, '/pages/' + encodeURIComponent(response.id));
+    return {
+      action: intendedAction,
+      page_id: response.id,
+      page_url: response.url || buildNotionPageUrl_(response.id),
+      page: verifiedPage,
+      outcome: evidence
+    };
   }
 
-  function findNotionPagesByFileId_(context, databaseId, aliases, fileId) {
+  // Exact file_id lookup, classified IDEMPOTENT_QUERY. This is read-only: it never writes
+  // history, row status, or any other side effect, so it is safe to reuse as the
+  // unknown-write verification callback.
+  function findNotionPagesByFileId_(context, databaseId, aliases, fileId, operationId) {
     const cleanFileId = String(fileId || '').trim();
     if (!cleanFileId) throw new Error('Missing file_id; cannot safely upsert');
     const property = aliases.resolved.file_id;
@@ -162,12 +219,26 @@ var VisualAssetLibraryProductionSyncService = (function() {
     do {
       const body = { filter: buildEqualsFilter_(property, schema.type, cleanFileId), page_size: 100 };
       if (cursor) body.start_cursor = cursor;
-      const result = notionRequest_(context, 'post', '/databases/' + encodeURIComponent(databaseId) + '/query', body);
+      const result = notionQuery_(context, '/databases/' + encodeURIComponent(databaseId) + '/query', body, operationId);
       Array.prototype.push.apply(pages, result.results || []);
       cursor = result.has_more ? result.next_cursor : null;
     } while (cursor);
     return pages;
   }
+
+  function buildPageIdentityMatcher_(context, aliases, expected, existingPage) {
+    const property = aliases.resolved.file_id;
+    const expectedFileId = String(expected.record.file_id || '').trim();
+    const expectedPageId = existingPage ? normalizeNotionId_(existingPage.id) : '';
+    return function(page) {
+      if (!page || !page.id) return false;
+      if (expectedPageId && normalizeNotionId_(page.id) !== expectedPageId) return false;
+      const actual = extractProperty_((page.properties || {})[property]);
+      return expectedFileId !== '' && String(actual).trim() === expectedFileId;
+    };
+  }
+
+  function normalizeNotionId_(value) { return String(value || '').replace(/-/g, ''); }
 
   function throwDuplicatePages_(fileId, pages) {
     const urls = pages.map(function(page) { return page.url || buildNotionPageUrl_(page.id); }).filter(Boolean);
@@ -223,9 +294,13 @@ var VisualAssetLibraryProductionSyncService = (function() {
     return verification;
   }
 
-  function buildProgressItem_(record, page, status, detail, verification, operation, started) {
+  function buildProgressItem_(record, page, status, detail, verification, operation, started, writeEvidence) {
     const notes = unique_(verification.notes.concat(verification.field_results.filter(function(item) { return !item.ok; }).map(function(item) { return item.field + ': ' + item.reason; })));
     return {
+      write_outcome: writeEvidence,
+      outcome_status: writeEvidence ? writeEvidence.status : '',
+      outcome_label: writeEvidence ? writeEvidence.label : '',
+      operation_id: writeEvidence ? writeEvidence.operation_id : '',
       source_row: record.rowNumber,
       file_id: record.file_id || '',
       file_name: record.file_name || '',
@@ -255,8 +330,21 @@ var VisualAssetLibraryProductionSyncService = (function() {
 
   function summarize_(progress) {
     const counts = { synced: 0, partial: 0, waiting: 0, failed: 0 };
-    progress.forEach(function(item) { counts[item.status] = (counts[item.status] || 0) + 1; });
-    return { total: progress.length, counts: counts, average_sync_percent: progress.length ? Math.round(progress.reduce(function(sum, item) { return sum + Number(item.sync_percent || 0); }, 0) / progress.length) : 0, next_action: counts.failed ? 'Fix failed rows, then retry.' : counts.partial ? 'Resync partial rows.' : counts.waiting ? 'Sync waiting rows.' : 'Advance to the next batch.' };
+    const outcomeCounts = {};
+    progress.forEach(function(item) {
+      counts[item.status] = (counts[item.status] || 0) + 1;
+      if (item.outcome_status) outcomeCounts[item.outcome_status] = (outcomeCounts[item.outcome_status] || 0) + 1;
+    });
+    const unresolved = Number(outcomeCounts.UNKNOWN_OUTCOME || 0) + Number(outcomeCounts.DUPLICATE_IDENTITY_BLOCKED || 0);
+    return {
+      total: progress.length,
+      counts: counts,
+      outcome_counts: outcomeCounts,
+      unresolved_write_count: unresolved,
+      average_sync_percent: progress.length ? Math.round(progress.reduce(function(sum, item) { return sum + Number(item.sync_percent || 0); }, 0) / progress.length) : 0,
+      // Unresolved writes must never be advertised as retryable.
+      next_action: unresolved ? 'Reconcile unresolved write outcomes in Notion before any further write.' : counts.failed ? 'Fix failed rows, then retry.' : counts.partial ? 'Resync partial rows.' : counts.waiting ? 'Sync waiting rows.' : 'Advance to the next batch.'
+    };
   }
 
   function getContext_() {
@@ -330,15 +418,66 @@ var VisualAssetLibraryProductionSyncService = (function() {
     return { property: propertyName, rich_text: { equals: String(value) } };
   }
 
-  function notionRequest_(context, method, path, body) {
-    const options = { method: method, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + context.notionToken, 'Notion-Version': NOTION_VERSION } };
-    if (body) { options.contentType = 'application/json'; options.payload = JSON.stringify(body); }
-    const response = UrlFetchApp.fetch(NOTION_API_BASE_URL + path, options);
-    if (typeof Utilities !== 'undefined' && Utilities.sleep) Utilities.sleep(REQUEST_DELAY_MS);
-    const status = response.getResponseCode();
-    const text = response.getContentText();
-    if (status < 200 || status >= 300) throw new Error('Notion API error ' + status + ': ' + text);
-    return text ? JSON.parse(text) : {};
+  // Every Notion request is delegated to NotionTransport. This service owns no API base URL,
+  // no API version, no request delay, no retry policy, no response parsing, and no error
+  // normalization.
+  function notionRead_(context, path, operationId) {
+    return notionRequestOrThrow_(context, 'get', path, null, NotionTransport.OPERATION.IDEMPOTENT_READ, operationId);
+  }
+
+  function notionQuery_(context, path, body, operationId) {
+    return notionRequestOrThrow_(context, 'post', path, body, NotionTransport.OPERATION.IDEMPOTENT_QUERY, operationId);
+  }
+
+  function notionRequestOrThrow_(context, method, path, body, operationClass, operationId) {
+    const spec = { token: context.notionToken, method: method, path: path, operationClass: operationClass };
+    if (body) spec.body = body;
+    if (operationId) spec.operationId = operationId;
+    return NotionTransport.requestOrThrow(spec);
+  }
+
+  function createOperationId_(prefix) {
+    const suffix = typeof Utilities !== 'undefined' && Utilities.getUuid ? Utilities.getUuid() : String(new Date().getTime());
+    return prefix + '-' + suffix;
+  }
+
+  function isConfirmedWrite_(status) { return status === 'SUCCESS' || status === 'VERIFIED_SUCCESS'; }
+
+  function buildWriteEvidence_(outcome, intendedAction) {
+    const verification = outcome.verification || {};
+    return {
+      intended_action: intendedAction,
+      operation_id: outcome.operationId,
+      operation_class: outcome.operationClass,
+      status: outcome.status,
+      label: OUTCOME_LABELS[outcome.status] || outcome.status,
+      attempts: outcome.attempts,
+      response_received: outcome.responseReceived,
+      status_code: outcome.statusCode,
+      error_code: outcome.errorCode,
+      retry_guidance: outcome.retryGuidance,
+      verification_status: verification.status || 'NOT_RUN',
+      verification_count: Number(verification.count || 0),
+      retry_delays_ms: (outcome.evidence || []).map(function(item) { return Number(item.retryDelayMs || 0); })
+    };
+  }
+
+  function historyResultForOutcome_(evidence, verification) {
+    if (!evidence) return verification.ok ? 'PASS' : 'FAIL';
+    if (evidence.status === 'VERIFIED_SUCCESS' || evidence.status === 'SUCCESS') return verification.ok ? 'PASS' : 'FAIL';
+    if (evidence.status === 'UNKNOWN_OUTCOME') return 'UNKNOWN';
+    if (evidence.status === 'DUPLICATE_IDENTITY_BLOCKED') return 'BLOCKED';
+    return 'FAIL';
+  }
+
+  function buildOutcomeVerification_(expected, evidence) {
+    const fieldResults = Object.keys(expected.fields || {}).map(function(canonical) {
+      const field = expected.fields[canonical];
+      return { field: field.property, canonical: canonical, ok: false, expected: stringify_(field.value), actual: '', reason: evidence.label };
+    });
+    const verification = buildVerification_(fieldResults, fieldResults.map(function(item) { return item.field; }), [], [evidence.label]);
+    verification.summary = evidence.label + ' (operation ' + evidence.operation_id + ', verification ' + evidence.verification_status + ').';
+    return verification;
   }
 
   function getDatabaseId_(context) {
@@ -361,8 +500,9 @@ var VisualAssetLibraryProductionSyncService = (function() {
   function labelForStatus_(status) { return status === 'synced' ? 'Completely synced' : status === 'partial' ? 'Partially synced' : status === 'waiting' ? 'Waiting to sync' : status === 'failed' ? 'Failed' : 'Never attempted'; }
   function unique_(values) { return Array.from(new Set(values || [])); }
 
-  function buildHistoryEntry_(record, operation, item, verification, started) {
-    return { timestamp: new Date().toISOString(), row: record.rowNumber, image: record.file_name || record.file_id || '', operation: operation, changed_fields: (item.field_results || []).filter(function(field) { return field.changed; }).map(function(field) { return field.field; }), skipped_fields: verification.field_results.filter(function(field) { return !field.ok; }).map(function(field) { return field.field; }), reason: item.validation_notes.join(' | '), duration_ms: new Date().getTime() - started.getTime(), verification_result: verification.ok ? 'PASS' : 'FAIL', sync_percent: item.sync_percent, duplicate_page_urls: item.duplicate_page_urls || [] };
+  // An unconfirmed write is never recorded as a successful history entry.
+  function buildHistoryEntry_(record, operation, item, verification, started, writeEvidence) {
+    return { timestamp: new Date().toISOString(), row: record.rowNumber, image: record.file_name || record.file_id || '', operation: operation, changed_fields: (item.field_results || []).filter(function(field) { return field.changed; }).map(function(field) { return field.field; }), skipped_fields: verification.field_results.filter(function(field) { return !field.ok; }).map(function(field) { return field.field; }), reason: item.validation_notes.join(' | '), duration_ms: new Date().getTime() - started.getTime(), verification_result: historyResultForOutcome_(writeEvidence, verification), sync_percent: item.sync_percent, duplicate_page_urls: item.duplicate_page_urls || [], operation_id: writeEvidence ? writeEvidence.operation_id : '', outcome_status: writeEvidence ? writeEvidence.status : '' };
   }
 
   return {
