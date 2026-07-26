@@ -6,6 +6,16 @@ Issue: #45
 
 The repository exposes top-level Apps Script functions as runtime entry points. Operator-side registries do not prevent a function from being run manually, referenced by a menu, or invoked by a trigger. The static checker in `scripts/check-apps-script-entry-points.mjs` inventories every `.gs` and script block in deployable `.html` source, records every declaration location, classifies each symbol, and fails unexplained duplicate declarations.
 
+## Checker architecture
+
+The checker has one implementation source of truth in `scripts/apps-script-entry-point-checker.cjs`.
+
+- `scripts/check-apps-script-entry-points.mjs` is the executable ESM wrapper. It invokes the shared core and preserves the existing standalone command.
+- `tests/entry-points/checkEntryPoints.test.js` requires the same shared core directly from Jest's CommonJS runtime.
+- `tests/entry-points/checkEntryPointWrapper.test.js` launches a separate Node process to verify the public ESM wrapper, exact named exports, check-mode execution, failure status, and explicit report generation.
+
+This boundary avoids requiring Node's experimental VM ESM loader for the repository-wide Jest suite. It keeps the CLI portable across the Node 20 environments used locally and by Cloud Build, without duplicating classification or inventory logic.
+
 ## Classification model
 
 The policy file is `config/apps-script-entry-points.json`.
@@ -39,16 +49,34 @@ Both are declared more than once in `DMSC_SourceApproval.gs`. The checker record
 
 ## Running the checker
 
+Run the artifact-clean validation path:
+
 ```bash
 npm run test:entry-points
 ```
 
-The command:
+That command:
 
 1. scans deployable `.gs` and `.html` sources;
-2. writes `docs/apps-script-entry-point-inventory.json` with symbol, classification, and declaration locations;
-3. fails unexplained duplicates;
-4. runs focused checker tests.
+2. evaluates classifications and unexplained duplicates without writing a report;
+3. prints the classified-symbol summary;
+4. runs the focused CommonJS and ESM-wrapper tests.
+
+The equivalent direct check mode is:
+
+```bash
+node scripts/check-apps-script-entry-points.mjs --no-write
+```
+
+Unknown command-line arguments are rejected with a nonzero exit instead of being silently ignored.
+
+Generate `docs/apps-script-entry-point-inventory.json` only when an intentional inventory refresh is in scope:
+
+```bash
+npm run generate:entry-points
+```
+
+The generated JSON is a command artifact. Validation and test workflows use `--no-write`, so they do not create or modify it. After intentional generation, review the report and remove it unless the refresh is an approved repository change.
 
 The scan is credential-free and does not execute Apps Script source, access Google services, inspect live triggers, or make network requests.
 
