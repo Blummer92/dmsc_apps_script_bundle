@@ -7,22 +7,30 @@ const { spawnSync } = require('node:child_process');
 const { pathToFileURL } = require('node:url');
 
 const repositoryRoot = path.resolve(__dirname, '..', '..');
+const corePath = path.join(repositoryRoot, 'scripts/apps-script-entry-point-checker.cjs');
 const wrapperPath = path.join(repositoryRoot, 'scripts/check-apps-script-entry-points.mjs');
 const generatedInventoryPath = path.join(repositoryRoot, 'docs/apps-script-entry-point-inventory.json');
 const temporaryDirectories = [];
 
-function runNode(args, options = {}) {
-  return spawnSync(process.execPath, args, {
+function runNode(args) {
+  const result = spawnSync(process.execPath, args, {
     cwd: repositoryRoot,
     encoding: 'utf8',
-    env: { ...process.env, ...(options.env || {}) }
+    timeout: 30_000,
+    windowsHide: true
   });
+  if (result.error) throw result.error;
+  return result;
 }
 
 function createFixture({ duplicate = false } = {}) {
   const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'dmsc-entry-point-wrapper-'));
   temporaryDirectories.push(fixtureRoot);
+  fs.mkdirSync(path.join(fixtureRoot, 'scripts'), { recursive: true });
+  fs.mkdirSync(path.join(fixtureRoot, 'config'), { recursive: true });
   fs.mkdirSync(path.join(fixtureRoot, 'src'), { recursive: true });
+  fs.copyFileSync(corePath, path.join(fixtureRoot, 'scripts/apps-script-entry-point-checker.cjs'));
+  fs.copyFileSync(wrapperPath, path.join(fixtureRoot, 'scripts/check-apps-script-entry-points.mjs'));
   fs.writeFileSync(
     path.join(fixtureRoot, 'src', 'Example.gs'),
     duplicate ? 'function duplicate() {}\nfunction duplicate() {}\n' : 'function fixtureCommand() {}\n'
@@ -36,15 +44,14 @@ function createFixture({ duplicate = false } = {}) {
     classificationRules: [],
     temporaryDuplicateExceptions: {}
   };
-  const policyPath = path.join(fixtureRoot, 'policy.json');
-  fs.writeFileSync(policyPath, `${JSON.stringify(fixturePolicy, null, 2)}\n`);
-  return { fixtureRoot, fixturePolicy, policyPath };
-}
-
-function fixtureEnvironment(fixtureRoot, policyPath) {
+  fs.writeFileSync(
+    path.join(fixtureRoot, 'config/apps-script-entry-points.json'),
+    `${JSON.stringify(fixturePolicy, null, 2)}\n`
+  );
   return {
-    DMSC_ENTRY_POINT_CHECKER_ROOT: fixtureRoot,
-    DMSC_ENTRY_POINT_CHECKER_POLICY: policyPath
+    fixtureRoot,
+    fixturePolicy,
+    fixtureWrapperPath: path.join(fixtureRoot, 'scripts/check-apps-script-entry-points.mjs')
   };
 }
 
@@ -105,10 +112,8 @@ describe('Apps Script entry-point ESM wrapper', () => {
   });
 
   test('returns a nonzero status for inventory errors without writing an artifact', () => {
-    const { fixtureRoot, policyPath } = createFixture({ duplicate: true });
-    const result = runNode([wrapperPath, '--no-write'], {
-      env: fixtureEnvironment(fixtureRoot, policyPath)
-    });
+    const { fixtureRoot, fixtureWrapperPath } = createFixture({ duplicate: true });
+    const result = runNode([fixtureWrapperPath, '--no-write']);
 
     expect(result.status).toBe(1);
     expect(result.stdout).toBe('Classified 1 deployable symbols across 1 Apps Script projects.\n');
@@ -117,7 +122,8 @@ describe('Apps Script entry-point ESM wrapper', () => {
   });
 
   test('rejects unknown arguments', () => {
-    const result = runNode([wrapperPath, '--unknown-option']);
+    const { fixtureWrapperPath } = createFixture();
+    const result = runNode([fixtureWrapperPath, '--unknown-option']);
 
     expect(result.status).toBe(2);
     expect(result.stdout).toBe('');
@@ -125,10 +131,8 @@ describe('Apps Script entry-point ESM wrapper', () => {
   });
 
   test('keeps intentional inventory generation available', () => {
-    const { fixtureRoot, policyPath } = createFixture();
-    const result = runNode([wrapperPath], {
-      env: fixtureEnvironment(fixtureRoot, policyPath)
-    });
+    const { fixtureRoot, fixtureWrapperPath } = createFixture();
+    const result = runNode([fixtureWrapperPath]);
     const outputPath = path.join(fixtureRoot, 'docs/apps-script-entry-point-inventory.json');
 
     expect(result.status).toBe(0);

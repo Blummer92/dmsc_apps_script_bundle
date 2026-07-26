@@ -4,13 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
-const defaultPolicyPath = path.join(root, 'config/apps-script-entry-points.json');
-
-function readPolicy(policyPath = defaultPolicyPath) {
-  return JSON.parse(fs.readFileSync(policyPath, 'utf8'));
-}
-
-const policy = readPolicy();
+const policy = JSON.parse(fs.readFileSync(path.join(root, 'config/apps-script-entry-points.json'), 'utf8'));
 
 function maskNonCode(source) {
   const chars = [...String(source)];
@@ -180,15 +174,7 @@ function parseCliArgs(args) {
   return { writeInventory };
 }
 
-function resolveCliPaths(environment = process.env) {
-  const repositoryRoot = path.resolve(environment.DMSC_ENTRY_POINT_CHECKER_ROOT || root);
-  const policyPath = path.resolve(
-    environment.DMSC_ENTRY_POINT_CHECKER_POLICY || path.join(repositoryRoot, 'config/apps-script-entry-points.json')
-  );
-  return { repositoryRoot, policyPath };
-}
-
-function runCli(args = process.argv.slice(2), io = console, environment = process.env) {
+function runCli(args = process.argv.slice(2), io = console) {
   let cliOptions;
   try {
     cliOptions = parseCliArgs(args);
@@ -198,18 +184,16 @@ function runCli(args = process.argv.slice(2), io = console, environment = proces
   }
 
   try {
-    const { repositoryRoot, policyPath } = resolveCliPaths(environment);
-    const configuredPolicy = readPolicy(policyPath);
-    const inventory = buildInventory(repositoryRoot, configuredPolicy);
+    const inventory = buildInventory();
     const errors = evaluateInventory(inventory);
 
     if (cliOptions.writeInventory) {
-      const outputPath = path.join(repositoryRoot, 'docs/apps-script-entry-point-inventory.json');
+      const outputPath = path.join(root, 'docs/apps-script-entry-point-inventory.json');
       fs.mkdirSync(path.dirname(outputPath), { recursive: true });
       fs.writeFileSync(outputPath, `${JSON.stringify({ generatedAt: new Date().toISOString(), inventory }, null, 2)}\n`);
     }
 
-    io.log(`Classified ${inventory.length} deployable symbols across ${(configuredPolicy.projects || []).length} Apps Script projects.`);
+    io.log(`Classified ${inventory.length} deployable symbols across ${(policy.projects || []).length} Apps Script projects.`);
     if (errors.length) {
       io.error(errors.join('\n'));
       return 1;
