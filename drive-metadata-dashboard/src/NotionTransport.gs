@@ -254,16 +254,31 @@ var NotionTransport = (function() {
         verification: { status: 'MULTIPLE_MATCHES', count: matches.length }
       });
     }
-    if (matches.length === 1 && typeof spec.verifyMatch === 'function' && spec.verifyMatch(matches[0]) === true) {
-      return result_('VERIFIED_SUCCESS', operationId, operationClass, method, endpoint, startedAt, dependencies, {
-        attempts: attempts,
-        statusCode: statusCode,
-        retryGuidance: retryGuidance,
-        errorCode: errorCode,
-        data: matches[0],
-        evidence: evidence,
-        verification: { status: 'MATCHED', count: 1 }
-      });
+    if (matches.length === 1 && typeof spec.verifyMatch === 'function') {
+      let matched;
+      try {
+        matched = spec.verifyMatch(matches[0]) === true;
+      } catch (error) {
+        return result_('UNKNOWN_OUTCOME', operationId, operationClass, method, endpoint, startedAt, dependencies, {
+          attempts: attempts,
+          statusCode: statusCode,
+          retryGuidance: retryGuidance,
+          errorCode: errorCode,
+          evidence: evidence,
+          verification: { status: 'ERROR', count: matches.length, detail: redactText_(error && error.message) }
+        });
+      }
+      if (matched) {
+        return result_('VERIFIED_SUCCESS', operationId, operationClass, method, endpoint, startedAt, dependencies, {
+          attempts: attempts,
+          statusCode: statusCode,
+          retryGuidance: retryGuidance,
+          errorCode: errorCode,
+          data: matches[0],
+          evidence: evidence,
+          verification: { status: 'MATCHED', count: 1 }
+        });
+      }
     }
     return result_('UNKNOWN_OUTCOME', operationId, operationClass, method, endpoint, startedAt, dependencies, {
       attempts: attempts,
