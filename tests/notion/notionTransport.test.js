@@ -294,6 +294,40 @@ describe('NotionTransport production source', () => {
     expect(outcome.data).toEqual(match);
   });
 
+  test('verifyMatch throwing on an ambiguous write returns UNKNOWN_OUTCOME without retrying or leaking secrets', () => {
+    const { transport } = buildHarness();
+    let attempts = 0;
+    let outcome;
+
+    expect(() => {
+      outcome = transport.request(baseSpec({
+        method: 'patch',
+        path: '/pages/page-1',
+        operationClass: 'UPDATE',
+        body: { properties: {} },
+        verify: () => [{ id: 'page-1' }],
+        verifyMatch: () => { throw new Error('lookup failed for token secret_should_be_redacted'); }
+      }), {
+        fetch: () => {
+          attempts += 1;
+          return response(503, { code: 'service_unavailable', additional_data: { retry_guidance: 'reconcile before retrying' } });
+        },
+        clock: () => 1000,
+        jitter: () => 0,
+        sleep: () => {}
+      });
+    }).not.toThrow();
+
+    expect(outcome.status).toBe('UNKNOWN_OUTCOME');
+    expect(outcome.verification.status).toBe('ERROR');
+    expect(outcome.verification.count).toBe(1);
+    expect(outcome.statusCode).toBe(503);
+    expect(outcome.responseReceived).toBe(true);
+    expect(outcome.retryGuidance).toBe('reconcile before retrying');
+    expect(JSON.stringify(outcome)).not.toContain('secret_should_be_redacted');
+    expect(attempts).toBe(1);
+  });
+
   test('blocks duplicate identity matches after an unknown write outcome', () => {
     const { transport } = buildHarness();
     const outcome = transport.request(baseSpec({
@@ -478,5 +512,227 @@ describe('NotionTransport production source', () => {
       expect(JSON.stringify(error.notionTransportOutcome)).not.toContain('private-value');
       expect(error.message).not.toContain('secret_test_token');
     }
+  });
+
+  // The transport does not classify operations itself: it trusts the operationClass a caller
+  // supplies and treats IDEMPOTENT_QUERY as retryable like a read, while CREATE is never blindly
+  // retried after an ambiguous outcome. This proves query-via-POST's classification actually
+  // changes transport behavior, distinguishing it from a misclassified CREATE.
+  test('a POST classified as IDEMPOTENT_QUERY retries like a read, unlike a POST classified as CREATE', () => {
+    const { transport } = buildHarness();
+    let queryAttempts = 0;
+    const queryOutcome = transport.request(baseSpec({
+      method: 'post',
+      path: '/databases/example/query',
+      operationClass: 'IDEMPOTENT_QUERY',
+      body: { page_size: 2 },
+      maxAttempts: 2
+    }), {
+      fetch() {
+        queryAttempts += 1;
+        return queryAttempts === 1 ? response(503, { code: 'service_unavailable' }) : response(200, { results: [] });
+      },
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: () => {}
+    });
+    expect(queryOutcome.status).toBe('SUCCESS');
+    expect(queryAttempts).toBe(2);
+
+    let createAttempts = 0;
+    const createOutcome = transport.request(baseSpec({
+      method: 'post',
+      path: '/databases/example/query',
+      operationClass: 'CREATE',
+      body: { page_size: 2 },
+      maxAttempts: 2
+    }), {
+      fetch() {
+        createAttempts += 1;
+        return response(503, { code: 'service_unavailable' });
+      },
+      clock: () => 1000,
+      jitter: () => 0,
+      sleep: () => {}
+    });
+    expect(createOutcome.status).toBe('UNKNOWN_OUTCOME');
+    expect(createAttempts).toBe(1);
+  });
+});
+
+// Caller-delegation coverage: proves VisualAssetLibraryWriteService.gs and
+// VisualAssetLibraryValidationService.gs delegate their Notion schema read through
+// NotionTransport.requestOrThrow rather than talking to Notion directly, using the real
+// production source with bounded local stubs for their Apps Script dependencies.
+describe('Visual Asset Library caller delegation through NotionTransport', () => {
+  const NOTION_DATABASE_ID = '0123456789abcdef0123456789abcdef';
+  const NOTION_TOKEN = 'test-configured-token';
+
+  function recordingDouble(methods) {
+    const calls = {};
+    const impl = {};
+    Object.keys(methods).forEach((name) => {
+      calls[name] = [];
+      impl[name] = (...args) => {
+        calls[name].push(args);
+        return methods[name].apply(null, args);
+      };
+    });
+    impl.__calls = calls;
+    return impl;
+  }
+
+  function createNotionTransportDouble(schemaResponse) {
+    const real = buildHarness().transport;
+    const calls = [];
+    return {
+      OPERATION: real.OPERATION,
+      requestOrThrow(spec) {
+        calls.push(spec);
+        return schemaResponse;
+      },
+      __calls: calls
+    };
+  }
+
+  function baseProperties(overrides = {}) {
+    return {
+      DM_SOURCE_LIBRARY_SPREADSHEET_ID: 'sheet-fixture-id',
+      DM_SOURCE_LIBRARY_SHEET_NAME: 'Sheet1',
+      DM_NOTION_STAGING_DATA_SOURCE_ID: 'collection://da5cba48-50fd-4377-9790-8df8f6f2c7dd',
+      DM_NOTION_STAGING_DATABASE_URL: 'https://www.notion.so/workspace/' + NOTION_DATABASE_ID,
+      DM_NOTION_API_TOKEN: NOTION_TOKEN,
+      DM_NOTION_SYNC_START_ROW: '2',
+      DM_NOTION_SYNC_END_ROW: '3',
+      DM_NOTION_SYNC_CURSOR_ROW: '2',
+      DM_NOTION_SYNC_BATCH_SIZE: '25',
+      DM_NOTION_SYNC_MAX_END_ROW: '454',
+      DM_NOTION_SYNC_SCOPE: 'ELIGIBLE_STAGING_BATCH',
+      ...overrides
+    };
+  }
+
+  const fixtureRecords = [
+    { rowNumber: 2, file_id: 'file-2' },
+    { rowNumber: 3, file_id: 'file-3' }
+  ];
+
+  test('VisualAssetLibraryWriteService.syncEligibleBatch delegates the schema read through NotionTransport.requestOrThrow', () => {
+    const properties = baseProperties({
+      DM_NOTION_SYNC_MODE: 'STAGING_WRITE',
+      DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED: 'YES_EXPANDED_STAGING_BATCH_ONLY',
+      DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED: 'YES_VISUAL_ASSET_LIBRARY_ONLY'
+    });
+    const runtime = createAppsScriptRuntime({ properties });
+
+    const notionTransport = createNotionTransportDouble({ properties: { Name: { id: 'title' } } });
+    const sheetReadService = recordingDouble({
+      readSpreadsheetRowsById: () => ({ warnings: [], records: fixtureRecords })
+    });
+    const dryRunProofService = recordingDouble({
+      assertMatches: () => ({ saved_at: 'proof-saved-at' })
+    });
+    const productionSyncService = recordingDouble({
+      sync: () => ({
+        row_progress: [{
+          status: 'synced',
+          source_row: 2,
+          file_id: 'file-2',
+          notion_page_url: 'https://notion.so/page-2',
+          sync_percent: 100,
+          complete_fields: 5,
+          total_fields: 5,
+          field_results: []
+        }],
+        summary: { total: 1 }
+      })
+    });
+
+    const harness = createAppsScriptHarness({
+      runtime,
+      globals: {
+        NotionTransport: notionTransport,
+        SheetReadService: sheetReadService,
+        VisualAssetLibraryDryRunProofService: dryRunProofService,
+        VisualAssetLibraryProductionSyncService: productionSyncService
+      }
+    });
+    harness.loadFiles(['drive-metadata-dashboard/src/VisualAssetLibraryWriteService.gs']);
+
+    const result = harness.getValue('VisualAssetLibraryWriteService').syncEligibleBatch();
+
+    expect(notionTransport.__calls).toHaveLength(1);
+    const requestSpec = notionTransport.__calls[0];
+    expect(requestSpec.method).toBe('get');
+    expect(requestSpec.path).toBe('/databases/' + NOTION_DATABASE_ID);
+    expect(requestSpec.operationClass).toBe(notionTransport.OPERATION.IDEMPOTENT_READ);
+    expect(requestSpec.token).toBe(NOTION_TOKEN);
+
+    expect(runtime.getEvents('urlFetch.fetch')).toHaveLength(0);
+
+    expect(productionSyncService.__calls.sync).toHaveLength(1);
+    expect(productionSyncService.__calls.sync[0][0]).toEqual([2, 3]);
+    expect(dryRunProofService.__calls.assertMatches).toHaveLength(1);
+    expect(dryRunProofService.__calls.assertMatches[0][2]).toEqual({ Name: { id: 'title' } });
+
+    expect(result.dry_run_proof_saved_at).toBe('proof-saved-at');
+    expect(result.synced_count).toBe(1);
+    expect(JSON.stringify(result)).not.toContain(NOTION_TOKEN);
+  });
+
+  test('VisualAssetLibraryValidationService.dryRunFieldValidationOnly delegates the schema read through NotionTransport.requestOrThrow', () => {
+    const properties = baseProperties({ DM_NOTION_SYNC_MODE: 'DRY_RUN' });
+    const runtime = createAppsScriptRuntime({ properties });
+
+    const notionTransport = createNotionTransportDouble({ properties: { Name: { id: 'title' } } });
+    const sheetReadService = recordingDouble({
+      readSpreadsheetRowsById: () => ({ warnings: [], records: fixtureRecords })
+    });
+    const dryRunProofService = recordingDouble({
+      save: () => ({ id: 'proof-1' })
+    });
+    const productionSyncService = recordingDouble({
+      dryRun: () => ({
+        row_progress: [{
+          status: 'waiting',
+          source_row: 2,
+          file_id: 'file-2',
+          notion_page_url: '',
+          field_results: []
+        }],
+        summary: { total: 1 },
+        keyword_mode: 'STRICT'
+      })
+    });
+
+    const harness = createAppsScriptHarness({
+      runtime,
+      globals: {
+        NotionTransport: notionTransport,
+        SheetReadService: sheetReadService,
+        VisualAssetLibraryDryRunProofService: dryRunProofService,
+        VisualAssetLibraryProductionSyncService: productionSyncService
+      }
+    });
+    harness.loadFiles(['drive-metadata-dashboard/src/VisualAssetLibraryValidationService.gs']);
+
+    const result = harness.getValue('VisualAssetLibraryValidationService').dryRunFieldValidationOnly();
+
+    expect(notionTransport.__calls).toHaveLength(1);
+    const requestSpec = notionTransport.__calls[0];
+    expect(requestSpec.method).toBe('get');
+    expect(requestSpec.path).toBe('/databases/' + NOTION_DATABASE_ID);
+    expect(requestSpec.operationClass).toBe(notionTransport.OPERATION.IDEMPOTENT_READ);
+    expect(requestSpec.token).toBe(NOTION_TOKEN);
+
+    expect(runtime.getEvents('urlFetch.fetch')).toHaveLength(0);
+
+    expect(productionSyncService.__calls.dryRun).toHaveLength(1);
+    expect(productionSyncService.__calls.dryRun[0][0]).toEqual([2, 3]);
+    expect(dryRunProofService.__calls.save).toHaveLength(1);
+    expect(dryRunProofService.__calls.save[0][1]).toEqual({ Name: { id: 'title' } });
+
+    expect(result.dry_run_proof).toEqual({ id: 'proof-1' });
+    expect(JSON.stringify(result)).not.toContain(NOTION_TOKEN);
   });
 });
