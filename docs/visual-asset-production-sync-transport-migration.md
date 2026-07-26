@@ -86,18 +86,63 @@ guidance across every unknown-write outcome, so that a received 503 reports `sta
 with `responseReceived: true` while a genuine pre-response failure still reports
 `statusCode: 0` with `responseReceived: false`.
 
-That was originally missing and is fixed in the transport foundation under #39, not here. This
-service owns no transport change of its own.
+That was originally missing and is fixed in the transport foundation under #39 (merged in
+`f4b92c2`), not here. This service owns no transport change of its own.
+
+A write receiving HTTP 429 is never automatically retried: it returns
+`RATE_LIMITED_WRITE_NOT_RETRIED` immediately, the bounded `Retry-After` guidance is preserved on
+`write_outcome.retry_guidance`, and the row is reported `failed` and visible for reconciliation
+rather than silently dropped.
+
+## Metadata architecture: Google Drive is the image source of truth
+
+Google Drive remains the authoritative location for image files. Notion stores a clean,
+searchable metadata catalog and a stable reference back to Drive — it never receives the image
+bytes themselves. The canonical Google Drive file ID (`file_id`) is the stable identity used for
+deduplication and reconciliation: every create/update is preceded by an exact `file_id` lookup,
+and a changed Drive revision or metadata value updates the existing matched page rather than
+creating a duplicate.
+
+Fields currently mapped into Notion, where the existing `PropertyAliasService` contract already
+defines the canonical alias: `file_id` (Drive identity), `drive_link` (stable Drive URL, falling
+back to a canonical `drive.google.com/file/d/<id>/view` link when the source sheet has none),
+`asset_title` (file name), `alt_text`, `accessibility_notes`, `ai_prompt`, `prompt_source` /
+`prompt_source_text`, `instructional_purpose`, `style_family`, `asset_type`, `keywords`,
+`version`, and `approved_use`.
+
+Fields such as MIME type, file size, approval notes, sync status, and a last-synced timestamp
+have no canonical alias in `PropertyAliasService` today and are intentionally not invented here;
+adding them is a mapping-contract decision for a future focused issue, not a transport-migration
+change.
+
+This service never uploads image bytes, creates a Notion file upload, sets a page cover, or
+modifies Drive sharing — confirmed by both a static source check and integration tests. Issue
+#66 records this decision and is closed as not planned for binary image uploads.
+
+## HTTP 529 (`service_overload`) — deferred to #65
+
+Notion documents HTTP 529 as a temporary overload response. The shared transport has no explicit
+529 policy today, and this caller-migration PR intentionally adds none: no caller-local 529
+branching, retry, sleep, or error policy exists in this file. Shared 529 handling is owned by
+#65 and belongs in `NotionTransport.gs`, not here.
 
 ## Preserved boundaries
 
 Production mutation stays denied. `validateContext_` still requires the approved Visual Asset
 Library data source and complete source/target/token configuration before any transport call.
 This issue does not implement the #42 authorization gateway or the #43 side-effect redesign.
+UTF-8 payload byte accounting remains #57, payload element-limit semantics remain #64, the final
+aggregate validation matrix remains #58, and the 2026 Notion API migration remains #52.
 
 ## Validation
 
 `tests/notion/visualAssetLibraryProductionSyncTransport.test.js` runs against the production
 source through the offline Apps Script harness. Sheets are in-memory fixtures and outbound
-network access is refused by the harness. No live Notion request, credential, deployment,
-Sheet, Drive, trigger, sharing, or production mutation was used.
+network access is refused by the harness. Coverage includes operation classification (schema
+read and page read as `IDEMPOTENT_READ`, exact `file_id` lookup as `IDEMPOTENT_QUERY` — proven
+by a transient-failure retry, since only read/query classes retry — create as `CREATE`, update as
+`UPDATE`), the full unknown-write matrix, a 429 write proven non-retried with retry guidance
+preserved, stable operation ID propagation, absence of a second write after inconclusive
+verification, credential redaction, and the absence of any image-upload or Drive-sharing
+behavior. No live Notion request, credential, deployment, Sheet, Drive, trigger, sharing, or
+production mutation was used.

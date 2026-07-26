@@ -496,6 +496,87 @@ describe('VisualAssetLibraryProductionSyncService transport migration', () => {
     expect(spreadsheet.__getSheet('Visual Sync History').__getRows().length).toBe(0);
   });
 
+  describe('operation classification and retry-boundary robustness', () => {
+    test('classifies the file_id lookup as IDEMPOTENT_QUERY: a transient failure retries before the write proceeds', () => {
+      let queryAttempts = 0;
+      const context = buildHarness({
+        fetchImpl(request) {
+          if (isSchemaRead(request)) return notionResponse(200, { object: 'database', properties: SCHEMA });
+          if (isQuery(request)) {
+            queryAttempts += 1;
+            if (queryAttempts === 1) return notionResponse(503, { code: 'service_unavailable' });
+            return notionResponse(200, { results: [] });
+          }
+          if (isCreate(request)) return notionResponse(200, { id: 'page-1', url: 'https://www.notion.so/page1' });
+          if (isPageRead(request)) return notionResponse(200, notionPage('page-1'));
+          return notionResponse(200, {});
+        }
+      });
+
+      const result = context.service.sync([2]);
+
+      // A read-only query retries a bounded transient failure, which only happens for
+      // IDEMPOTENT_READ/IDEMPOTENT_QUERY classes; CREATE/UPDATE never retry blindly.
+      expect(queryAttempts).toBe(2);
+      expect(context.runtime.getEvents('utilities.sleep').length).toBe(1);
+      expect(result.row_progress[0].outcome_status).toBe('SUCCESS');
+      expect(context.requests.filter(isCreate).length).toBe(1);
+    });
+
+    test('a 429 on create is never retried and preserves retry guidance', () => {
+      let writeCalls = 0;
+      const context = buildHarness({
+        fetchImpl(request) {
+          if (isSchemaRead(request)) return notionResponse(200, { object: 'database', properties: SCHEMA });
+          if (isQuery(request)) return notionResponse(200, { results: [] });
+          if (isCreate(request)) {
+            writeCalls += 1;
+            return notionResponse(
+              429,
+              { code: 'rate_limited', additional_data: { retry_guidance: 'wait for reset window' } },
+              { 'Retry-After': '5' }
+            );
+          }
+          return notionResponse(200, {});
+        }
+      });
+
+      const result = context.service.sync([2]);
+      const item = result.row_progress[0];
+
+      expect(writeCalls).toBe(1);
+      expect(item.outcome_status).toBe('RATE_LIMITED_WRITE_NOT_RETRIED');
+      expect(item.write_outcome.retry_guidance).toBe('wait for reset window');
+      expect(context.runtime.getEvents('utilities.sleep').length).toBe(0);
+    });
+  });
+
+  test('never uploads image bytes to Notion and never mutates Drive sharing', () => {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '..', '..', 'drive-metadata-dashboard/src/VisualAssetLibraryProductionSyncService.gs'),
+      'utf8'
+    );
+    // Google Drive stays the image source of truth; Notion stores metadata and a stable
+    // reference only. No file-upload lifecycle, image block, page cover, or Drive-sharing
+    // mutation belongs in this service (tracked separately by #66).
+    expect(source).not.toMatch(/file_upload/i);
+    expect(source).not.toMatch(/multipart/i);
+    expect(source).not.toContain('page_cover');
+    expect(source).not.toContain('DriveApp');
+    expect(source).not.toMatch(/setSharing|addViewer|addEditor|revokePermission|setShareable/i);
+
+    const context = buildHarness({
+      fetchImpl: scriptedNotion({
+        existing: [],
+        write: () => notionResponse(200, { id: 'page-1', url: 'https://www.notion.so/page1' })
+      })
+    });
+    context.service.sync([2]);
+    context.requests.forEach((request) => {
+      expect(request.url).not.toMatch(/file_uploads/);
+    });
+  });
+
   test('redacts credentials from surfaced evidence', () => {
     const context = buildHarness({
       fetchImpl: scriptedNotion({
