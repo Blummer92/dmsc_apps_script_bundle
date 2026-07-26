@@ -1,13 +1,6 @@
 'use strict';
 
-const path = require('path');
-const { pathToFileURL } = require('url');
-
-let checker;
-
-beforeAll(async () => {
-  checker = await import(pathToFileURL(path.resolve(__dirname, '..', '..', 'scripts/check-apps-script-entry-points.mjs')).href);
-});
+const checker = require('../../scripts/apps-script-entry-point-checker.cjs');
 
 describe('Apps Script entry-point checker', () => {
   test('detects duplicate top-level declarations with project and locations', () => {

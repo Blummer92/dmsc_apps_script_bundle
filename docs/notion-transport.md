@@ -28,6 +28,8 @@ The transport uses `Notion-Version: 2022-06-28` by default. This is the temporar
 - `PERMANENT_FAILURE`
 - `BUDGET_EXHAUSTED`
 - `BLOCKED_PAYLOAD_LIMIT`
+- `BLOCKED_INVALID_REQUEST`
+- `RATE_LIMITED_WRITE_NOT_RETRIED`
 - `UNKNOWN_OUTCOME`
 - `DUPLICATE_IDENTITY_BLOCKED`
 
@@ -38,6 +40,8 @@ The transport uses `Notion-Version: 2022-06-28` by default. This is the temporar
 Reads and query-via-POST operations may retry 409, 429, 500, 502, 503, and 504 while attempts and execution budget remain.
 
 Create and update operations are never blindly retried after pre-response failure, malformed response, 409, or 5xx uncertainty. They may run an injected verification callback. Zero or mismatched results remain `UNKNOWN_OUTCOME`; multiple results block; one exact match becomes `VERIFIED_SUCCESS`.
+
+A create or update operation that receives HTTP 429 is not automatically retried. It returns `RATE_LIMITED_WRITE_NOT_RETRIED` immediately, with the observed status code and the bounded `Retry-After` guidance preserved as evidence for the caller to act on.
 
 ## Redaction
 
