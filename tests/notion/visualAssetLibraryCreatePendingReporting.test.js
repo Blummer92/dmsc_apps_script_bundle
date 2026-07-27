@@ -332,6 +332,37 @@ describe('Harden create-pending reporting for unmatched Visual Asset Library row
     expect(context.requests.filter(isUpdate).length).toBe(0);
   });
 
+  test('unmatched page with an independent row-level blocker reports row_blocked, not create-pending', () => {
+    // asset_category has no approved Asset Type mapping, so buildExpected_ pushes a blocker
+    // even though the row also has no matching Notion page.
+    const context = buildHarness({
+      rows: [sheetRow('unmatched-blocked', { asset_category: 'totally-unknown-category' })],
+      fetchImpl(request) {
+        if (isSchemaRead(request)) return notionResponse(200, { object: 'database', properties: SCHEMA });
+        if (isQuery(request)) return notionResponse(200, { results: [] });
+        return notionResponse(200, {});
+      }
+    });
+
+    const result = context.service.dryRun([2]);
+    const item = result.row_progress[0];
+    const REASON = context.service.VERIFICATION_REASON;
+
+    expect(item.status).toBe('failed');
+    expect(item.reason_code).toBe(REASON.ROW_BLOCKED);
+    expect(item.create_pending_fields).toEqual([]);
+    expect(item.field_results.length).toBeGreaterThan(0);
+    item.field_results.filter((field) => !field.ok).forEach((field) => {
+      expect(field.reason_code).toBe(REASON.ROW_BLOCKED);
+      expect(field.reason.toLowerCase()).not.toContain('create-pending');
+    });
+    expect(item.validation_notes.some((note) => /No approved Notion Asset Type mapping/i.test(note))).toBe(true);
+
+    expect(context.requests.filter(isCreate).length).toBe(0);
+    expect(context.requests.filter(isUpdate).length).toBe(0);
+    expect(context.requests.filter(isSchemaMutation).length).toBe(0);
+  });
+
   test('duplicate exact file_id matches remain blocked', () => {
     const context = buildHarness({
       rows: [sheetRow('duplicate-id')],

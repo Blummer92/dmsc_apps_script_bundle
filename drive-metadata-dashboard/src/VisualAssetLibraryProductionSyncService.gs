@@ -328,12 +328,26 @@ var VisualAssetLibraryProductionSyncService = (function() {
     aliases.ambiguous.forEach(function(item) { notes.push(item.reason); });
     expected.blockers.forEach(function(item) { notes.push(item.field + ': ' + item.reason); });
     verification.ok = false;
-    // Identity/alias/blocker conditions are a row-level fail-closed state, distinct from
-    // whatever per-field create-pending/missing/mismatch codes verifyExpectedAgainstPage_
-    // computed against the (possibly still-null) page.
     verification.status_code = VERIFICATION_REASON.ROW_BLOCKED;
+    // The blocker text alone (alias/ambiguous/expected-field reasons), never the generic
+    // page-missing note verifyExpectedAgainstPage_ attaches, so a field's reason exposes the
+    // actual blocker instead of reading as safely create-pending.
+    const blockerSummary = notes.join(' | ') || verification.summary;
     verification.notes = notes.concat(verification.notes || []);
-    verification.summary = verification.notes.join(' | ') || verification.summary;
+    verification.summary = blockerSummary;
+    if (!page) {
+      // An unmatched page alone is create-pending, but an independent row-level blocker
+      // (bad alias resolution, asset-type mapping, keyword failure, etc.) makes the row
+      // fail-closed regardless of page match. Every field must carry that same row_blocked
+      // signal instead of the create-pending code verifyExpectedAgainstPage_ assigned when it
+      // only knew the page was missing, or a consumer reading field-level codes could treat a
+      // blocked row as safely create-pending.
+      verification.field_results = verification.field_results.map(function(item) {
+        if (item.ok) return item;
+        return Object.assign({}, item, { reason_code: VERIFICATION_REASON.ROW_BLOCKED, reason: blockerSummary });
+      });
+      verification.create_pending_fields = [];
+    }
     return verification;
   }
 
