@@ -96,7 +96,7 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     const altTextValue = buildShortAltText_(record, assetLabel, assetCategory, unitVisualSystem, visualConsistencyNotes);
 
     const fields = {
-      'Alt text': { value: altTextValue, sourceColumn: prompt.sourceColumn, reason: altTextValue ? '' : prompt.reason },
+      'Alt text': { value: altTextValue, sourceColumn: altTextValue ? 'alt_text' : '', reason: altTextValue ? '' : 'no explicit source alt text available; preserve existing Notion value' },
       'AI Prompt': { value: fullPromptValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
       'Prompt Source': { value: prompt.sourceLabel, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
       'Prompt Source Text': { value: fullPromptValue, sourceColumn: prompt.sourceColumn, reason: prompt.reason },
@@ -192,14 +192,9 @@ var VisualAssetLibraryPromptMetadataService = (function() {
     return Array.from(new Set(tags));
   }
 
-  function buildShortAltText_(record, assetLabel, assetCategory, unitVisualSystem, visualConsistencyNotes) {
-    const subject = firstNonEmpty_(assetLabel, record.file_name, 'Visual asset');
-    const context = unitVisualSystem ? ' for ' + unitVisualSystem : '';
-    const category = assetCategory ? ' ' + assetCategory.toLowerCase() : '';
-    const note = firstSentence_(visualConsistencyNotes);
-    const firstSentence = subject + context + '.';
-    const secondSentence = note || ('This' + category + ' is included for visual review and instructional asset tracking.');
-    return capAltText_(firstSentence + ' ' + secondSentence);
+  function buildShortAltText_(record) {
+    const explicitAltText = firstNonEmpty_(record.alt_text, record.approved_alt_text, record.alt_text_approved);
+    return explicitAltText ? capAltText_(explicitAltText) : '';
   }
 
   function buildFullPromptText_(prompt) {
