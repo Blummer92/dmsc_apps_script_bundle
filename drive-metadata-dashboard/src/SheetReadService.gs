@@ -141,7 +141,14 @@ var SheetReadService = (function() {
       }
     });
 
+    applyCanonicalAliases_(record);
     return record;
+  }
+
+  function applyCanonicalAliases_(record) {
+    if (!String(record.file_id || '').trim() && Object.prototype.hasOwnProperty.call(record, 'drive_file_id')) {
+      record.file_id = record.drive_file_id;
+    }
   }
 
   function rowHasAnyValue_(row) {
