@@ -28,6 +28,47 @@ function dryRunVisualAssetLibraryFieldValidationOnly() {
   return VisualAssetLibraryValidationService.dryRunFieldValidationOnly();
 }
 
+function getNotionWriteSafetyStatus() {
+  const props = PropertiesService.getScriptProperties();
+  const approvals = {
+    DM_NOTION_STAGING_WRITE_APPROVED: props.getProperty('DM_NOTION_STAGING_WRITE_APPROVED'),
+    DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED: props.getProperty('DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED'),
+    DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED: props.getProperty('DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED')
+  };
+  const approvalsUnset = Object.keys(approvals).every(function(key) {
+    return approvals[key] === null;
+  });
+  const mode = props.getProperty('DM_NOTION_SYNC_MODE') || 'DRY_RUN';
+
+  return {
+    safe: mode === 'DRY_RUN' && approvalsUnset,
+    mode: mode,
+    write_approvals_unset: approvalsUnset,
+    write_approval_properties: approvals
+  };
+}
+
+function setNotionDryRunAndUnsetWriteApprovals() {
+  const props = PropertiesService.getScriptProperties();
+  props.setProperty('DM_NOTION_SYNC_MODE', 'DRY_RUN');
+  [
+    'DM_NOTION_STAGING_WRITE_APPROVED',
+    'DM_NOTION_EXPANDED_STAGING_WRITE_APPROVED',
+    'DM_VISUAL_ASSET_LIBRARY_WRITE_APPROVED'
+  ].forEach(function(propertyName) {
+    props.deleteProperty(propertyName);
+  });
+
+  const status = getNotionWriteSafetyStatus();
+  if (!status.safe) {
+    throw new Error('Blocked: Notion write safety could not be confirmed after disabling write approvals.');
+  }
+
+  Logger.log('NOTION WRITE SAFETY CONFIRMED - mode is DRY_RUN and all known write approvals are unset.');
+  Logger.log(JSON.stringify(status, null, 2));
+  return status;
+}
+
 function getVisualAssetLibrarySyncPanel() {
   const props = PropertiesService.getScriptProperties();
   const startRow = Number(props.getProperty('DM_NOTION_SYNC_START_ROW') || 2);
