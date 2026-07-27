@@ -18,6 +18,17 @@ var VisualAssetLibraryProductionSyncService = (function() {
     BLOCKED_INVALID_REQUEST: 'Blocked before send: invalid request'
   };
 
+  // Explicit verification state codes so consumers branch on a code instead of parsing English
+  // reason text. Field-level codes are a subset of the row-level codes: ROW_BLOCKED is row-only,
+  // since it reflects identity/alias/blocker conditions rather than a single field's comparison.
+  const VERIFICATION_REASON = {
+    OK: 'ok',
+    PAGE_MISSING_CREATE_PENDING: 'page_missing_create_pending',
+    PROPERTY_MISSING_ON_EXISTING_PAGE: 'property_missing_on_existing_page',
+    PROPERTY_VALUE_MISMATCH: 'property_value_mismatch',
+    ROW_BLOCKED: 'row_blocked'
+  };
+
   function dryRun(rows) { return runRows_('DRY_RUN', rows || getCurrentBatchRows_()); }
   function sync(rows) { return runRows_('SYNC', rows || getCurrentBatchRows_()); }
   function verify(rows) { return runRows_('VERIFY', rows || getCurrentBatchRows_()); }
@@ -252,23 +263,62 @@ var VisualAssetLibraryProductionSyncService = (function() {
     const fieldResults = [];
     const missing = [];
     const mismatched = [];
+    const createPending = [];
     Object.keys(expected.fields).forEach(function(canonical) {
       const field = expected.fields[canonical];
       const property = page && page.properties ? page.properties[field.property] : null;
       const actual = extractProperty_(property);
       const ok = property ? valuesMatch_(field.value, actual) : false;
-      if (!property) missing.push(field.property);
-      else if (!ok) mismatched.push(field.property);
-      fieldResults.push({ field: field.property, canonical: canonical, ok: ok, expected: stringify_(field.value), actual: actual, reason: ok ? '' : property ? 'Expected and actual values differ.' : 'Notion property is missing on page.' });
+      let reasonCode = VERIFICATION_REASON.OK;
+      let reason = '';
+      if (!ok) {
+        if (!page) {
+          // No Notion page has matched this file_id yet. This field is not missing from an
+          // existing page; it simply has not been created yet, so it must never be reported
+          // with the missing-property diagnostic.
+          reasonCode = VERIFICATION_REASON.PAGE_MISSING_CREATE_PENDING;
+          reason = 'Create-pending: Notion page does not exist yet; value will be set when the page is created.';
+          createPending.push(field.property);
+        } else if (!property) {
+          reasonCode = VERIFICATION_REASON.PROPERTY_MISSING_ON_EXISTING_PAGE;
+          reason = 'Notion property is missing on page.';
+          missing.push(field.property);
+        } else {
+          reasonCode = VERIFICATION_REASON.PROPERTY_VALUE_MISMATCH;
+          reason = 'Expected and actual values differ.';
+          mismatched.push(field.property);
+        }
+      }
+      fieldResults.push({ field: field.property, canonical: canonical, ok: ok, expected: stringify_(field.value), actual: actual, reason_code: reasonCode, reason: reason });
     });
-    return buildVerification_(fieldResults, missing, mismatched, page ? [] : ['Notion page is missing.']);
+    const statusCode = !page
+      ? VERIFICATION_REASON.PAGE_MISSING_CREATE_PENDING
+      : missing.length
+        ? VERIFICATION_REASON.PROPERTY_MISSING_ON_EXISTING_PAGE
+        : mismatched.length
+          ? VERIFICATION_REASON.PROPERTY_VALUE_MISMATCH
+          : VERIFICATION_REASON.OK;
+    const notes = page ? [] : ['Create-pending: no Notion page exists yet. Sync will create one.'];
+    return buildVerification_(fieldResults, missing, mismatched, notes, createPending, statusCode);
   }
 
-  function buildVerification_(fieldResults, missing, mismatched, notes) {
+  function buildVerification_(fieldResults, missing, mismatched, notes, createPending, statusCode) {
     const total = fieldResults.length;
     const okCount = fieldResults.filter(function(item) { return item.ok; }).length;
     const percent = total ? Math.round((okCount / total) * 100) : 0;
-    return { ok: total > 0 && okCount === total, total: total, ok_count: okCount, percent: percent, missing_fields: missing, mismatched_fields: mismatched, field_results: fieldResults, notes: notes || [], summary: okCount + '/' + total + ' fields verified (' + percent + '%).' };
+    return {
+      ok: total > 0 && okCount === total,
+      total: total,
+      ok_count: okCount,
+      percent: percent,
+      missing_fields: missing,
+      mismatched_fields: mismatched,
+      create_pending_fields: createPending || [],
+      status_code: statusCode || VERIFICATION_REASON.OK,
+      field_results: fieldResults,
+      notes: notes || [],
+      summary: okCount + '/' + total + ' fields verified (' + percent + '%).'
+    };
   }
 
   function buildBlockedVerification_(expected, aliases, page) {
@@ -278,6 +328,10 @@ var VisualAssetLibraryProductionSyncService = (function() {
     aliases.ambiguous.forEach(function(item) { notes.push(item.reason); });
     expected.blockers.forEach(function(item) { notes.push(item.field + ': ' + item.reason); });
     verification.ok = false;
+    // Identity/alias/blocker conditions are a row-level fail-closed state, distinct from
+    // whatever per-field create-pending/missing/mismatch codes verifyExpectedAgainstPage_
+    // computed against the (possibly still-null) page.
+    verification.status_code = VERIFICATION_REASON.ROW_BLOCKED;
     verification.notes = notes.concat(verification.notes || []);
     verification.summary = verification.notes.join(' | ') || verification.summary;
     return verification;
@@ -287,9 +341,9 @@ var VisualAssetLibraryProductionSyncService = (function() {
     const message = error && error.message ? error.message : String(error);
     const fieldResults = Object.keys(expected.fields || {}).map(function(canonical) {
       const field = expected.fields[canonical];
-      return { field: field.property, canonical: canonical, ok: false, expected: stringify_(field.value), actual: '', reason: message };
+      return { field: field.property, canonical: canonical, ok: false, expected: stringify_(field.value), actual: '', reason_code: VERIFICATION_REASON.ROW_BLOCKED, reason: message };
     });
-    const verification = buildVerification_(fieldResults, fieldResults.map(function(item) { return item.field; }), [], [message]);
+    const verification = buildVerification_(fieldResults, fieldResults.map(function(item) { return item.field; }), [], [message], [], VERIFICATION_REASON.ROW_BLOCKED);
     verification.duplicate_page_urls = error && error.duplicatePageUrls ? error.duplicatePageUrls : [];
     return verification;
   }
@@ -310,12 +364,14 @@ var VisualAssetLibraryProductionSyncService = (function() {
       color: colorForStatus_(status),
       label: labelForStatus_(status),
       detail: detail,
+      reason_code: verification.status_code || VERIFICATION_REASON.OK,
       sync_percent: verification.percent,
       complete_fields: verification.ok_count,
       total_fields: verification.total,
       missing_fields: unique_(verification.missing_fields.concat(verification.mismatched_fields)),
+      create_pending_fields: unique_(verification.create_pending_fields || []),
       validation_notes: notes,
-      field_results: verification.field_results.map(function(item) { return { field: item.field, ok: item.ok, changed: !item.ok, reason: item.reason, expected: item.expected, actual: item.actual }; }),
+      field_results: verification.field_results.map(function(item) { return { field: item.field, canonical: item.canonical, ok: item.ok, changed: !item.ok, reason_code: item.reason_code || VERIFICATION_REASON.OK, reason: item.reason, expected: item.expected, actual: item.actual }; }),
       stages: buildStages_(status, operation),
       duration_ms: new Date().getTime() - started.getTime()
     };
@@ -473,9 +529,9 @@ var VisualAssetLibraryProductionSyncService = (function() {
   function buildOutcomeVerification_(expected, evidence) {
     const fieldResults = Object.keys(expected.fields || {}).map(function(canonical) {
       const field = expected.fields[canonical];
-      return { field: field.property, canonical: canonical, ok: false, expected: stringify_(field.value), actual: '', reason: evidence.label };
+      return { field: field.property, canonical: canonical, ok: false, expected: stringify_(field.value), actual: '', reason_code: VERIFICATION_REASON.ROW_BLOCKED, reason: evidence.label };
     });
-    const verification = buildVerification_(fieldResults, fieldResults.map(function(item) { return item.field; }), [], [evidence.label]);
+    const verification = buildVerification_(fieldResults, fieldResults.map(function(item) { return item.field; }), [], [evidence.label], [], VERIFICATION_REASON.ROW_BLOCKED);
     verification.summary = evidence.label + ' (operation ' + evidence.operation_id + ', verification ' + evidence.verification_status + ').';
     return verification;
   }
@@ -510,7 +566,8 @@ var VisualAssetLibraryProductionSyncService = (function() {
     sync: sync,
     verify: verify,
     findNotionPagesByFileId: findNotionPagesByFileId,
-    upsertVisualAssetPage: upsertVisualAssetPage
+    upsertVisualAssetPage: upsertVisualAssetPage,
+    VERIFICATION_REASON: VERIFICATION_REASON
   };
 })();
 
