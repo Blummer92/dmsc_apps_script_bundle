@@ -19,8 +19,8 @@
       </div>
 
       <div class="boundary-card" role="note">
-        <strong>Metadata only.</strong>
-        <span>No classroom, reuse, source-control, production, assessment, or instructional approval is created here.</span>
+        <strong>Metadata and source control only.</strong>
+        <span>Source approval recorded here does not grant Production Authorized. Final production authorization belongs to Production Control.</span>
       </div>
 
       <nav id="queueNav" class="queue-nav" aria-label="Review queues"></nav>
@@ -31,7 +31,7 @@
         <div>
           <p class="eyebrow">Digital Media Source Control</p>
           <h2 id="viewTitle">All Metadata Records</h2>
-          <p id="viewSubtitle">Server-backed review console for metadata evidence and human routing.</p>
+          <p id="viewSubtitle">Server-backed review console for metadata evidence, source-control decisions, and human routing.</p>
         </div>
         <div class="topbar-actions">
           <button class="btn ghost" id="refreshButton" type="button">Refresh</button>
@@ -155,5 +155,36 @@
   </dialog>
 
   <?!= include('DashboardJs'); ?>
+  <script>
+    function approveSelectedSource() {
+      if (!state.currentRecord) return;
+
+      const evidenceUrl = document.getElementById('sourceApprovalEvidenceUrl').value.trim();
+      if (!evidenceUrl) {
+        showToast('Source-control evidence URL is required.');
+        return;
+      }
+
+      const button = document.getElementById('approveSourceButton');
+      if (button) button.disabled = true;
+
+      google.script.run
+        .withSuccessHandler(function(response) {
+          showToast('Source-control decision recorded. Production authorization remains unchanged.');
+          selectRecord(response.fileId || state.currentRecord.imageIdentityId);
+          loadRows();
+        })
+        .withFailureHandler(function(error) {
+          if (button) button.disabled = false;
+          showError(error);
+        })
+        .approveDmscSourceControlDecision({
+          fileId: state.currentRecord.fileId || state.currentRecord.imageIdentityId,
+          approvalEvidenceUrl: evidenceUrl,
+          restrictions: document.getElementById('sourceApprovalRestrictions').value,
+          sourceNotes: document.getElementById('sourceApprovalNotes').value
+        });
+    }
+  </script>
 </body>
 </html>

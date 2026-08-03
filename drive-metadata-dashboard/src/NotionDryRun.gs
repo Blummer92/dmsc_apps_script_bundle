@@ -1,23 +1,23 @@
 function dryRunNotionRows2To11() {
-  return NotionSyncService.dryRunRows2To11();
+  return CanonicalOwnershipNotionSyncService.dryRunRows2To11();
 }
 
 function syncNotionRows2To11ToStaging() {
-  return NotionSyncService.syncRows2To11ToStaging();
+  return CanonicalOwnershipNotionSyncService.syncRows2To11ToStaging();
 }
 
 function dryRunNotionEligibleStagingBatch() {
   if (isVisualAssetLibraryTarget_()) {
     return VisualAssetLibraryValidationService.dryRunFieldValidationOnly();
   }
-  return NotionSyncService.dryRunEligibleStagingBatch();
+  return CanonicalOwnershipNotionSyncService.dryRunEligibleStagingBatch();
 }
 
 function syncNotionEligibleStagingBatchToStaging() {
   if (isVisualAssetLibraryTarget_()) {
     return VisualAssetLibraryWriteService.syncEligibleBatch();
   }
-  return NotionSyncService.syncEligibleStagingBatchToStaging();
+  return CanonicalOwnershipNotionSyncService.syncEligibleStagingBatchToStaging();
 }
 
 function auditVisualAssetLibrarySync() {
