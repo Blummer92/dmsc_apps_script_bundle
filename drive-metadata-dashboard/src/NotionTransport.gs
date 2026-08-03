@@ -59,7 +59,9 @@ var NotionTransport = (function() {
         errorCode: payloadCheck.code,
         detail: payloadCheck.detail,
         attempts: 0,
-        evidence: evidence
+        evidence: evidence,
+        payloadBytes: payloadCheck.payloadBytes,
+        payloadLimitBytes: payloadCheck.payloadLimitBytes
       });
     }
 
@@ -316,10 +318,61 @@ var NotionTransport = (function() {
       return { ok: false, code: 'PAYLOAD_SERIALIZATION_FAILED', detail: 'Payload could not be serialized.' };
     }
     if (serialized === undefined) return { ok: false, code: 'PAYLOAD_SERIALIZATION_FAILED', detail: 'Payload could not be serialized.' };
-    if (serialized.length > MAX_PAYLOAD_BYTES) return { ok: false, code: 'PAYLOAD_BYTES_EXCEEDED', detail: 'Payload exceeds the temporary 500 KB preflight ceiling.' };
+    const payloadBytes = utf8ByteLength_(serialized);
+    if (payloadBytes > MAX_PAYLOAD_BYTES) {
+      return {
+        ok: false,
+        code: 'PAYLOAD_BYTES_EXCEEDED',
+        detail: 'Payload is ' + payloadBytes + ' UTF-8 bytes, exceeding the ' + MAX_PAYLOAD_BYTES + '-byte preflight ceiling.',
+        payloadBytes: payloadBytes,
+        payloadLimitBytes: MAX_PAYLOAD_BYTES
+      };
+    }
+    // Element-limit semantics (#64) are unchanged by this fix: still counted from the
+    // unstringified body, independent of byte accounting.
     const count = countElements_(body);
     if (count > MAX_BLOCK_ELEMENTS) return { ok: false, code: 'PAYLOAD_ELEMENTS_EXCEEDED', detail: 'Payload exceeds the temporary 1000-element preflight ceiling.' };
     return { ok: true };
+  }
+
+  // Measures the exact serialized JSON string in UTF-8 bytes, never JS string length
+  // (UTF-16 code units). Apps Script exposes a standards-based byte count via
+  // Utilities.newBlob(...).getBytes().length; the offline Node harness has no Utilities.newBlob,
+  // so it falls back to a deterministic pure-JS UTF-8 encoder. Lone (unpaired) surrogates are
+  // not valid Unicode scalar values: both paths treat each one as a single U+FFFD replacement
+  // character (3 bytes), the same deterministic substitution the WHATWG UTF-8 encode algorithm
+  // uses, so byte counts stay identical and reproducible in both environments.
+  function utf8ByteLength_(text) {
+    const value = text === undefined || text === null ? '' : String(text);
+    if (typeof Utilities !== 'undefined' && typeof Utilities.newBlob === 'function') {
+      return Utilities.newBlob(value).getBytes().length;
+    }
+    return utf8ByteLengthFallback_(value);
+  }
+
+  function utf8ByteLengthFallback_(value) {
+    let bytes = 0;
+    for (let i = 0; i < value.length; i += 1) {
+      const code = value.charCodeAt(i);
+      if (code >= 0xD800 && code <= 0xDBFF) {
+        const next = i + 1 < value.length ? value.charCodeAt(i + 1) : 0;
+        if (next >= 0xDC00 && next <= 0xDFFF) {
+          bytes += 4;
+          i += 1;
+        } else {
+          bytes += 3;
+        }
+      } else if (code >= 0xDC00 && code <= 0xDFFF) {
+        bytes += 3;
+      } else if (code < 0x80) {
+        bytes += 1;
+      } else if (code < 0x800) {
+        bytes += 2;
+      } else {
+        bytes += 3;
+      }
+    }
+    return bytes;
   }
 
   function countElements_(value) {
@@ -376,6 +429,8 @@ var NotionTransport = (function() {
     };
     if (Object.prototype.hasOwnProperty.call(extra, 'data')) output.data = extra.data;
     if (extra.detail) output.detail = extra.detail;
+    if (extra.payloadBytes !== undefined) output.payloadBytes = extra.payloadBytes;
+    if (extra.payloadLimitBytes !== undefined) output.payloadLimitBytes = extra.payloadLimitBytes;
     return output;
   }
 
@@ -467,9 +522,11 @@ var NotionTransport = (function() {
   return {
     OPERATION: OPERATION,
     API_VERSION: DEFAULT_API_VERSION,
+    MAX_PAYLOAD_BYTES: MAX_PAYLOAD_BYTES,
     request: request,
     requestOrThrow: requestOrThrow,
     parseRetryAfter: parseRetryAfter_,
-    validatePayload: validatePayload_
+    validatePayload: validatePayload_,
+    utf8ByteLength: utf8ByteLength_
   };
 })();

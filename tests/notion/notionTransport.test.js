@@ -477,7 +477,173 @@ describe('NotionTransport production source', () => {
     });
 
     expect(outcome.status).toBe('BLOCKED_PAYLOAD_LIMIT');
+    expect(outcome.errorCode).toBe('PAYLOAD_ELEMENTS_EXCEEDED');
     expect(fetched).toBe(false);
+  });
+
+  // #57: the 500 KB preflight must measure the exact serialized JSON in UTF-8 bytes, never
+  // JS string length (UTF-16 code units). #64 owns element-count semantics separately and is
+  // untouched here — proven above by the unmodified element-limit test still passing.
+  describe('UTF-8 payload byte accounting (#57)', () => {
+    function bufferBytes(text) {
+      return Buffer.byteLength(text, 'utf8');
+    }
+
+    test('measures ASCII text: UTF-8 bytes equal string length', () => {
+      const { transport } = buildHarness();
+      const text = 'abcXYZ123 !@#';
+      expect(transport.utf8ByteLength(text)).toBe(text.length);
+      expect(transport.utf8ByteLength(text)).toBe(bufferBytes(text));
+    });
+
+    test('measures accented Latin text where UTF-8 bytes exceed the JS character count', () => {
+      const { transport } = buildHarness();
+      const text = 'café façade naïve';
+      expect(transport.utf8ByteLength(text)).toBeGreaterThan(text.length);
+      expect(transport.utf8ByteLength(text)).toBe(bufferBytes(text));
+    });
+
+    test('measures CJK multibyte script text as 3 bytes per character', () => {
+      const { transport } = buildHarness();
+      const text = '你好，世界';
+      expect(transport.utf8ByteLength(text)).toBe(text.length * 3);
+      expect(transport.utf8ByteLength(text)).toBe(bufferBytes(text));
+    });
+
+    test('measures an emoji surrogate pair as 4 UTF-8 bytes', () => {
+      const { transport } = buildHarness();
+      const text = '😀';
+      expect(text.length).toBe(2); // one code point stored as two UTF-16 code units
+      expect(transport.utf8ByteLength(text)).toBe(4);
+      expect(transport.utf8ByteLength(text)).toBe(bufferBytes(text));
+    });
+
+    test('applies a deterministic fail-safe rule to a lone high surrogate', () => {
+      const { transport } = buildHarness();
+      const text = '\uD800';
+      expect(transport.utf8ByteLength(text)).toBe(3);
+      expect(transport.utf8ByteLength(text)).toBe(bufferBytes(text));
+    });
+
+    test('applies a deterministic fail-safe rule to a lone low surrogate', () => {
+      const { transport } = buildHarness();
+      const text = '\uDC00';
+      expect(transport.utf8ByteLength(text)).toBe(3);
+      expect(transport.utf8ByteLength(text)).toBe(bufferBytes(text));
+    });
+
+    test('measures the exact serialized JSON string, including quoting and escaping', () => {
+      const { transport } = buildHarness();
+      const raw = 'a"b\\c'; // five characters: a, ", b, \, c
+      const serialized = JSON.stringify({ v: raw });
+      expect(serialized).toContain('\\"');
+      expect(serialized).toContain('\\\\');
+      // Two escape characters are added beyond the five raw characters plus JSON structure.
+      expect(transport.utf8ByteLength(serialized)).toBe(bufferBytes(serialized));
+      expect(transport.utf8ByteLength(serialized)).toBe(serialized.length);
+    });
+
+    // Builds a body whose *serialized* JSON is exactly `targetBytes` UTF-8 bytes, computed from
+    // the real per-payload JSON overhead rather than an assumed property-name byte count.
+    function asciiBodyForSerializedBytes(targetBytes) {
+      const overhead = JSON.stringify({ text: '' }).length; // pure ASCII: chars === bytes
+      const contentLength = Math.max(0, targetBytes - overhead);
+      return { text: 'a'.repeat(contentLength) };
+    }
+
+    test('allows a payload below the configured byte limit', () => {
+      const { transport } = buildHarness();
+      const limit = transport.MAX_PAYLOAD_BYTES;
+      const body = asciiBodyForSerializedBytes(limit - 1000);
+      expect(transport.utf8ByteLength(JSON.stringify(body))).toBe(limit - 1000);
+      let fetched = false;
+      const outcome = transport.request(baseSpec({ method: 'post', operationClass: 'IDEMPOTENT_QUERY', body }), {
+        fetch() { fetched = true; return response(200, {}); },
+        clock: () => 1000,
+        jitter: () => 0,
+        sleep: () => {}
+      });
+      expect(outcome.status).toBe('SUCCESS');
+      expect(fetched).toBe(true);
+    });
+
+    test('allows a payload exactly at the configured byte limit', () => {
+      const { transport } = buildHarness();
+      const limit = transport.MAX_PAYLOAD_BYTES;
+      const body = asciiBodyForSerializedBytes(limit);
+      expect(transport.utf8ByteLength(JSON.stringify(body))).toBe(limit);
+      let fetched = false;
+      const outcome = transport.request(baseSpec({ method: 'post', operationClass: 'IDEMPOTENT_QUERY', body }), {
+        fetch() { fetched = true; return response(200, {}); },
+        clock: () => 1000,
+        jitter: () => 0,
+        sleep: () => {}
+      });
+      expect(outcome.status).toBe('SUCCESS');
+      expect(fetched).toBe(true);
+    });
+
+    test('blocks a payload exactly one byte above the configured limit and invokes zero fetches', () => {
+      const { transport } = buildHarness();
+      const limit = transport.MAX_PAYLOAD_BYTES;
+      const body = asciiBodyForSerializedBytes(limit + 1);
+      expect(transport.utf8ByteLength(JSON.stringify(body))).toBe(limit + 1);
+      let fetched = false;
+      const outcome = transport.request(baseSpec({ method: 'post', operationClass: 'IDEMPOTENT_QUERY', body }), {
+        fetch() { fetched = true; return response(200, {}); },
+        clock: () => 1000,
+        jitter: () => 0,
+        sleep: () => {}
+      });
+      expect(outcome.status).toBe('BLOCKED_PAYLOAD_LIMIT');
+      expect(outcome.errorCode).toBe('PAYLOAD_BYTES_EXCEEDED');
+      expect(fetched).toBe(false);
+    });
+
+    test('exposes measured bytes, the configured limit, and a stable failure code in evidence', () => {
+      const { transport } = buildHarness();
+      const limit = transport.MAX_PAYLOAD_BYTES;
+      const body = asciiBodyForSerializedBytes(limit + 500);
+      const outcome = transport.request(baseSpec({ method: 'post', operationClass: 'IDEMPOTENT_QUERY', body }), {
+        fetch: () => response(200, {}),
+        clock: () => 1000,
+        jitter: () => 0,
+        sleep: () => {}
+      });
+
+      expect(outcome.status).toBe('BLOCKED_PAYLOAD_LIMIT');
+      expect(outcome.errorCode).toBe('PAYLOAD_BYTES_EXCEEDED');
+      expect(outcome.payloadBytes).toBe(limit + 500);
+      expect(outcome.payloadLimitBytes).toBe(limit);
+    });
+
+    test('never exposes raw payload text, credentials, or headers in rejection evidence', () => {
+      const { transport } = buildHarness();
+      const limit = transport.MAX_PAYLOAD_BYTES;
+      const secretMarker = 'super-secret-marker-value-should-not-leak';
+      const body = { text: 'a'.repeat(limit), secret: secretMarker };
+      const outcome = transport.request(baseSpec({
+        method: 'post',
+        operationClass: 'IDEMPOTENT_QUERY',
+        body: body,
+        token: 'secret_test_token'
+      }), {
+        fetch: () => response(200, {}),
+        clock: () => 1000,
+        jitter: () => 0,
+        sleep: () => {}
+      });
+
+      expect(outcome.status).toBe('BLOCKED_PAYLOAD_LIMIT');
+      const serialized = JSON.stringify(outcome);
+      expect(serialized).not.toContain(secretMarker);
+      expect(serialized).not.toContain('secret_test_token');
+      expect(serialized).not.toContain('Authorization');
+      expect(outcome.detail).not.toContain(secretMarker);
+      // The rejection evidence is bounded structural data only, not the full request options.
+      expect(outcome).not.toHaveProperty('options');
+      expect(outcome).not.toHaveProperty('body');
+    });
   });
 
   test('preserves redacted retry guidance', () => {
